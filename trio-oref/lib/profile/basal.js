@@ -4,6 +4,21 @@ var _ = require('lodash');
 /* Return basal rate(U / hr) at the provided timeOfDay */
 function basalLookup (schedules, now) {
 
+    if (!Array.isArray(schedules) || schedules.length === 0) {
+        console.error("ERROR: basal schedule is empty", schedules);
+        return;
+    }
+
+    var hasInvalidRate = _.some(schedules, function (entry) {
+        var rate = Number(entry.rate);
+        return !isFinite(rate) || rate < 0;
+    });
+
+    if (hasInvalidRate) {
+        console.error("ERROR: basal schedule contains an invalid rate", schedules);
+        return;
+    }
+
     var nowDate = now;
 
     if (typeof(now) === 'undefined') {
@@ -11,16 +26,12 @@ function basalLookup (schedules, now) {
     }
 
     var basalprofile_data = _.sortBy(schedules, function(o) { return o.i; });
-    var basalRate = basalprofile_data[basalprofile_data.length-1].rate
-    if (basalRate === 0) {
-        console.error("ERROR: bad basal schedule",schedules);
-        return;
-    }
+    var basalRate = Number(basalprofile_data[basalprofile_data.length-1].rate);
     var nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
 
     for (var i = 0; i < basalprofile_data.length - 1; i++) {
         if ((nowMinutes >= basalprofile_data[i].minutes) && (nowMinutes < basalprofile_data[i + 1].minutes)) {
-            basalRate = basalprofile_data[i].rate;
+            basalRate = Number(basalprofile_data[i].rate);
             break;
         }
     }

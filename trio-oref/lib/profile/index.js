@@ -150,8 +150,8 @@ function generate (inputs, opts) {
 
   profile.max_daily_basal = basal.maxDailyBasal(inputs);
   profile.max_basal = basal.maxBasalLookup(inputs);
-  if (profile.current_basal === 0) {
-    console.error("current_basal of",profile.current_basal,"is not supported");
+  if (typeof profile.current_basal !== 'number' || !isFinite(profile.current_basal) || profile.current_basal < 0) {
+    console.error("current_basal of",profile.current_basal,"is invalid");
     return -1;
   }
   if (profile.max_daily_basal === 0) {
