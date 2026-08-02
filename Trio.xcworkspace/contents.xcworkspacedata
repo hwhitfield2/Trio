@@ -14,6 +14,9 @@
       location = "group:LibreTransmitter/LibreTransmitter.xcodeproj">
    </FileRef>
    <FileRef
+      location = "group:LibreLoop/LibreLoop.xcodeproj">
+   </FileRef>
+   <FileRef
       location = "group:DanaKit/DanaKit.xcodeproj">
    </FileRef>
    <FileRef
