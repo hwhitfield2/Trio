@@ -157,10 +157,14 @@ final class BaseHealthKitManager: HealthKitManager, Injectable {
 
     func uploadGlucose() async {
         do {
-            // With FreeStyle Lingo as CGM, sensor readings were imported FROM Apple Health;
-            // writing them back would duplicate every reading there. Manual entries still upload.
-            if settingsManager.settings.cgm != .lingo {
-                let glucose = try await glucoseStorage.getGlucoseNotYetUploadedToHealth()
+            let glucose = try await glucoseStorage.getGlucoseNotYetUploadedToHealth()
+            if settingsManager.settings.cgm == .lingo {
+                // With FreeStyle Lingo as CGM, sensor readings were imported FROM Apple Health;
+                // writing them back would duplicate every reading there. Mark them as uploaded
+                // without saving so they also can't upload after a later switch to another CGM.
+                // Manual entries still upload below.
+                await updateGlucoseAsUploaded(glucose)
+            } else {
                 await uploadGlucose(glucose)
             }
 
