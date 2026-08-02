@@ -156,6 +156,7 @@ extension CGMSettings {
                 .sheet(isPresented: $state.shouldDisplayCGMSetupSheet) {
                     switch state.cgmCurrent.type {
                     case .enlite,
+                         .lingo,
                          .nightscout,
                          .none,
                          .simulator,
@@ -213,6 +214,7 @@ extension CGMSettings {
                                     Text("• Dexcom Share")
                                     Text("• Freestyle Libre")
                                     Text("• Freestyle Libre Demo")
+                                    Text("• Freestyle Lingo (via Apple Health, delayed)")
                                     Text("• Glucose Simulator")
                                     Text("• Medtronic Enlite")
                                     Text("• Nightscout")

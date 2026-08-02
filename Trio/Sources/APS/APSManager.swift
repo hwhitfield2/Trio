@@ -452,6 +452,17 @@ final class BaseAPSManager: APSManager, Injectable {
         let isValidGlucoseData = await privateContext.perform { [weak self] in
             guard let self else { return false }
 
+            // FreeStyle Lingo readings come from Apple Health hours late and clipped to the
+            // Lingo reporting range; that source is display-only and must never drive dosing.
+            guard self.settingsManager.settings.cgm != .lingo else {
+                debug(.apsManager, "FreeStyle Lingo is display-only, skipping dosing")
+                invalidGlucoseError =
+                    String(
+                        localized: "FreeStyle Lingo readings are display-only. Trio does not dose insulin based on delayed Apple Health data."
+                    )
+                return false
+            }
+
             guard glucose.count > 2 else {
                 debug(.apsManager, "Not enough glucose data")
                 invalidGlucoseError =

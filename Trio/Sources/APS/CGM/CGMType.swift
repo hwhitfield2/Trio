@@ -7,6 +7,7 @@ enum CGMType: String, JSON, CaseIterable, Identifiable {
     case xdrip
     case simulator
     case enlite
+    case lingo
     case plugin
 
     var displayName: String {
@@ -21,6 +22,8 @@ enum CGMType: String, JSON, CaseIterable, Identifiable {
             return String(localized: "Glucose Simulator", comment: "Glucose Simulator CGM type")
         case .enlite:
             return "Medtronic Enlite"
+        case .lingo:
+            return "FreeStyle Lingo"
         case .plugin:
             return "Plugin CGM"
         }
@@ -29,6 +32,7 @@ enum CGMType: String, JSON, CaseIterable, Identifiable {
     var appURL: URL? {
         switch self {
         case .enlite,
+             .lingo,
              .nightscout,
              .none:
             return nil
@@ -45,6 +49,8 @@ enum CGMType: String, JSON, CaseIterable, Identifiable {
         switch self {
         case .xdrip:
             return URL(string: "https://xdrip4ios.readthedocs.io/")!
+        case .lingo:
+            return URL(string: "https://www.hellolingo.com/")!
         default: return nil
         }
     }
@@ -65,6 +71,11 @@ enum CGMType: String, JSON, CaseIterable, Identifiable {
             return String(localized: "Glucose Simulator for Demo Only", comment: "Simple simulator")
         case .enlite:
             return String(localized: "Minilink transmitter", comment: "Minilink transmitter")
+        case .lingo:
+            return String(
+                localized: "Reads Lingo glucose from Apple Health (delayed by Abbott)",
+                comment: "FreeStyle Lingo via Apple Health"
+            )
         case .plugin:
             return String(localized: "Plugin CGM", comment: "Plugin CGM")
         }

@@ -106,8 +106,20 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
 
     func storeGlucose(_ glucose: [BloodGlucose]) async throws {
         try await context.perform {
+            // Respect readings the user deleted in Trio; sources that re-serve recent history
+            // (Nightscout, Apple Health) must not resurrect them
+            let withoutDeletedGlucose = self.filterGlucoseValues(
+                glucose,
+                fetchRequest: DeletedGlucoseStored.fetchRequest(),
+                timeBuffer: 1
+            )
+
             // Get new glucose values that don't exist yet
-            let newGlucose = self.filterGlucoseValues(glucose, fetchRequest: GlucoseStored.fetchRequest(), timeBuffer: 1)
+            let newGlucose = self.filterGlucoseValues(
+                withoutDeletedGlucose,
+                fetchRequest: GlucoseStored.fetchRequest(),
+                timeBuffer: 1
+            )
             guard !newGlucose.isEmpty else { return }
 
             do {

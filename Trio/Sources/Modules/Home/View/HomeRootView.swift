@@ -1026,6 +1026,7 @@ extension Home {
             .sheet(isPresented: $state.shouldDisplayCGMSetupSheet) {
                 switch state.cgmCurrent.type {
                 case .enlite,
+                     .lingo,
                      .nightscout,
                      .none,
                      .simulator,

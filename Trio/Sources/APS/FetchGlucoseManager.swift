@@ -55,6 +55,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
     @PersistedProperty(key: "CGMManagerState") var rawCGMManager: CGMManager.RawValue?
 
     private lazy var simulatorSource = GlucoseSimulatorSource()
+    private lazy var lingoSource = LingoSource()
 
     private let context = CoreDataStack.shared.newTaskContext()
 
@@ -156,6 +157,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
 
     @MainActor func deleteGlucoseSource() async {
         cgmManager = nil
+        (glucoseSource as? LingoSource)?.stopObserving()
         glucoseSource = nil
         settingsManager.settings.cgm = cgmDefaultModel.type
         settingsManager.settings.cgmPluginIdentifier = cgmDefaultModel.id
@@ -189,6 +191,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
         if self.cgmGlucoseSourceType != cgmGlucoseSourceType || self.cgmGlucosePluginId != cgmGlucosePluginId {
             removeCalibrations()
             cgmManager = nil
+            (glucoseSource as? LingoSource)?.stopObserving()
             glucoseSource = nil
         }
 
@@ -224,6 +227,9 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
                 glucoseSource = simulatorSource
             case .enlite:
                 glucoseSource = deviceDataManager
+            case .lingo:
+                lingoSource.glucoseManager = self
+                glucoseSource = lingoSource
             case .plugin:
                 glucoseSource = PluginSource(glucoseStorage: glucoseStorage, glucoseManager: self)
             }

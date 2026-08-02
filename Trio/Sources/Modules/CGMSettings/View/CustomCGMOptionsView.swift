@@ -22,6 +22,10 @@ extension CGMSettings {
         @State private var noiseAmplitude: Double = UserDefaults.standard.double(forKey: "GlucoseSimulator_NoiseAmplitude")
         @State private var produceStaleValues: Bool = UserDefaults.standard.bool(forKey: "GlucoseSimulator_ProduceStaleValues")
 
+        // Lingo settings
+        @State private var lingoSources: [LingoSource.HealthSourceInfo] = []
+        @State private var selectedLingoSourceId: String?
+
         // Initialize state variables with defaults if needed
         private func initializeSimulatorSettings() {
             if centerValue == 0 {
@@ -58,6 +62,8 @@ extension CGMSettings {
                             xDripConfigurationSection
                         } else if cgmCurrent.type == .simulator {
                             simulatorConfigurationSection
+                        } else if cgmCurrent.type == .lingo {
+                            lingoConfigurationSection
                         }
 
                         if let appURL = cgmCurrent.type.appURL {
@@ -117,6 +123,8 @@ extension CGMSettings {
                 .onAppear {
                     if cgmCurrent.type == .simulator {
                         initializeSimulatorSettings()
+                    } else if cgmCurrent.type == .lingo {
+                        refreshLingoSources()
                     }
                 }
             }
@@ -213,6 +221,149 @@ extension CGMSettings {
                     }
                 }
             ).listRowBackground(Color.chart)
+        }
+
+        private var lingoGlucoseSource: LingoSource? {
+            state.fetchGlucoseManager.glucoseSource as? LingoSource
+        }
+
+        private func refreshLingoSources() {
+            guard let source = lingoGlucoseSource else { return }
+            selectedLingoSourceId = source.selectedSourceBundleIdentifier
+            source.fetchAvailableSources { sources in
+                lingoSources = sources
+                selectedLingoSourceId = source.selectedSourceBundleIdentifier
+            }
+        }
+
+        var lingoConfigurationSection: some View {
+            Group {
+                Section(
+                    header: Text("Configuration"),
+                    content: {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("CGM is not used as heartbeat.").padding(.top)
+
+                            Text(
+                                "Trio reads Lingo glucose from Apple Health. The Lingo sensor sends encrypted Bluetooth data that only Abbott's Lingo app can decode, and the Lingo app shares readings to Apple Health with a delay of about 3 hours, limited to 55–200 mg/dL (3.1–11.1 mmol/L)."
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(Color.secondary)
+                            .lineLimit(nil)
+
+                            Text(
+                                "Because readings arrive hours late and are clipped to Lingo's reporting range, Trio stores them for history, statistics and uploads only. Trio will NOT dose insulin while FreeStyle Lingo is the selected CGM."
+                            )
+                            .bold()
+                            .lineLimit(nil)
+
+                            Text(
+                                "Setup: in the Lingo app, enable sharing to Apple Health. Then tap the button below and allow Trio to read Blood Glucose. You can review this later in the Health app under Sharing → Apps → Trio."
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(Color.secondary)
+                            .lineLimit(nil)
+
+                            if let link = cgmCurrent.type.externalLink {
+                                Button {
+                                    UIApplication.shared.open(link, options: [:], completionHandler: nil)
+                                } label: {
+                                    HStack {
+                                        Text("About this source")
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.bottom)
+                            }
+                        }
+                    }
+                ).listRowBackground(Color.chart)
+
+                Section(
+                    header: Text("Glucose Source App"),
+                    content: {
+                        if lingoSources.isEmpty {
+                            Text(
+                                "No app has written glucose to Apple Health yet, or Trio has no permission to read it. Enable Apple Health sharing in the Lingo app, grant Trio access below, then return here."
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(Color.secondary)
+                            .lineLimit(nil)
+                        } else {
+                            ForEach(lingoSources) { source in
+                                Button {
+                                    selectedLingoSourceId = source.bundleIdentifier
+                                    lingoGlucoseSource?.selectedSourceBundleIdentifier = source.bundleIdentifier
+                                } label: {
+                                    HStack {
+                                        Text(source.name).foregroundStyle(Color.primary)
+                                        Spacer()
+                                        if selectedLingoSourceId == source.bundleIdentifier {
+                                            Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text("Only readings written by the selected app are imported.")
+                                .font(.footnote)
+                                .foregroundStyle(Color.secondary)
+                                .lineLimit(nil)
+                        }
+                    }
+                ).listRowBackground(Color.chart)
+
+                Section {
+                    Button {
+                        guard let source = lingoGlucoseSource else { return }
+                        source.canPromptForPermission { canPrompt in
+                            if canPrompt {
+                                source.requestReadPermission { _ in
+                                    refreshLingoSources()
+                                }
+                            } else {
+                                self.router.alertMessage
+                                    .send(MessageContent(
+                                        content: "Apple Health access has already been set. To change it, open the Health app and go to Sharing → Apps → Trio → Blood Glucose.",
+                                        type: .warning
+                                    ))
+                            }
+                        }
+                    }
+                    label: {
+                        Label(
+                            "Grant Apple Health Access",
+                            systemImage: "heart.text.square"
+                        ).font(.title3)
+                            .padding() }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .buttonStyle(.bordered)
+                }.listRowBackground(Color.clear)
+
+                Section {
+                    Button {
+                        UIApplication.shared.open(URL(string: "x-apple-health://")!, options: [:]) { success in
+                            if !success {
+                                self.router.alertMessage
+                                    .send(MessageContent(
+                                        content: "Unable to open the app",
+                                        type: .warning
+                                    ))
+                            }
+                        }
+                    }
+                    label: {
+                        Label(
+                            "Open Apple Health",
+                            systemImage: "waveform.path.ecg.rectangle"
+                        ).font(.title3)
+                            .padding() }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .buttonStyle(.bordered)
+                }.listRowBackground(Color.clear)
+            }
         }
 
         var simulatorConfigurationSection: some View {
