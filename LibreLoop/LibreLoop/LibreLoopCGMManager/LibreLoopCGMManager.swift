@@ -394,15 +394,9 @@ public final class LibreLoopCGMManager: CGMManager {
     public var isInoperable: Bool { state.sensorNeedsReplacement }
 
     public var cgmManagerStatus: CGMManagerStatus {
-        let lifecycle = sensorLifecycle
-        let inWarmup: Bool
-        switch lifecycle {
-        case .warmup, .pairingWarmup: inWarmup = true
-        default: inWarmup = false
-        }
+        // Trio's (older) LoopKit CGMManagerStatus has no inSensorWarmup /
+        // isInoperable fields; those live only in the Tidepool-sync fork.
         return CGMManagerStatus(hasValidSensorSession: state.sensorSerial != nil && !state.sensorNeedsReplacement,
-                                inSensorWarmup: inWarmup,
-                                isInoperable: isInoperable,
                                 lastCommunicationDate: state.latestReadingTimestamp,
                                 device: device)
     }
@@ -752,9 +746,11 @@ public final class LibreLoopCGMManager: CGMManager {
         }
     }
 
-    // AlertResponder. Tidepool-sync's LoopKit replaced the completion-handler
-    // signature with async/throws.
-    public func acknowledgeAlert(alertIdentifier: Alert.AlertIdentifier) async throws {}
+    // AlertResponder. Trio's (older) LoopKit uses the completion-handler
+    // signature; the Tidepool-sync fork replaced it with async/throws.
+    public func acknowledgeAlert(alertIdentifier: Alert.AlertIdentifier, completion: @escaping (Error?) -> Void) {
+        completion(nil)
+    }
 
     // AlertSoundVendor.
     public func getSoundBaseURL() -> URL? { nil }

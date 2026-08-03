@@ -358,6 +358,16 @@ public final class SensorSession: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Vendor-parity fallback: directly read the patchStatus characteristic
+    /// when the notify stream has gone quiet. CoreBluetooth delivers the read
+    /// response through the same delegate path as a notify, so the value also
+    /// surfaces on `notifications()` and is decoded by the normal pipeline; the
+    /// returned Data is provided for callers that want it inline.
+    @discardableResult
+    public func readPatchStatus(timeout: TimeInterval = 8) async throws -> Data {
+        try await readRaw(LibreSensorGATT.Char.patchStatus, timeout: timeout)
+    }
+
     private func removePendingRead(uuid: CBUUID, id: UUID) {
         guard var reads = pendingReads[uuid],
               let index = reads.firstIndex(where: { $0.box.id == id }) else {
