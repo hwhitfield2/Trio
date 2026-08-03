@@ -346,6 +346,19 @@ public final class LibreLoopPairingService {
             throw Failure.nfcNoActivationResponse
         }
 
+        // Surface the sensor family so a Lingo pairing attempt is observable in
+        // logs. Lingo (product type 9) is recognized and driven through the same
+        // universal Libre 3 app-certificate handshake; whether the sensor accepts
+        // that certificate is the open question. Watch the handshake log: a
+        // security error at ValidateCertificate means Lingo pins its own app
+        // certificate (needs separate extraction); reaching Phase 6 means it
+        // works. See LibreLoop-Integration.md ("Lingo").
+        let product = scanResult.patchInfo.product
+        llog("Sensor product: \(product.displayName) (raw productType \(scanResult.patchInfo.productType)).")
+        if !product.isPairingProven {
+            llog("WARNING: \(product.displayName) is not a proven pairing target. Attempting the universal Libre 3 handshake anyway (experimental).")
+        }
+
         // Persist NFC response IMMEDIATELY. If anything below fails -- BLE
         // scan, connect, or handshake -- the caller still has the receiverID
         // and (new) blePIN. Losing the blePIN after a successful A8 strands

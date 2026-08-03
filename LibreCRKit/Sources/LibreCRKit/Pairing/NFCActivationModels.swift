@@ -31,6 +31,55 @@ public struct Libre3NFCPatchInfo: Sendable, Equatable {
     public var recommendedCommandCode: NFCActivationCommandCode {
         stateByte == 0x01 ? .activate : .switchReceiver
     }
+
+    /// The Libre 3-family product this sensor reports.
+    ///
+    /// Note: this maps the `productType` byte parsed above. The raw byte offset
+    /// was validated against Libre 3 sensors (productType == 4); confirm a real
+    /// Lingo reports `9` here before trusting Lingo detection in the field
+    /// (DiaBLE reads the same field at a different offset on the un-normalized
+    /// patch info).
+    public var product: Libre3ProductType {
+        Libre3ProductType(rawProductType: productType)
+    }
+}
+
+/// Libre 3-family product discriminator, from the NFC patch-info product-type
+/// byte. Values match DiaBLE's `ProductType` mapping. Only Libre 3 / 3+ pairing
+/// is proven; Lingo/Instinct are recognized but not confirmed to complete the
+/// BLE certificate handshake with the universal Libre 3 app certificate.
+public enum Libre3ProductType: Sendable, Equatable {
+    case libre3        // 4  — FreeStyle Libre 3 / 3+
+    case lingo         // 9  — Abbott Lingo (consumer)
+    case instinct      // 10 — Medtronic-branded Libre 3+
+    case unknown(UInt8)
+
+    public init(rawProductType: UInt8) {
+        switch rawProductType {
+        case 4: self = .libre3
+        case 9: self = .lingo
+        case 10: self = .instinct
+        default: self = .unknown(rawProductType)
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .libre3: return "FreeStyle Libre 3 / 3+"
+        case .lingo: return "FreeStyle Lingo"
+        case .instinct: return "Instinct (Libre 3+)"
+        case .unknown(let value): return "Unknown Libre 3-family product (\(value))"
+        }
+    }
+
+    /// Whether this product is on the proven pairing path. Only Libre 3 / 3+
+    /// has confirmed live pairing with the bundled universal app certificate.
+    public var isPairingProven: Bool {
+        switch self {
+        case .libre3, .instinct: return true
+        case .lingo, .unknown: return false
+        }
+    }
 }
 
 private extension Libre3NFCPatchInfo {

@@ -67,10 +67,49 @@ interoperability projects. These bytes are now committed directly to this (priva
 repository, and a shipped build made from it would contain them. This is an informed,
 deliberate choice for a private build — do not publish or redistribute this tree.
 
-## Scope
+## Scope: Libre 3 / 3+ proven; Lingo experimental
 
-LibreLoop supports **Libre 3 / Libre 3 Plus only**. It does **not** support the Abbott
-**Lingo** or **Rio** sensors — they use different sensor certificates that LibreCRKit does
-not carry, so pairing a Lingo/Rio through LibreLoop is expected to fail. For Lingo, the
-delayed Apple Health source (CGM type "FreeStyle Lingo") remains the only option, and it is
+**Proven:** Libre 3 / Libre 3 Plus. These pair and stream via the bundled universal Libre 3
+app certificate (`phone_cert_162b.bin` = Juggluco's `LIBRE3_APP_CERTIFICATES_B[1]`).
+
+**Lingo (experimental, unconfirmed):** see the dedicated section below. Rio is
+uncharacterized. Until a Lingo pairing is confirmed on hardware, the delayed Apple Health
+source (CGM type "FreeStyle Lingo") remains the only working Lingo option, and it is
 display-only.
+
+## Lingo — feasibility and the decisive experiment
+
+What the code establishes (verified by reading LibreCRKit, DiaBLE, and Juggluco source):
+
+- **There is no product-type gate.** LibreCRKit parses the product-type byte but never
+  branches on it; the NFC activation/switch command carries no product-type field. A patch
+  now recognizes the family explicitly (`Libre3ProductType`: Libre 3 = 4, Lingo = 9,
+  Instinct = 10) and LibreLoop logs it during pairing, but a Lingo is still driven through
+  the **same** universal Libre 3 handshake.
+- **The gating identity is the app certificate, not the sensor.** Only two Abbott Libre 3
+  app certificates exist publicly (indices 0 and 1); index 1 is the "universal" one that
+  pairs live Libre 3 sensors. Neither is Lingo-specific. DiaBLE models Lingo as an empty
+  subclass of Libre 3 that reuses this same cert — i.e. it *bets* Lingo trusts it — but
+  **no one has published a confirmed Lingo pairing, success or failure.** The certificate
+  index is read from the sensor's own patch-info, and Lingo is the same silicon, so the
+  universal cert *may* be accepted.
+
+So Lingo is one of two cases, and only a Lingo sensor can tell them apart:
+
+1. **Lingo trusts the universal cert** → it should pair and stream with no further work.
+   This code path already attempts it.
+2. **Lingo pins its own (Lingo-app) certificate** → the sensor rejects the universal cert.
+
+**The decisive experiment (needs a Lingo sensor + a Mac build):** pair a Lingo through
+LibreLoop and watch the handshake log.
+- Reaching **Phase 6 / glucose readings** → case 1, Lingo works.
+- A **security error at ValidateCertificate** (Abbott codes 901/902) → case 2.
+
+**If it's case 2**, enabling Lingo requires extracting the Lingo app's own app certificate
++ matching private/scalar material (the same Frida-against-the-SKB-white-box method used to
+obtain the Libre 3 material), then adding that cert + its Phase 5 scalar window as an
+alternate in `PhoneCert`/`phase5StaticScalarWindowOverride`. That is a separate
+reverse-engineering effort against the Lingo app binary; no public head start exists, and it
+is not something that can be produced without the Lingo app + tooling. The code seam for
+dropping such material in already exists (the pairing flow takes an injectable
+`phoneCert`/scalar).
