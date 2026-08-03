@@ -1,0 +1,110 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%1$@ can't reconnect to your FreeStyle Libre 3. Scan the sensor again to resume CGM readings. If it was recently inserted and keeps failing, the sensor may be defective — replace it.": {
+      "extractionState": "manual",
+      "comment": "Reconnect-failed alert body (1: appName)"
+    },
+    "Active": {
+      "extractionState": "manual",
+      "comment": "Sensor lifecycle: active"
+    },
+    "Authenticating": {
+      "extractionState": "manual",
+      "comment": "Pairing stage: handshaking"
+    },
+    "Can't reconnect after %d tries — re-scan the sensor to reconnect (or replace it if it was recently inserted).": {
+      "extractionState": "manual",
+      "comment": "Reconnect-failed status after many attempts"
+    },
+    "Connecting": {
+      "extractionState": "manual",
+      "comment": "Pairing stage: connecting"
+    },
+    "Expired": {
+      "extractionState": "manual",
+      "comment": "Sensor lifecycle: expired"
+    },
+    "Initializing": {
+      "extractionState": "manual",
+      "comment": "Sensor lifecycle: initializing"
+    },
+    "No sensor": {
+      "extractionState": "manual",
+      "comment": "Sensor lifecycle: no sensor paired"
+    },
+    "OK": {
+      "extractionState": "manual",
+      "comment": "Alert acknowledge button"
+    },
+    "Re-scan sensor": {
+      "extractionState": "manual",
+      "comment": "Reconnect-failed alert title"
+    },
+    "Replace sensor": {
+      "extractionState": "manual",
+      "comment": "Sensor failure alert title"
+    },
+    "Scanning sensor": {
+      "extractionState": "manual",
+      "comment": "Pairing stage: NFC scanning"
+    },
+    "Searching for sensor": {
+      "extractionState": "manual",
+      "comment": "Pairing stage: BLE searching"
+    },
+    "Sensor ended": {
+      "extractionState": "manual",
+      "comment": "Sensor ended alert title"
+    },
+    "Sensor ends in 2 hours": {
+      "extractionState": "manual",
+      "comment": "2h sensor-expiry alert title"
+    },
+    "Sensor ends tomorrow": {
+      "extractionState": "manual",
+      "comment": "24h sensor-expiry alert title"
+    },
+    "Sensor failed": {
+      "extractionState": "manual",
+      "comment": "Sensor lifecycle title: sensor failed (detail says replace)"
+    },
+    "Sensor session ended": {
+      "extractionState": "manual",
+      "comment": "Sensor expired alert title"
+    },
+    "Signal loss": {
+      "extractionState": "manual",
+      "comment": "Sensor lifecycle: signal loss"
+    },
+    "Stabilizing": {
+      "extractionState": "manual",
+      "comment": "Sensor lifecycle: stabilizing after pairing"
+    },
+    "Warming up": {
+      "extractionState": "manual",
+      "comment": "Sensor lifecycle: warming up"
+    },
+    "Your FreeStyle Libre 3 sensor expires %@. Replace it before then to avoid a CGM interruption.": {
+      "extractionState": "manual",
+      "comment": "24h sensor-expiry alert body (expiry date/time)"
+    },
+    "Your FreeStyle Libre 3 sensor expires at %@. Replace it now to avoid a CGM interruption.": {
+      "extractionState": "manual",
+      "comment": "2h sensor-expiry alert body (expiry time)"
+    },
+    "Your FreeStyle Libre 3 sensor has expired. Replace it to resume CGM readings.": {
+      "extractionState": "manual",
+      "comment": "Sensor expired alert body"
+    },
+    "Your FreeStyle Libre 3 sensor has stopped working and needs to be replaced to resume CGM readings.": {
+      "extractionState": "manual",
+      "comment": "Sensor failure alert body"
+    },
+    "Your FreeStyle Libre 3 sensor session has ended. Replace it to resume CGM readings.": {
+      "extractionState": "manual",
+      "comment": "Sensor ended alert body"
+    }
+  },
+  "version": "1.0"
+}
