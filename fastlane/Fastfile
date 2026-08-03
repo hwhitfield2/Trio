@@ -233,9 +233,13 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
     
+    # force: true regenerates the provisioning profiles every run. Needed after a
+    # capability/App-Group change on a bundle id (e.g. associating the Trio app group
+    # with the side-by-side .triolingo id): otherwise match reuses the stale profile
+    # that lacks the app group and the archive fails code-signing.
     match(
       type: "appstore",
-      force: false,
+      force: true,
       verbose: true,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
