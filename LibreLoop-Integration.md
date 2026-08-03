@@ -101,9 +101,33 @@ So Lingo is one of two cases, and only a Lingo sensor can tell them apart:
 2. **Lingo pins its own (Lingo-app) certificate** → the sensor rejects the universal cert.
 
 **The decisive experiment (needs a Lingo sensor + a Mac build):** pair a Lingo through
-LibreLoop and watch the handshake log.
-- Reaching **Phase 6 / glucose readings** → case 1, Lingo works.
-- A **security error at ValidateCertificate** (Abbott codes 901/902) → case 2.
+LibreLoop and read the handshake log (LibreLoop's `llog` file log; the pairing flow logs
+every step and prints the sensor's actual response bytes).
+
+Exact log signatures to look for:
+
+1. First confirm recognition — near the top of the attempt:
+   `Sensor product: FreeStyle Lingo (raw productType 9).`
+   If instead it prints `Unknown Libre 3-family product (N)`, the product-type byte offset
+   needs adjusting for Lingo (tell me the raw patch-info); this does **not** affect the
+   pairing attempt, which never gates on product type.
+
+2. Then watch the certificate step. The flow sends `LoadCertificate 0x02` → the phone cert →
+   `SendCertificateLoadDone 0x03`, then waits for `0x04 CertificateAccepted`:
+   - **Case 1 (works):** the log continues past the cert step —
+     `got CertificateAccepted response=04…`, then `CertificateReady`, `EphemeralReady`,
+     `ChallengeLoadDone`, Phase 6, and glucose readings start. Lingo trusts the universal
+     cert; nothing more to do.
+   - **Case 2 (Lingo pins its own cert):** the cert step fails, as either
+     `got CertificateAccepted response=<non-04 bytes>` followed by a thrown
+     `unexpectedCommandResponse(label: "CertificateAccepted", …, actual: <bytes>)`
+     (the `actual` bytes are the sensor's rejection/security code — capture them), or a
+     timeout waiting for `CertificateAccepted`. Either way the sensor rejected the Libre 3
+     app certificate → Lingo needs its own cert material (see below).
+
+A failure *after* `ChallengeLoadDone` (i.e. at Phase 5/Phase 6) is a different signal — it
+would mean the cert was accepted but the key derivation diverges — capture that log too, as
+it changes what extraction is needed.
 
 **If it's case 2**, enabling Lingo requires extracting the Lingo app's own app certificate
 + matching private/scalar material (the same Frida-against-the-SKB-white-box method used to
