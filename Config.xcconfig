@@ -1,7 +1,7 @@
 // Some of the items can be modified to match the user's preference
-APP_DISPLAY_NAME = Trio
+APP_DISPLAY_NAME = Trio Lingo
 APP_ICON = trioBlack
-APP_URL_SCHEME = Trio
+APP_URL_SCHEME = TrioLingo
 
 // DEVELOPER_TEAM will be set to your Apple Developer ID - typically using ConfigOverride.xcconfig
 DEVELOPER_TEAM = ##TEAM_ID##
@@ -9,7 +9,12 @@ DEVELOPER_TEAM = ##TEAM_ID##
 // Typically this is not modified unless you want to create a separate (unique) app using your ID
 // It must include $(DEVELOPMENT_TEAM)
 // For example: myOwnApp.$(DEVELOPMENT_TEAM).trio
-BUNDLE_IDENTIFIER = org.nightscout.$(DEVELOPMENT_TEAM).trio
+//
+// Changed to a distinct id so this experimental Lingo build installs SIDE-BY-SIDE with a
+// normal Trio (different bundle id => separate app + separate sandbox, so it cannot touch
+// the real Trio's settings, dosing state, or Core Data glucose history). Requires
+// re-running "2. Add Identifiers" and "3. Create Certificates" for this id before building.
+BUNDLE_IDENTIFIER = org.nightscout.$(DEVELOPMENT_TEAM).triolingo
 
 // Danger zone - do not modify these unless you know what you are doing
 
