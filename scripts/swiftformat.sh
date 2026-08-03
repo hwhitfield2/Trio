@@ -103,6 +103,8 @@ trailingClosures \
   Dependencies,  \
   LoopKit,  \
   LibreTransmitter, \
+  LibreCRKit, \
+  LibreLoop, \
   G7SensorKit, \
   dexcom-share-client-swift, \
   CGMBLEKit, \
