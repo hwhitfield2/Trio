@@ -712,3 +712,27 @@ final class LibreLoopSettingsViewModel: ObservableObject, LibreLoopStateObserver
         }
     }
 }
+
+// LoopKit's HKUnit convenience units and the `localizedShortUnitString` helper
+// are internal to their respective modules (Trio's LoopKit fork keeps the units
+// internal, and `localizedShortUnitString` only exists in the newer
+// LoopKit/LoopAlgorithm generation). Redeclare the ones LibreLoopUI needs at
+// module scope here — the core LibreLoop module does the same in its own
+// Common/HKUnit.swift. Note: the raw HealthKit `unitString` for mmol/L embeds
+// the molar mass (e.g. "mmol<180.16>/L"), so `localizedShortUnitString` maps the
+// two blood-glucose units explicitly rather than returning `unitString`.
+extension HKUnit {
+    static let milligramsPerDeciliter: HKUnit = HKUnit.gramUnit(with: .milli).unitDivided(by: .literUnit(with: .deci))
+    static let milligramsPerDeciliterPerMinute: HKUnit = milligramsPerDeciliter.unitDivided(by: .minute())
+    static let millimolesPerLiter: HKUnit = HKUnit.moleUnit(with: .milli, molarMass: HKUnitMolarMassBloodGlucose).unitDivided(by: .liter())
+
+    var localizedShortUnitString: String {
+        if self == .millimolesPerLiter {
+            return "mmol/L"
+        } else if self == .milligramsPerDeciliter {
+            return "mg/dL"
+        } else {
+            return unitString
+        }
+    }
+}
