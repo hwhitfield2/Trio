@@ -67,9 +67,28 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
 
+    # Ensure an App Store Connect app record exists for this bundle id. A brand-new
+    # bundle id (e.g. the side-by-side "Trio Lingo" build) has no app record yet, which
+    # makes latest_testflight_build_number fail with "Could not find an app". produce
+    # creates it; skip_devcenter because the bundle id already exists (from the
+    # `identifiers` lane). Wrapped so an already-existing app (re-runs) is a no-op.
+    begin
+      produce(
+        api_key: api_key,
+        app_identifier: "#{BUNDLE_ID}",
+        app_name: "Trio Lingo",
+        language: "English",
+        sku: "#{BUNDLE_ID}",
+        skip_devcenter: true
+      )
+    rescue => e
+      UI.important("produce: app record not created here (may already exist): #{e.message}")
+    end
+
     previous_build_number = latest_testflight_build_number(
       app_identifier: "#{BUNDLE_ID}",
       api_key: api_key,
+      initial_build_number: 0
     )
 
     current_build_number = previous_build_number + 1
