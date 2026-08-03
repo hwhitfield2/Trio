@@ -94,11 +94,11 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
-      # This syncs any target branch to upstream branch of the same name
+      # This syncs any target branch to upstream branch of the same name.
+      # Skipped on this experimental branch (github.ref_name != 'main'): it has no
+      # matching upstream branch, so the sync would fail the job and clobber work.
       - name: Sync upstream changes
-        if: | # do not run the upstream sync action on the upstream repository,
-          # and never on this experimental branch: it has no matching upstream
-          # branch, so syncing would fail the job (and would clobber local work).
+        if: |
           steps.workflow-permission.outputs.has_permission == 'true' &&
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'nightscout' &&
           github.ref_name == 'main'
