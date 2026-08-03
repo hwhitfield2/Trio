@@ -1,16 +1,24 @@
-#!/bin/sh -e
+#!/bin/sh
 #  capture-build-details.sh
 #  Trio
 #
 #  Created by Jonas Björkert on 2024-05-08.
+#
+# NOTE: This script only populates informational build metadata (date, branch,
+# commit, submodule SHAs) shown on the app's about screen. It must never abort
+# the archive. Under Xcode's user-script sandbox (ENABLE_USER_SCRIPT_SANDBOXING
+# = YES) the plist write into BUILT_PRODUCTS_DIR — or the git subprocesses — can
+# be denied, and with `set -e` that failure previously killed the whole archive.
+# It now runs best-effort and always exits 0.
 
 # Path to BuildDetails.plist in the built product
 info_plist_path="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildDetails.plist"
 
-# Ensure the path to BuildDetails.plist is valid.
+# Ensure the path to BuildDetails.plist is valid. Missing/unwritable → skip
+# gracefully rather than failing the build.
 if [ "${info_plist_path}" = "/" -o ! -e "${info_plist_path}" ]; then
-    echo "BuildDetails.plist file does not exist at path: ${info_plist_path}" >&2
-    exit 1
+    echo "BuildDetails.plist not found at path: ${info_plist_path}; skipping build-details capture." >&2
+    exit 0
 fi
 
 echo "Gathering build details..."
@@ -63,3 +71,6 @@ echo "${submodules_info}" | while IFS="|" read -r submodule_name sub_branch sub_
 done
 
 echo "BuildDetails.plist has been updated at: ${info_plist_path}"
+
+# Never fail the archive over informational metadata.
+exit 0
