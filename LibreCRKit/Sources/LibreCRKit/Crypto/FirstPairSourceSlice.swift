@@ -3134,16 +3134,18 @@ public enum FirstPairSourceSlice {
             var bd0State = initBD0
 
             for shift in [24, 16, 8, 0] {
-                let cf0Source = [UInt8](repeating: 0, count: 3)
-                    + [0x05]
-                    + Array(cf0State[0..<8])
-                    + Array(cf0State[8..<12])
-                    + Array(cf0State[12..<14])
-                let bd0Source = [UInt8](repeating: 0, count: 3)
-                    + [0x03]
-                    + Array(bd0State[0..<8])
-                    + Array(bd0State[8..<12])
-                    + Array(bd0State[12..<14])
+                // Built with append(contentsOf:) instead of chained `+` array
+                // concatenation: the latter makes the Swift type-checker time out
+                // ("unable to type-check this expression in reasonable time") under
+                // the Xcode 26 toolchain. Byte layout is unchanged.
+                var cf0Source: [UInt8] = [0, 0, 0, 0x05]
+                cf0Source.append(contentsOf: cf0State[0..<8])
+                cf0Source.append(contentsOf: cf0State[8..<12])
+                cf0Source.append(contentsOf: cf0State[12..<14])
+                var bd0Source: [UInt8] = [0, 0, 0, 0x03]
+                bd0Source.append(contentsOf: bd0State[0..<8])
+                bd0Source.append(contentsOf: bd0State[8..<12])
+                bd0Source.append(contentsOf: bd0State[12..<14])
                 let cf0 = try vm638840(
                     magic: builder633fa8NullPostInitCF0Magic,
                     src1: cf0Source,
