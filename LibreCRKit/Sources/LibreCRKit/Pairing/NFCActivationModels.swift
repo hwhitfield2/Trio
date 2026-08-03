@@ -29,16 +29,31 @@ public struct Libre3NFCPatchInfo: Sendable, Equatable {
     }
 
     public var recommendedCommandCode: NFCActivationCommandCode {
-        stateByte == 0x01 ? .activate : .switchReceiver
+        // Libre 3: fresh (state 0x01 = storage) sensors take the activate command
+        // (0xA0); an already-paired sensor (state 0x04) is taken over with
+        // switchReceiver (0xA8). This is the proven Libre 3 path.
+        //
+        // Lingo (productType 9) diverges: a real Lingo observed in the field
+        // reports state 0x04 (paired) yet REJECTS switchReceiver (0xA8) with a
+        // short `a5 01 …` error. DiaBLE — the reference Libre 3 direct-NFC tool —
+        // never issues 0xA8; it drives every sensor through activate (0xA0). So
+        // route Lingo through 0xA0 too. (0xA0 returns the sensor's BLE address +
+        // PIN; on an already-activated sensor it should return the existing
+        // credentials rather than restart the wear clock, matching DiaBLE's
+        // universal use of the command.)
+        if product == .lingo {
+            return .activate
+        }
+        return stateByte == 0x01 ? .activate : .switchReceiver
     }
 
     /// The Libre 3-family product this sensor reports.
     ///
-    /// Note: this maps the `productType` byte parsed above. The raw byte offset
-    /// was validated against Libre 3 sensors (productType == 4); confirm a real
-    /// Lingo reports `9` here before trusting Lingo detection in the field
-    /// (DiaBLE reads the same field at a different offset on the un-normalized
-    /// patch info).
+    /// Note: this maps the `productType` byte parsed above (normalized frame[15]).
+    /// Confirmed in the field: a real Lingo reports `9` here, with a
+    /// self-consistent serial and state byte at the adjacent offsets (DiaBLE reads
+    /// the same product-type field at a different offset on the un-normalized patch
+    /// info; both agree the value is 9 for Lingo).
     public var product: Libre3ProductType {
         Libre3ProductType(rawProductType: productType)
     }
