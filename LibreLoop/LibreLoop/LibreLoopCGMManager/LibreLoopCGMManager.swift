@@ -1,7 +1,6 @@
 import Foundation
 import HealthKit
 import LibreCRKit
-import LoopAlgorithm
 import LoopKit
 import os.log
 import UIKit
@@ -835,9 +834,9 @@ struct LibreLoopGlucoseDisplay: GlucoseDisplayable {
         }
     }
 
-    var trendRate: LoopQuantity? {
+    var trendRate: HKQuantity? {
         sample.rateOfChangeMgDLPerMinute.map {
-            LoopQuantity(unit: .milligramsPerDeciliterPerMinute, doubleValue: $0)
+            HKQuantity(unit: .milligramsPerDeciliterPerMinute, doubleValue: $0)
         }
     }
 }
