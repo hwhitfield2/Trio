@@ -157,7 +157,7 @@ extension Onboarding {
 
         // MARK: - Carb Ratio
 
-        let carbRatioPickerSetting = PickerSetting(value: 30, step: 0.1, min: 1, max: 50, type: .gram)
+        let carbRatioPickerSetting = PickerSetting(value: 30, step: 0.1, min: 1, max: 500, type: .gram)
         var carbRatioItems: [CarbRatioEditor.Item] = []
         var initialCarbRatioItems: [CarbRatioEditor.Item] = []
         var carbRatioTimeValues: [TimeInterval] { sharedTimeValues }
@@ -195,7 +195,7 @@ extension Onboarding {
 
         // MARK: - Insulin Sensitivity Factor (ISF)
 
-        var sensitivityPickerSetting = PickerSetting(value: 200, step: 1, min: 9, max: 540, type: .glucose)
+        var sensitivityPickerSetting = PickerSetting(value: 200, step: 1, min: 9, max: 1800, type: .glucose)
         var isfItems: [ISFEditor.Item] = []
         var initialISFItems: [ISFEditor.Item] = []
         var isfTimeValues: [TimeInterval] { sharedTimeValues }
