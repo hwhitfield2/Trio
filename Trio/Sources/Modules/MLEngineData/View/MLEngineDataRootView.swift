@@ -62,7 +62,7 @@ extension MLEngineData {
                 Section(
                     header: Text("Decision Audit Records"),
                     footer: Text(
-                        "One record per dosing cycle: who decided (algorithm, versions, caps in force), what was proposed and enacted, which path the decision took, when, why (predictions and binding constraints), and how. Files rotate daily and are kept for 90 days."
+                        "One record per dosing cycle: who decided (algorithm, versions, caps in force), what was proposed and enacted, which path the decision took, when, why (predictions and binding constraints), and how. Tap a day to browse each decision; share from within the day view. Files rotate daily and are kept for 90 days."
                     ),
                     content: {
                         if state.auditFileURLs.isEmpty {
@@ -71,7 +71,9 @@ extension MLEngineData {
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(state.auditFileURLs, id: \.absoluteString) { url in
-                                ShareLink(item: url) {
+                                NavigationLink {
+                                    AuditDayView(fileURL: url, loader: { state.auditRecords(in: $0) })
+                                } label: {
                                     HStack {
                                         Text(url.lastPathComponent)
                                             .lineLimit(1)
@@ -82,8 +84,6 @@ extension MLEngineData {
                                                 .font(.footnote)
                                                 .foregroundStyle(.secondary)
                                         }
-                                        Image(systemName: "square.and.arrow.up")
-                                            .font(.footnote)
                                     }
                                 }
                             }

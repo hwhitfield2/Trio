@@ -104,6 +104,7 @@
 		FAB1E5000000000000000055 /* DeliveryCapEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */; };
 		FAB1E5000000000000000056 /* DeliveryCapEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */; };
 		FAB1E5000000000000000057 /* DeliveryCapsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000047 /* DeliveryCapsTests.swift */; };
+		FAB1E5000000000000000058 /* AuditRecordViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000048 /* AuditRecordViews.swift */; };
 		FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */; };
 		38192E04261B82FA0094D973 /* ReachabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E03261B82FA0094D973 /* ReachabilityManager.swift */; };
 		38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */; };
@@ -988,6 +989,7 @@
 		FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorStateModel.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorRootView.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000047 /* DeliveryCapsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapsTests.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000048 /* AuditRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditRecordViews.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelopeTests.swift; sourceTree = "<group>"; };
 		3818AA45274C229000843DB3 /* LibreTransmitter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LibreTransmitter; path = Dependencies/LibreTransmitter; sourceTree = "<group>"; };
 		3818AA49274C267000843DB3 /* CGMBLEKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = CGMBLEKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -3864,6 +3866,7 @@
 			isa = PBXGroup;
 			children = (
 				FAB1E5000000000000000025 /* MLEngineDataRootView.swift */,
+				FAB1E5000000000000000048 /* AuditRecordViews.swift */,
 			);
 			path = View;
 			sourceTree = "<group>";
@@ -4570,6 +4573,7 @@
 				FAB1E5000000000000000033 /* MLEngineDataDataFlow.swift in Sources */,
 				FAB1E5000000000000000034 /* MLEngineDataStateModel.swift in Sources */,
 				FAB1E5000000000000000035 /* MLEngineDataRootView.swift in Sources */,
+				FAB1E5000000000000000058 /* AuditRecordViews.swift in Sources */,
 				DDA6E3202D258E0500C2988C /* OverrideHelpView.swift in Sources */,
 				DDA6E2502D22187500C2988C /* ChartLegendView.swift in Sources */,
 				49090A8D2E9FE8D200D0F5DB /* GarminWatchSettings.swift in Sources */,

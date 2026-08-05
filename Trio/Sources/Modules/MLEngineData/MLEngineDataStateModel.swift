@@ -22,6 +22,10 @@ extension MLEngineData {
             auditFileURLs = decisionAuditService.auditFileURLs().reversed()
         }
 
+        func auditRecords(in url: URL) -> [DecisionAuditRecord] {
+            decisionAuditService.records(in: url)
+        }
+
         func exportTrainingData() {
             guard !isExporting else { return }
             isExporting = true

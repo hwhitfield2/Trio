@@ -141,6 +141,21 @@ final class DecisionAuditFileStore {
         }
     }
 
+    /// Decodes every record in one audit file, newest first, for the in-app
+    /// browser. Best-effort: a malformed line is skipped rather than hiding the
+    /// rest of the day.
+    func records(in url: URL) -> [DecisionAuditRecord] {
+        queue.sync {
+            guard let data = try? Data(contentsOf: url),
+                  let text = String(data: data, encoding: .utf8) else { return [] }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return text.split(separator: "\n")
+                .compactMap { try? decoder.decode(DecisionAuditRecord.self, from: Data($0.utf8)) }
+                .sorted { $0.when.decisionAt > $1.when.decisionAt }
+        }
+    }
+
     private func fileURL(for date: Date) -> URL {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -172,6 +187,8 @@ final class DecisionAuditFileStore {
 protocol DecisionAuditService {
     /// All audit files on disk, oldest first, for export.
     func auditFileURLs() -> [URL]
+    /// All records in one audit file, newest first, for the in-app browser.
+    func records(in url: URL) -> [DecisionAuditRecord]
 }
 
 /// Observes every published determination and writes its audit record.
@@ -194,6 +211,10 @@ final class BaseDecisionAuditService: DecisionAuditService, Injectable {
 
     func auditFileURLs() -> [URL] {
         store.auditFileURLs()
+    }
+
+    func records(in url: URL) -> [DecisionAuditRecord] {
+        store.records(in: url)
     }
 }
 
