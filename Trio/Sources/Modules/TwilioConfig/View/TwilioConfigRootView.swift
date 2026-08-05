@@ -16,8 +16,6 @@ extension TwilioConfig {
         @State private var testResultMessage: String?
         @State private var showTestResult: Bool = false
 
-        private static let cooldownOptions: [Decimal] = [5, 10, 15, 30, 60, 120, 240]
-
         @Environment(\.colorScheme) var colorScheme
         @Environment(AppState.self) var appState
 
@@ -292,7 +290,7 @@ extension TwilioConfig {
                     selection: $state.twilioCooldownMinutes,
                     label: Text("Cooldown")
                 ) {
-                    ForEach(Self.cooldownOptions, id: \.self) { value in
+                    ForEach(TwilioMessaging.Config.cooldownOptions, id: \.self) { value in
                         Text("\(Int(truncating: value as NSNumber)) min").tag(value)
                     }
                 }

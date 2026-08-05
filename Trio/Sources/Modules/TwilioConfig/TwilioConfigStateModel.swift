@@ -4,6 +4,7 @@ import SwiftUI
 extension TwilioConfig {
     final class StateModel: BaseStateModel<Provider> {
         @Injected() private var keychain: Keychain!
+        @Injected() private var broadcaster: Broadcaster!
         @Injected() var twilioMessaging: TwilioMessagingManager!
 
         @Published var twilioEnabled = false
@@ -22,6 +23,7 @@ extension TwilioConfig {
 
         override func subscribe() {
             units = settingsManager.settings.units
+            broadcaster.register(SettingsObserver.self, observer: self)
 
             accountSID = keychain.getValue(String.self, forKey: TwilioMessaging.Config.accountSIDKey) ?? ""
             authToken = keychain.getValue(String.self, forKey: TwilioMessaging.Config.authTokenKey) ?? ""
@@ -54,10 +56,11 @@ extension TwilioConfig {
                 max(min($0, 100), 40)
             })
 
+            // Snap to the nearest picker option so imported settings always show a selection.
             subscribeSetting(\.twilioCooldownMinutes, on: $twilioCooldownMinutes, initial: {
-                twilioCooldownMinutes = $0
+                twilioCooldownMinutes = Self.nearestCooldownOption(to: $0)
             }, map: {
-                max(min($0, 240), 5)
+                Self.nearestCooldownOption(to: $0)
             })
 
             // Debounce the free-text fields so settings are not persisted on every keystroke.
@@ -70,6 +73,12 @@ extension TwilioConfig {
                 \.twilioRecipients,
                 on: $twilioRecipients.debounce(for: .seconds(1), scheduler: RunLoop.main)
             ) { twilioRecipients = $0 }
+        }
+
+        static func nearestCooldownOption(to value: Decimal) -> Decimal {
+            TwilioMessaging.Config.cooldownOptions.min {
+                abs(Double(truncating: ($0 - value) as NSNumber)) < abs(Double(truncating: ($1 - value) as NSNumber))
+            } ?? value
         }
 
         private func storeSecret(_ value: String, forKey key: String) {

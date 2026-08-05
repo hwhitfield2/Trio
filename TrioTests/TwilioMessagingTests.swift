@@ -94,6 +94,15 @@ import Testing
     }
 }
 
+@Suite("Twilio Config Tests") struct TwilioConfigTests {
+    @Test("Snaps cooldown to the nearest picker option") func cooldownSnap() {
+        #expect(TwilioConfig.StateModel.nearestCooldownOption(to: 20) == 15)
+        #expect(TwilioConfig.StateModel.nearestCooldownOption(to: 30) == 30)
+        #expect(TwilioConfig.StateModel.nearestCooldownOption(to: 1000) == 240)
+        #expect(TwilioConfig.StateModel.nearestCooldownOption(to: 1) == 5)
+    }
+}
+
 @Suite("Twilio Request Builder Tests") struct TwilioRequestBuilderTests {
     @Test("Builds a valid Twilio API request") func buildRequest() throws {
         let request = try #require(TwilioRequestBuilder.request(

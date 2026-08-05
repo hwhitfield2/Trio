@@ -9,6 +9,7 @@ enum TwilioMessaging {
         static let authTokenKey = "TwilioMessaging.authToken"
         static let timeout: TimeInterval = 30
         static let loopFailureGraceMinutes: Double = 45
+        static let cooldownOptions: [Decimal] = [5, 10, 15, 30, 60, 120, 240]
     }
 }
 
@@ -17,6 +18,7 @@ enum TwilioMessagingError: LocalizedError {
     case missingRecipients
     case badStatusCode(Int, String?)
     case invalidResponse
+    case recipientFailed(String, String)
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +28,8 @@ enum TwilioMessagingError: LocalizedError {
             )
         case .missingRecipients:
             return String(localized: "No destination phone numbers are configured for Twilio messages.")
+        case let .recipientFailed(recipient, reason):
+            return String(localized: "Sending to \(recipient) failed: \(reason)")
         case let .badStatusCode(code, message):
             if let message = message, !message.isEmpty {
                 return String(localized: "Twilio returned an error (\(code)): \(message)")
@@ -60,15 +64,36 @@ final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
     @Persisted(key: "TwilioMessaging.activeAlertKind") private var activeAlertKindRaw: String = ""
 
     private let viewContext = CoreDataStack.shared.persistentContainer.viewContext
+    private let queue = DispatchQueue(label: "BaseTwilioMessagingManager.queue", qos: .utility)
+    private var coreDataPublisher: AnyPublisher<Set<NSManagedObjectID>, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
     init(resolver: Resolver) {
         injectServices(resolver)
+        coreDataPublisher =
+            changedObjectsOnManagedObjectContextDidSavePublisher()
+                .receive(on: queue)
+                .share()
+                .eraseToAnyPublisher()
         subscribeToGlucoseUpdates()
     }
 
     private func subscribeToGlucoseUpdates() {
+        // updatePublisher only fires for batch inserts (e.g. backfills), not for the single
+        // readings a live CGM delivers, so additionally observe GlucoseStored Core Data saves —
+        // same workaround as GarminManager.
         glucoseStorage.updatePublisher
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.evaluateAndSendIfNeeded()
+                }
+            }
+            .store(in: &subscriptions)
+
+        coreDataPublisher?
+            .filteredByEntityName("GlucoseStored")
+            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 Task { @MainActor in
@@ -96,12 +121,20 @@ final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
             localized: "Trio test message: Twilio SMS alerts are configured correctly.",
             comment: "Twilio test SMS body"
         ) + " " + caregiverMessaging.statusMessage()
-        try await send(body: body, to: recipients)
+        let failures = try await send(body: body, to: recipients)
+        if let failure = failures.first {
+            throw TwilioMessagingError.recipientFailed(failure.recipient, failure.error.localizedDescription)
+        }
     }
 
     @MainActor private func evaluateAndSendIfNeeded() async {
         let settings = settingsManager.settings
-        guard settings.twilioEnabled, isConfigured else { return }
+        guard settings.twilioEnabled, isConfigured else {
+            // Reset the episode marker so re-enabling starts fresh instead of suppressing
+            // an alert that never resolved while the feature was off.
+            if !activeAlertKindRaw.isEmpty { activeAlertKindRaw = "" }
+            return
+        }
 
         let recipients = CaregiverMessage.recipients(from: settings.twilioRecipients)
         guard !recipients.isEmpty else { return }
@@ -135,11 +168,20 @@ final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
         guard let kind = TwilioAlertPolicy.evaluate(conditions: conditions, state: state) else { return }
 
         do {
-            try await send(body: messageBody(for: kind), to: recipients)
+            let failures = try await send(body: messageBody(for: kind), to: recipients)
+            // At least one recipient was reached, so record the send: retrying the failed
+            // numbers every cycle would flood the reachable ones with duplicates.
             lastSentDate = Date()
             activeAlertKindRaw = kind.rawValue
-            debug(.service, "Twilio alert sent (\(kind.rawValue)) to \(recipients.count) recipient(s)")
+            debug(
+                .service,
+                "Twilio alert sent (\(kind.rawValue)) to \(recipients.count - failures.count)/\(recipients.count) recipient(s)"
+            )
+            for failure in failures {
+                warning(.service, "Twilio alert to \(failure.recipient) failed", error: failure.error)
+            }
         } catch {
+            // Nothing was delivered; state stays untouched so the next glucose update retries.
             warning(.service, "Twilio alert failed to send", error: error)
         }
     }
@@ -180,7 +222,11 @@ final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
         }
     }
 
-    private func send(body: String, to recipients: [String]) async throws {
+    /// Sends the message to every recipient, collecting per-recipient failures. Throws only when
+    /// the configuration is unusable or no recipient could be reached — one bad number must not
+    /// block delivery to (or trigger endless re-sends for) the others.
+    @discardableResult
+    private func send(body: String, to recipients: [String]) async throws -> [(recipient: String, error: Error)] {
         guard let accountSID = keychain.getValue(String.self, forKey: TwilioMessaging.Config.accountSIDKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             let authToken = keychain.getValue(String.self, forKey: TwilioMessaging.Config.authTokenKey)?
@@ -193,28 +239,50 @@ final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
         let fromNumber = settingsManager.settings.twilioFromNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !fromNumber.isEmpty else { throw TwilioMessagingError.missingCredentials }
 
+        var failures: [(recipient: String, error: Error)] = []
+
         for recipient in recipients {
-            guard let request = TwilioRequestBuilder.request(
-                accountSID: accountSID,
-                authToken: authToken,
-                from: fromNumber,
-                to: recipient,
-                body: body,
-                timeout: TwilioMessaging.Config.timeout
-            ) else {
-                throw TwilioMessagingError.invalidResponse
+            do {
+                try await sendSingle(
+                    accountSID: accountSID,
+                    authToken: authToken,
+                    from: fromNumber,
+                    to: recipient,
+                    body: body
+                )
+            } catch {
+                failures.append((recipient: recipient, error: error))
             }
+        }
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+        if failures.count == recipients.count, let first = failures.first {
+            throw first.error
+        }
 
-            guard let http = response as? HTTPURLResponse else {
-                throw TwilioMessagingError.invalidResponse
-            }
+        return failures
+    }
 
-            guard 200 ..< 300 ~= http.statusCode else {
-                let apiError = try? JSONDecoder().decode(TwilioErrorResponse.self, from: data)
-                throw TwilioMessagingError.badStatusCode(http.statusCode, apiError?.message)
-            }
+    private func sendSingle(accountSID: String, authToken: String, from: String, to: String, body: String) async throws {
+        guard let request = TwilioRequestBuilder.request(
+            accountSID: accountSID,
+            authToken: authToken,
+            from: from,
+            to: to,
+            body: body,
+            timeout: TwilioMessaging.Config.timeout
+        ) else {
+            throw TwilioMessagingError.invalidResponse
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw TwilioMessagingError.invalidResponse
+        }
+
+        guard 200 ..< 300 ~= http.statusCode else {
+            let apiError = try? JSONDecoder().decode(TwilioErrorResponse.self, from: data)
+            throw TwilioMessagingError.badStatusCode(http.statusCode, apiError?.message)
         }
     }
 }
