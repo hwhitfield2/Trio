@@ -18,6 +18,25 @@ provides:
   keeps running.
 - `trioml.model` — quantile-regression sequence model skeleton (requires torch;
   everything else is stdlib-only so the gate suite runs anywhere)
+- `trioml.estimator` — CGM-lag-compensating Kalman StateEstimator prototype
+- `trioml.nightscout` — Nightscout → export-schema converter (deep history:
+  the phone retains only 90 days; a long-running Nightscout site holds more)
+- `trioml.merge` — deduplicating merge of overlapping sources (periodic app
+  exports + Nightscout) into one training corpus
+
+## Working with limited data
+
+The pipeline is designed to start small and grow:
+
+- StateEstimator validation needs only ~2-3 days of readings.
+- Model training becomes meaningful around 3-4 weeks of frames; below
+  `gates.MIN_SAMPLES_PER_HORIZON` the promotion gates fail closed and oref
+  keeps dosing — insufficient data costs time, never safety.
+- Archive every in-app export (CoreData purges at 90 days) and merge them with
+  `merge.merge_events(app_export_events, nightscout_events)`; the merged corpus
+  is the long-term training set.
+- Simulator pretraining (Phase 2) is the other lever: pretrain on virtual-patient
+  data, fine-tune on the personal corpus.
 
 ## Usage
 
