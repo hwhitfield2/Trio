@@ -21,6 +21,8 @@ enum Screen: Identifiable, Hashable {
     case cgm
     case healthkit
     case glucoseNotificationSettings
+    case caregiverMessagingSettings
+    case caregiverQuickMessage
     case mealSettings
     case iconConfig
     case overrideConfig
@@ -109,6 +111,10 @@ extension Screen {
             AppleHealthKit.RootView(resolver: resolver)
         case .glucoseNotificationSettings:
             GlucoseNotificationSettings.RootView(resolver: resolver)
+        case .caregiverMessagingSettings:
+            CaregiverMessagingSettings.RootView(resolver: resolver)
+        case .caregiverQuickMessage:
+            CaregiverQuickMessageView(resolver: resolver)
         case .mealSettings:
             MealSettings.RootView(resolver: resolver)
         case .iconConfig:

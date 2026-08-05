@@ -332,6 +332,15 @@
 		8E44E55651599902EC9ABC94 /* MealPhotoCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD3623233297369856004FE /* MealPhotoCaptureView.swift */; };
 		7566BB1F4E66A9C1B5A17A76 /* MealPhotoAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */; };
 		43FB1684AFB1922993CBB1FC /* MealPhotoResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */; };
+		AEC49BE7B933E7171AFFF218 /* CaregiverMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */; };
+		DA1B9A5FB663DDB1B8E3DCE9 /* CaregiverMessagingSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */; };
+		FE3C26AB30FDB5E166C4CBB7 /* CaregiverMessagingSettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */; };
+		EF5058CA95D89021A9BECB32 /* CaregiverMessagingSettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */; };
+		FD4BBD33D54FB26184731B55 /* CaregiverMessagingSettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */; };
+		E24CA2E781678C74A2552B26 /* MessageComposeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */; };
+		EB5DCD4A59CED904FAC81529 /* CaregiverQuickMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */; };
+		EAD9A79C03D063035BFB8081 /* CaregiverMessageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */; };
+		B3A991EE84DF9BD0905EBEDA /* CaregiverMessagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */; };
 		69B9A368029F7EB39F525422 /* CarbRatioEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AA5E04A2761F6EEA6568E1 /* CarbRatioEditorStateModel.swift */; };
 		6B1A8D192B14D91600E76752 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B1A8D182B14D91600E76752 /* WidgetKit.framework */; };
 		6B1A8D1B2B14D91600E76752 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B1A8D1A2B14D91600E76752 /* SwiftUI.framework */; };
@@ -949,6 +958,15 @@
 		1AD3623233297369856004FE /* MealPhotoCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoCaptureView.swift"; sourceTree = "<group>"; };
 		0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoAnalysisView.swift"; sourceTree = "<group>"; };
 		B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoResultView.swift"; sourceTree = "<group>"; };
+		C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingManager.swift; sourceTree = "<group>"; };
+		EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsDataFlow.swift; sourceTree = "<group>"; };
+		E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsProvider.swift; sourceTree = "<group>"; };
+		A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsStateModel.swift; sourceTree = "<group>"; };
+		B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsRootView.swift; sourceTree = "<group>"; };
+		F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageComposeView.swift; sourceTree = "<group>"; };
+		E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverQuickMessageView.swift; sourceTree = "<group>"; };
+		C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessageIntent.swift; sourceTree = "<group>"; };
+		EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingTests.swift; sourceTree = "<group>"; };
 		22963BD06A9C83959D4914E4 /* GlucoseNotificationSettingsRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlucoseNotificationSettingsRootView.swift; sourceTree = "<group>"; };
 		2AD22C985B79A2F0D2EA3D9D /* PumpConfigRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpConfigRootView.swift; sourceTree = "<group>"; };
 		2F2A13DF0EDEEEDC4106AA2A /* NightscoutConfigDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NightscoutConfigDataFlow.swift; sourceTree = "<group>"; };
@@ -2016,6 +2034,7 @@
 				DD09D4792C5986BA003FEA5D /* CalendarEventSettings */,
 				CEE9A64D2BBB411C00EB5194 /* Calibrations */,
 				E42231DBF0DBE2B4B92D1B15 /* CarbRatioEditor */,
+				A1A73E9B7F014A77D5CCE8EB /* CaregiverMessagingSettings */,
 				F75CB57ED6971B46F8756083 /* CGMSettings */,
 				0610F7D6D2EC00E3BA1569F0 /* ConfigEditor */,
 				E592A3762CEEC038009A472C /* ContactImage */,
@@ -2166,6 +2185,7 @@
 				BD7DB88C2D2C49FF003D3155 /* BolusCalculator */,
 				B015AFE22E500000000D7351 /* BolusSafety */,
 				3862CC2C2743F9DC00BF832C /* Calendar */,
+				E3F01B1922BB2746098E3926 /* CaregiverMessaging */,
 				E592A37E2CEEC046009A472C /* ContactImage */,
 				F90692A8274B7A980037068D /* HealthKit */,
 				3BF85FE22E427312000D7351 /* IOB */,
@@ -2794,6 +2814,7 @@
 				BD8FC0552D66187700B95AED /* CoreDataTests */,
 				38FCF3F125E9028E0078B0D1 /* Info.plist */,
 				CEE9A65D2BBC9F6500EB5194 /* CalibrationsTests.swift */,
+				EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */,
 				CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */,
 				3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */,
 				FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */,
@@ -3350,6 +3371,7 @@
 				118DF7692C5ECBC60067FEB7 /* Override */,
 				110AEDE22C5193D100615CC9 /* Bolus */,
 				CE1856F32ADC4835007E39C7 /* Carbs */,
+				E5947347F1C0F161D6288724 /* CaregiverMessage */,
 				CE7CA3432A064973004BE681 /* AppShortcuts.swift */,
 				CE7CA3442A064973004BE681 /* BaseIntentsRequest.swift */,
 				CE7CA3452A064973004BE681 /* TempPresets */,
@@ -3485,6 +3507,43 @@
 				DD09D4812C5986F6003FEA5D /* CalendarEventSettingsRootView.swift */,
 			);
 			path = View;
+			sourceTree = "<group>";
+		};
+		E3F01B1922BB2746098E3926 /* CaregiverMessaging */ = {
+			isa = PBXGroup;
+			children = (
+				C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */,
+			);
+			path = CaregiverMessaging;
+			sourceTree = "<group>";
+		};
+		A1A73E9B7F014A77D5CCE8EB /* CaregiverMessagingSettings */ = {
+			isa = PBXGroup;
+			children = (
+				A98278746E297F67CA16CBD5 /* View */,
+				EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */,
+				E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */,
+				A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */,
+			);
+			path = CaregiverMessagingSettings;
+			sourceTree = "<group>";
+		};
+		A98278746E297F67CA16CBD5 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */,
+				F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */,
+				E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		E5947347F1C0F161D6288724 /* CaregiverMessage */ = {
+			isa = PBXGroup;
+			children = (
+				C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */,
+			);
+			path = CaregiverMessage;
 			sourceTree = "<group>";
 		};
 		DD09D6492D2B6253000D82C9 /* Trio Watch Complication */ = {
@@ -4942,6 +5001,14 @@
 				8E44E55651599902EC9ABC94 /* MealPhotoCaptureView.swift in Sources */,
 				7566BB1F4E66A9C1B5A17A76 /* MealPhotoAnalysisView.swift in Sources */,
 				43FB1684AFB1922993CBB1FC /* MealPhotoResultView.swift in Sources */,
+				AEC49BE7B933E7171AFFF218 /* CaregiverMessagingManager.swift in Sources */,
+				DA1B9A5FB663DDB1B8E3DCE9 /* CaregiverMessagingSettingsDataFlow.swift in Sources */,
+				FE3C26AB30FDB5E166C4CBB7 /* CaregiverMessagingSettingsProvider.swift in Sources */,
+				EF5058CA95D89021A9BECB32 /* CaregiverMessagingSettingsStateModel.swift in Sources */,
+				FD4BBD33D54FB26184731B55 /* CaregiverMessagingSettingsRootView.swift in Sources */,
+				E24CA2E781678C74A2552B26 /* MessageComposeView.swift in Sources */,
+				EB5DCD4A59CED904FAC81529 /* CaregiverQuickMessageView.swift in Sources */,
+				EAD9A79C03D063035BFB8081 /* CaregiverMessageIntent.swift in Sources */,
 				DDF6905C2DA0AFC5008BF16C /* WelcomeStepView.swift in Sources */,
 				1967DFC029D053AC00759F30 /* IconSelection.swift in Sources */,
 				19D4E4EB29FC6A9F00351451 /* Charts.swift in Sources */,
@@ -5080,6 +5147,7 @@
 				BD8FC0542D66186000B95AED /* TestError.swift in Sources */,
 				DDDD0FFB2F4E22C000F9C645 /* GlucoseSmoothingTests.swift in Sources */,
 				CEE9A65E2BBC9F6500EB5194 /* CalibrationsTests.swift in Sources */,
+				B3A991EE84DF9BD0905EBEDA /* CaregiverMessagingTests.swift in Sources */,
 				CA02000000000000000010C2 /* DeliveryLimitsSyncTests.swift in Sources */,
 				BD8FC0622D6619E600B95AED /* OverrideStorageTests.swift in Sources */,
 				BD8FC0592D66189700B95AED /* TestAssembly.swift in Sources */,

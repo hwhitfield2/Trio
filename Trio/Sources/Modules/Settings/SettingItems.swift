@@ -377,6 +377,17 @@ enum SettingItems {
                 "Display IOB and COB"
             ],
             path: ["Notifications", "Calendar Events"]
+        ),
+        SettingItem(
+            title: "Caregiver Messaging",
+            view: .caregiverMessagingSettings,
+            searchContents: [
+                "Enable Caregiver Messaging",
+                "Include IOB and COB",
+                "Text Caregiver from Alerts",
+                "Send Update Now"
+            ],
+            path: ["Notifications", "Caregiver Messaging"]
         )
     ]
 

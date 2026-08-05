@@ -80,6 +80,18 @@ struct TrioSettings: JSON, Equatable, Encodable {
     /// AI-based meal photo analysis on the bolus calculator screen
     var mealPhotoAnalysisEnabled: Bool = false
 
+    /// Caregiver messaging: compose glucose status texts for sending via the Messages app
+    var caregiverMessagingEnabled: Bool = false
+
+    /// Caregiver messaging recipients (comma-separated phone numbers or iMessage addresses)
+    var caregiverRecipients: String = ""
+
+    /// Include IOB and COB in caregiver messages
+    var caregiverMessagesIncludeIOBCOB: Bool = true
+
+    /// Show a "Text Caregiver" action on glucose alarm notifications
+    var caregiverAlertQuickAction: Bool = true
+
     /// Selected Garmin watchface (Trio or SwissAlpine)
     var garminWatchface: GarminWatchface = .trio
     var garminDatafield: GarminDatafield = .none
@@ -368,6 +380,22 @@ extension TrioSettings: Decodable {
 
         if let mealPhotoAnalysisEnabled = try? container.decode(Bool.self, forKey: .mealPhotoAnalysisEnabled) {
             settings.mealPhotoAnalysisEnabled = mealPhotoAnalysisEnabled
+        }
+
+        if let caregiverMessagingEnabled = try? container.decode(Bool.self, forKey: .caregiverMessagingEnabled) {
+            settings.caregiverMessagingEnabled = caregiverMessagingEnabled
+        }
+
+        if let caregiverRecipients = try? container.decode(String.self, forKey: .caregiverRecipients) {
+            settings.caregiverRecipients = caregiverRecipients
+        }
+
+        if let caregiverMessagesIncludeIOBCOB = try? container.decode(Bool.self, forKey: .caregiverMessagesIncludeIOBCOB) {
+            settings.caregiverMessagesIncludeIOBCOB = caregiverMessagesIncludeIOBCOB
+        }
+
+        if let caregiverAlertQuickAction = try? container.decode(Bool.self, forKey: .caregiverAlertQuickAction) {
+            settings.caregiverAlertQuickAction = caregiverAlertQuickAction
         }
 
         if let garminWatchface = try? container.decode(GarminWatchface.self, forKey: .garminWatchface) {
