@@ -12,7 +12,10 @@ extension CarbRatioEditor {
 
         let timeValues = stride(from: 0.0, to: 1.days.timeInterval, by: 30.minutes.timeInterval).map { $0 }
 
-        let rateValues = stride(from: 10.0, to: 501.0, by: 1.0).map { ($0.decimal ?? .zero) / 10 }
+        // 1.0-50.0 g/U in 0.1 steps, then 51-500 g/U in whole-gram steps —
+        // very-low-dose regimens use ratios far above the old 50 g/U ceiling.
+        let rateValues = stride(from: 10.0, to: 501.0, by: 1.0).map { ($0.decimal ?? .zero) / 10 } +
+            stride(from: 51.0, to: 501.0, by: 1.0).map { $0.decimal ?? .zero }
 
         var canAdd: Bool {
             guard let lastItem = items.last else { return true }
