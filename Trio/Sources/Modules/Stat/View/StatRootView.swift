@@ -18,6 +18,7 @@ extension Stat {
         @State var state = StateModel()
         @State private var selectedView: StateModel.StatisticViewType = .glucose
         @State private var isGlucoseDaySelected: Bool = false
+        @State private var selectedForecastHorizon: Int = 30
 
         private var intervalOptions: [Stat.StateModel.StatsTimeIntervalWithToday] {
             state.selectedGlucoseChartType == .percentileByDay || state.selectedGlucoseChartType == .distributionByDay
@@ -45,6 +46,8 @@ extension Stat {
                             loopingView
                         case .meals:
                             mealsView
+                        case .forecasts:
+                            forecastsView
                         }
                     }
                     .padding()
@@ -418,6 +421,66 @@ extension Stat {
                     Text("Tap and hold a bar to reveal more details.")
                 }.foregroundStyle(Color.secondary)
             }.font(.footnote)
+        }
+
+        @ViewBuilder var forecastsView: some View {
+            HStack {
+                Text("Chart Type")
+                    .font(.headline)
+
+                Spacer()
+
+                Picker("Forecast Chart Type", selection: $state.selectedForecastChartType) {
+                    ForEach(StateModel.ForecastChartType.allCases, id: \.self) { type in
+                        Text(type.displayName)
+                    }
+                }.pickerStyle(.menu)
+            }.padding(.horizontal)
+
+            StatCard {
+                switch state.selectedForecastChartType {
+                case .accuracy:
+                    if state.forecastAccuracyStats.isEmpty {
+                        ContentUnavailableView(
+                            String(localized: "No Forecast Data"),
+                            systemImage: "chart.bar.fill",
+                            description: Text(
+                                "Forecast accuracy will appear here once the loop has run and prediction results could be compared against glucose readings."
+                            )
+                        )
+                    } else {
+                        ForecastAccuracyChart(
+                            stats: state.forecastAccuracyStats,
+                            selectedHorizon: $selectedForecastHorizon
+                        )
+                    }
+                case .predictedVsActual:
+                    if state.forecastAccuracyPoints.isEmpty {
+                        ContentUnavailableView(
+                            String(localized: "No Forecast Data"),
+                            systemImage: "chart.dots.scatter",
+                            description: Text(
+                                "Forecast accuracy will appear here once the loop has run and prediction results could be compared against glucose readings."
+                            )
+                        )
+                    } else {
+                        ForecastScatterChart(
+                            points: state.forecastAccuracyPoints,
+                            selectedHorizon: selectedForecastHorizon
+                        )
+                    }
+                case .cgmGaps:
+                    if state.cgmGapStats.isEmpty {
+                        ContentUnavailableView(
+                            String(localized: "No Glucose Data"),
+                            systemImage: "sensor.tag.radiowaves.forward",
+                            description: Text("CGM delivery statistics will appear here once data is available.")
+                        )
+                    } else {
+                        CGMGapChart(gapStats: state.cgmGapStats)
+                    }
+                }
+            }
         }
     }
 }

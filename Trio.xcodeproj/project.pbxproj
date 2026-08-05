@@ -364,6 +364,9 @@
 		BD249D972D42FCBF00412DEB /* AreaChartSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD249D962D42FCBD00412DEB /* AreaChartSetup.swift */; };
 		BD249D992D42FCCD00412DEB /* BolusStatsSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD249D982D42FCCA00412DEB /* BolusStatsSetup.swift */; };
 		BD249D9B2D42FCDB00412DEB /* LoopChartSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD249D9A2D42FCD800412DEB /* LoopChartSetup.swift */; };
+		FA6E57A72E0A00000000B001 /* ForecastStatsSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A001 /* ForecastStatsSetup.swift */; };
+		FA6E57A72E0A00000000B002 /* ForecastAccuracyChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A002 /* ForecastAccuracyChart.swift */; };
+		FA6E57A72E0A00000000B003 /* CGMGapChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A003 /* CGMGapChart.swift */; };
 		BD249D9D2D42FCF500412DEB /* MealStatsSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD249D9C2D42FCF300412DEB /* MealStatsSetup.swift */; };
 		BD249D9F2D42FD0600412DEB /* StackedChartSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD249D9E2D42FD0200412DEB /* StackedChartSetup.swift */; };
 		BD249DA12D42FD1200412DEB /* TDDSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD249DA02D42FD1000412DEB /* TDDSetup.swift */; };
@@ -1228,6 +1231,9 @@
 		BD249D962D42FCBD00412DEB /* AreaChartSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AreaChartSetup.swift; sourceTree = "<group>"; };
 		BD249D982D42FCCA00412DEB /* BolusStatsSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BolusStatsSetup.swift; sourceTree = "<group>"; };
 		BD249D9A2D42FCD800412DEB /* LoopChartSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopChartSetup.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A001 /* ForecastStatsSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastStatsSetup.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A002 /* ForecastAccuracyChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastAccuracyChart.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A003 /* CGMGapChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMGapChart.swift; sourceTree = "<group>"; };
 		BD249D9C2D42FCF300412DEB /* MealStatsSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealStatsSetup.swift; sourceTree = "<group>"; };
 		BD249D9E2D42FD0200412DEB /* StackedChartSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StackedChartSetup.swift; sourceTree = "<group>"; };
 		BD249DA02D42FD1000412DEB /* TDDSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TDDSetup.swift; sourceTree = "<group>"; };
@@ -2989,6 +2995,7 @@
 				DDCAE9792D79F99200B1BB51 /* Meal */,
 				DDCAE9782D79F98E00B1BB51 /* Insulin */,
 				DDCAE9772D79F98600B1BB51 /* Looping */,
+				FA6E57A72E0A00000000C001 /* Forecast */,
 			);
 			path = ViewElements;
 			sourceTree = "<group>";
@@ -3003,6 +3010,7 @@
 				BD249D962D42FCBD00412DEB /* AreaChartSetup.swift */,
 				BD249D9E2D42FD0200412DEB /* StackedChartSetup.swift */,
 				BD249D9A2D42FCD800412DEB /* LoopChartSetup.swift */,
+				FA6E57A72E0A00000000A001 /* ForecastStatsSetup.swift */,
 			);
 			path = "StatStateModel+Setup";
 			sourceTree = "<group>";
@@ -3668,6 +3676,15 @@
 				DD906BF52EA6AAE900262772 /* BaseNightscoutManager+Subscribers.swift */,
 			);
 			path = Nightscout;
+			sourceTree = "<group>";
+		};
+		FA6E57A72E0A00000000C001 /* Forecast */ = {
+			isa = PBXGroup;
+			children = (
+				FA6E57A72E0A00000000A002 /* ForecastAccuracyChart.swift */,
+				FA6E57A72E0A00000000A003 /* CGMGapChart.swift */,
+			);
+			path = Forecast;
 			sourceTree = "<group>";
 		};
 		DDCAE9772D79F98600B1BB51 /* Looping */ = {
@@ -4657,6 +4674,9 @@
 				58D08B342C8DF9A700AA37D3 /* CobIobChart.swift in Sources */,
 				642F76A05A4FF530463A9FD0 /* NightscoutConfigRootView.swift in Sources */,
 				BD249D9B2D42FCDB00412DEB /* LoopChartSetup.swift in Sources */,
+				FA6E57A72E0A00000000B001 /* ForecastStatsSetup.swift in Sources */,
+				FA6E57A72E0A00000000B002 /* ForecastAccuracyChart.swift in Sources */,
+				FA6E57A72E0A00000000B003 /* CGMGapChart.swift in Sources */,
 				BD7DA9AC2AE06EB900601B20 /* BolusCalculatorConfigRootView.swift in Sources */,
 				AD3D2CD42CD01B9EB8F26522 /* PumpConfigDataFlow.swift in Sources */,
 				DD17452E2C55AE4800211FAC /* TargetBehavoirDataFlow.swift in Sources */,

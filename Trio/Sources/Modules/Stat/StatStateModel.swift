@@ -37,6 +37,11 @@ extension Stat {
         var bolusAveragesCache: [Date: (manual: Double, smb: Double, external: Double)] = [:]
         var bolusTotalsCache: [(Date, total: Double)] = []
 
+        // Cache for Forecast Accuracy Stats
+        var forecastAccuracyPoints: [ForecastAccuracyPoint] = []
+        var forecastAccuracyStats: [ForecastAccuracyStats] = []
+        var cgmGapStats: [CGMGapStats] = []
+
         // Cache for Glucose Daily Stats
         var dailyGlucosePercentileStats: [GlucoseDailyPercentileStats] = []
         var glucosePercentileCache: [Date: GlucoseDailyPercentileStats] = [:]
@@ -76,6 +81,9 @@ extension Stat {
         // Selected Meal Chart Type
         var selectedMealChartType: MealChartType = .totalMeals
 
+        // Selected Forecast Chart Type
+        var selectedForecastChartType: ForecastChartType = .accuracy
+
         // Fetching Contexts
         let context = CoreDataStack.shared.newTaskContext()
         let viewContext = CoreDataStack.shared.persistentContainer.viewContext
@@ -83,6 +91,7 @@ extension Stat {
         let loopTaskContext = CoreDataStack.shared.newTaskContext()
         let mealTaskContext = CoreDataStack.shared.newTaskContext()
         let bolusTaskContext = CoreDataStack.shared.newTaskContext()
+        let forecastTaskContext = CoreDataStack.shared.newTaskContext()
 
         override func subscribe() {
             setupGlucoseArray(for: .today)
@@ -91,6 +100,7 @@ extension Stat {
             setupLoopStatRecords()
             setupMealStats()
             setupGlucoseDailyStats()
+            setupForecastStats()
             units = settingsManager.settings.units
             eA1cDisplayUnit = settingsManager.settings.eA1cDisplayUnit
             useFPUconversion = settingsManager.settings.useFPUconversion
@@ -294,6 +304,27 @@ extension Stat.StateModel {
         }
     }
 
+    /// Defines the available types of forecast charts
+    enum ForecastChartType: String, CaseIterable {
+        /// Compares oref forecast error against a no-change baseline
+        case accuracy = "Forecast Accuracy"
+        /// Scatter of predicted vs actually measured glucose
+        case predictedVsActual = "Predicted vs Actual"
+        /// Daily count of CGM delivery gaps that trigger stale glucose alerts
+        case cgmGaps = "CGM Gaps"
+
+        var displayName: String {
+            switch self {
+            case .accuracy:
+                return String(localized: "Forecast Accuracy")
+            case .predictedVsActual:
+                return String(localized: "Predicted vs Actual")
+            case .cgmGaps:
+                return String(localized: "CGM Gaps")
+            }
+        }
+    }
+
     /// Defines the available time periods for duration-based statistics including 'Today' (time since midnight until now)
     enum StatsTimeIntervalWithToday: String, CaseIterable, Identifiable {
         /// Current day
@@ -362,6 +393,8 @@ extension Stat.StateModel {
         case looping
         /// Meal-related statistics and correlations
         case meals
+        /// Forecast accuracy and CGM delivery statistics
+        case forecasts
 
         var id: String { rawValue }
 
@@ -375,6 +408,8 @@ extension Stat.StateModel {
                 return String(localized: "Looping", comment: "Title for looping and system statistics")
             case .meals:
                 return String(localized: "Meals", comment: "Title for meal-related statistics")
+            case .forecasts:
+                return String(localized: "Forecasts", comment: "Title for forecast accuracy statistics")
             }
         }
     }
