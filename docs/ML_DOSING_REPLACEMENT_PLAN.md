@@ -5,8 +5,10 @@
 
 **Objective:** The ML engine *is* the closed loop. It ingests glucose, carbs, and
 insulin-delivery history; chooses insulin delivery (temp basal + micro-bolus) to
-minimize time outside **target ± 15 mg/dL**; **re-evaluates every 5 minutes** despite
-CGM latency; **evolves hourly**; every component is **individually toggleable**; every
+minimize time outside **target ± 15 mg/dL**; **runs strictly on CGM event delivery —
+one cycle per new value, no re-cycle without one** (the sensor's ~5-min delivery
+interval sets the cadence), compensating for CGM latency; **evolves hourly**; every
+component is **individually toggleable**; every
 decision carries a complete **who/what/where/when/why/how audit record**; and
 **hard caps** on IOB, basal rate, SMB size, and insulin-per-hour/day are enforced by a
 layer that no toggle, model update, or adaptation can bypass.
@@ -68,7 +70,7 @@ Trio today runs oref as JavaScript in JavaScriptCore
 ## 2. Target architecture
 
 ```
- 5-min tick (timer-guaranteed, not CGM-gated)
+ new CGM value delivered (event-driven; no cycle without a new value)
    │
    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -98,27 +100,40 @@ Trio today runs oref as JavaScript in JavaScriptCore
 
 ### 2.1 Cadence and CGM latency
 
-**Requirement:** re-evaluate every 5 minutes even though CGM data reflects blood
-glucose ~10–15 minutes ago.
+**Requirement:** the loop runs on CGM event delivery — one cycle per newly delivered
+value, **no re-cycle without a new value**. The sensor's ~5-minute delivery interval
+is therefore the loop cadence; CGM data still reflects blood glucose ~10–15 minutes
+ago and must be compensated for.
 
-* **Guaranteed 5-min tick.** Today the loop is triggered by CGM arrival / pump
-  heartbeat with a 3-min minimum interval (`APSManager.canStartNewLoop`,
-  `Config.loopInterval`). The ML engine adds a timer-driven tick so a cycle runs every
-  5 minutes *regardless* of whether a new reading arrived — a late or missed reading
-  still gets a re-evaluation using the state estimator's projection. (iOS background
-  scheduling jitter is absorbed by also keeping the existing CGM/heartbeat triggers;
-  whichever fires first runs the cycle, minimum spacing 4 min.)
+* **Strictly event-driven trigger.** A cycle starts only when the CGM pipeline
+  delivers a reading that is *new* (deduplicated by timestamp/value against the last
+  processed reading — backfill re-deliveries and duplicate pushes do not trigger
+  cycles). Today's loop triggering (`APSManager.loop()` via `DeviceDataManager`
+  heartbeat, 3-min minimum interval in `canStartNewLoop`) is reworked so pump
+  heartbeats and timers never start a dosing cycle on their own; they only refresh
+  pump state. Manual triggers (user-initiated "run cycle now", carb entry, bolus
+  entry) re-evaluate using the newest already-delivered value and are marked as such
+  in the audit record.
+* **Silence decays safely.** Because there is no re-cycle without a new value, every
+  dose must have a bounded lifetime: temp basals are issued with ≤30-min durations, so
+  a sensor going quiet means the last temp expires and the pump reverts to profile
+  basal on its own — no software action required. SMBs are only ever issued within a
+  cycle, so no new value ⇒ no new SMB, inherently. A **non-dosing watchdog** (alert
+  only — it never doses, so it doesn't violate the event-driven rule) raises
+  escalating notifications when no new value has arrived for 10/20/30 min, and the
+  independent CGM urgent-low alarms remain untouched.
 * **StateEstimator — lag compensation.** A lightweight filter (Kalman-style) fuses the
   delayed CGM sequence with known insulin activity and carb absorption to estimate
   *current* blood glucose and rate of change, not 15-minutes-ago glucose. The dynamics
   model is trained on estimator output, so the whole stack reasons in "now" terms.
-  The estimator also owns sensor QC: dropout bridging (≤15 min), compression-low
-  detection (sudden implausible drop vs. IOB context), calibration-jump detection.
-  Estimated-vs-measured divergence is logged per cycle; beyond a band it triggers
-  fallback (§2.6).
-* **Cycles without fresh data** may only *reduce or hold* insulin delivery (cancel/
-  lower temp basal, never issue an SMB) — new-dose decisions require a reading newer
-  than 10 min. This is an envelope rule, not a model preference.
+  The estimator also owns sensor QC: gap handling after an outage (a burst of
+  backfilled values triggers *one* cycle on the newest, with history repaired),
+  compression-low detection (sudden implausible drop vs. IOB context), and
+  calibration-jump detection. Estimated-vs-measured divergence is logged per cycle;
+  beyond a band it triggers fallback (§2.6).
+* **Envelope rule on data age:** a dosing cycle whose triggering value is older than
+  10 min by the time the decision is made (processing backlog, backfill) may only
+  reduce or hold delivery — never issue an SMB or raise a temp.
 
 ### 2.2 Dynamics model (learned)
 
@@ -186,7 +201,7 @@ browsable in-app (decision list → detail view).
 | **Who** | Deciding component + exact versions: engine version, model weights checksum/version, AdaptationStack parameter snapshot (each scalar's current value), SafetyEnvelope code version, active toggle states, cap values in force |
 | **What** | Proposed action (rate, duration, SMB) *and* enacted action, plus the delta if the envelope clamped it; explicit `NO_ACTION` / `HOLD` / `SUSPEND` outcomes |
 | **Where** | Path taken through the pipeline: ML / oref-fallback / zero-temp-fallback; which stage terminated the decision (e.g. "envelope: LGS override") |
-| **When** | Timestamps: cycle trigger (timer vs. CGM vs. heartbeat), newest CGM reading time + its age, estimator output time, decision time, enactment time + pump ack |
+| **When** | Timestamps: cycle trigger (new CGM value vs. manual/carb/bolus re-evaluation), the triggering reading's sensor time + delivery time + age at decision, estimator output time, decision time, enactment time + pump ack |
 | **Why** | Cost breakdown of the chosen plan vs. runner-up and vs. zero-action: predicted p10/p50/p90 trajectories for each, which constraint(s) were binding, disturbance-signal level, estimator confidence, and a generated one-sentence human summary ("SMB 0.4 U: p50 reaches 172 in 40 min without action; p10 stays >85 with it") |
 | **How** | Candidate-set summary (ranges searched, count), inference latencies, input feature hash (exact reproducibility: same inputs + same versions ⇒ same decision, verified by a replay tool in the training repo) |
 
@@ -204,7 +219,7 @@ system *more* conservative, and every toggle change is audit-logged.
 | ML engine (master) | Full oref, exactly as today |
 | ML SMBs | ML sets temp basals only; SMB = 0 |
 | ML temp basals | ML issues SMBs only; basal follows profile |
-| StateEstimator lag compensation | Raw CGM values used; dosing cadence gated on fresh readings |
+| StateEstimator lag compensation | Raw CGM values used as-is (decisions reason on delayed glucose; controller behaves more conservatively) |
 | Disturbance/UAM signal | Controller assumes announced carbs only (more conservative dosing on rises) |
 | Hourly adaptation (fast loop) | Adaptation scalars frozen at 1.0 / last-reviewed values |
 | Weight promotion (slow loop) | Champion model pinned; new weights accumulate but never activate |
@@ -259,7 +274,8 @@ share sheet; Nightscout as deep-history source) · `SafetyEnvelope` module with 
 oref JS safety cases ported as unit-test fixtures · `DosingAlgorithm` protocol with
 `OrefAlgorithm` wrapping the existing path unchanged · `DecisionAudit`
 entity + logging (wired into the *oref* path first — audit visibility starts before
-any ML doses) · 5-min timer tick · versioned feature schema shared Python↔Swift with
+any ML doses) · CGM-event-only loop trigger rework (dedupe, no cycle without a new
+value, non-dosing silence watchdog) · versioned feature schema shared Python↔Swift with
 golden-file parity tests.
 
 **Phase 2 — Offline model:** training repo under `ml/`; dataset builder; StateEstimator
@@ -299,7 +315,7 @@ gated), audit browser in-app, weekly care-team data review.
 | Controller | Simulator scenario suite; replay of worst historical days; anti-oscillation checks |
 | AdaptationStack | Clamp tests per tier; adversarial residual injection (bad hour of data cannot move T2 scalars past step limit) |
 | Audit | Round-trip: decision replayed from audit record alone reproduces identical output (same versions + feature hash ⇒ same dose) |
-| Integration | Fault injection: kill model mid-cycle, corrupt input, stale CGM, timer starvation — verify fallback ladder and audit completeness |
+| Integration | Fault injection: kill model mid-cycle, corrupt input, CGM silence (verify temp expiry to profile basal + watchdog alerts, no phantom cycles), duplicate/backfilled CGM delivery (exactly one cycle per new value) — verify fallback ladder and audit completeness |
 | Rollback | One-tap revert to oref and one-version model rollback verified on-device before every stage advance |
 
 ---
@@ -322,5 +338,6 @@ gated), audit browser in-app, weekly care-team data review.
    later phase; fully buildable and testable today).
 2. `DecisionAudit` CoreData entity + logger, wired into the existing oref path first.
 3. `MLDataExporter` + export UI.
-4. `DosingAlgorithm` protocol refactor (oref wrapped unchanged) + 5-min timer tick.
+4. `DosingAlgorithm` protocol refactor (oref wrapped unchanged) + CGM-event-only
+   trigger rework with silence watchdog.
 5. `ml/` training scaffold: feature schema, dataset builder, backtest harness.
