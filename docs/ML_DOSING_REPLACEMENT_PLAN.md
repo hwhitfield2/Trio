@@ -332,12 +332,28 @@ gated), audit browser in-app, weekly care-team data review.
 
 ---
 
-## 7. Immediate next steps in this repo
+## 7. Implementation status (Phase 1)
 
-1. `SafetyEnvelope` module + test fixtures ported from the oref JS (needed by every
-   later phase; fully buildable and testable today).
-2. `DecisionAudit` CoreData entity + logger, wired into the existing oref path first.
-3. `MLDataExporter` + export UI.
-4. `DosingAlgorithm` protocol refactor (oref wrapped unchanged) + CGM-event-only
-   trigger rework with silence watchdog.
-5. `ml/` training scaffold: feature schema, dataset builder, backtest harness.
+Built:
+
+1. ✅ `SafetyEnvelope` (`Trio/Sources/APS/MLEngine/SafetyEnvelope.swift`) — full cap
+   stack with oref formulas ported; unit + seeded property-based tests in
+   `TrioTests/SafetyEnvelopeTests.swift`.
+2. ✅ `DecisionAudit` (`.../MLEngine/DecisionAudit.swift`) — 5W1H record + JSONL
+   store (Documents/decision_audit/, 90-day retention), observing every oref
+   determination via `DeterminationObserver`; registered in ServiceAssembly and
+   started at app launch. (JSONL instead of a CoreData entity for v1 — additive,
+   no store migration; a CoreData mirror can follow once the record shape settles.)
+3. ✅ `DosingAlgorithm` protocol + `OrefAlgorithm` wrapper (`.../MLEngine/DosingAlgorithm.swift`).
+4. ✅ `MLDataExporter` (`.../MLEngine/MLDataExporter.swift`) — raw JSONL event export
+   (glucose/carbs/pump/determinations), registered in APSAssembly.
+5. ✅ `ml/` training scaffold — schema, dataset builder (5-min frames + labels),
+   insulin curves, baselines, backtest harness, promotion gates, torch-guarded
+   quantile-TCN skeleton; 23 passing stdlib tests (`python3 -m unittest discover -s ml/tests`).
+
+Next:
+
+6. Export UI entry point (share sheet) + audit browser view.
+7. CGM-event-only trigger rework with silence watchdog (§2.1).
+8. StateEstimator prototype in `ml/` against exported data.
+9. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.

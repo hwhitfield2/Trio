@@ -94,6 +94,11 @@
 		3811DEEB25CA063400A708ED /* PersistedProperty.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DEE725CA063400A708ED /* PersistedProperty.swift */; };
 		3811DF0225CA9FEA00A708ED /* Credentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0125CA9FEA00A708ED /* Credentials.swift */; };
 		3811DF1025CAAAE200A708ED /* APSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0F25CAAAE200A708ED /* APSManager.swift */; };
+		FAB1E5000000000000000012 /* SafetyEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000002 /* SafetyEnvelope.swift */; };
+		FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000003 /* DecisionAudit.swift */; };
+		FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000004 /* DosingAlgorithm.swift */; };
+		FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000005 /* MLDataExporter.swift */; };
+		FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */; };
 		38192E04261B82FA0094D973 /* ReachabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E03261B82FA0094D973 /* ReachabilityManager.swift */; };
 		38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */; };
 		38192E0D261BAF980094D973 /* ConvenienceExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E0C261BAF980094D973 /* ConvenienceExtensions.swift */; };
@@ -964,6 +969,11 @@
 		3811DEE725CA063400A708ED /* PersistedProperty.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PersistedProperty.swift; sourceTree = "<group>"; };
 		3811DF0125CA9FEA00A708ED /* Credentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Credentials.swift; sourceTree = "<group>"; };
 		3811DF0F25CAAAE200A708ED /* APSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APSManager.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000002 /* SafetyEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelope.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000003 /* DecisionAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionAudit.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000004 /* DosingAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DosingAlgorithm.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000005 /* MLDataExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLDataExporter.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelopeTests.swift; sourceTree = "<group>"; };
 		3818AA45274C229000843DB3 /* LibreTransmitter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LibreTransmitter; path = Dependencies/LibreTransmitter; sourceTree = "<group>"; };
 		3818AA49274C267000843DB3 /* CGMBLEKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = CGMBLEKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		3818AA4C274C26A300843DB3 /* LoopKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = LoopKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -2265,6 +2275,17 @@
 			path = PropertyWrappers;
 			sourceTree = "<group>";
 		};
+		FAB1E5000000000000000001 /* MLEngine */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000002 /* SafetyEnvelope.swift */,
+				FAB1E5000000000000000003 /* DecisionAudit.swift */,
+				FAB1E5000000000000000004 /* DosingAlgorithm.swift */,
+				FAB1E5000000000000000005 /* MLDataExporter.swift */,
+			);
+			path = MLEngine;
+			sourceTree = "<group>";
+		};
 		3811DF0A25CAAAA500A708ED /* APS */ = {
 			isa = PBXGroup;
 			children = (
@@ -2277,6 +2298,7 @@
 				38A504F625DDA0E200C5B9E8 /* Extensions */,
 				388E5A5825B6F0070019842D /* OpenAPS */,
 				38A0362725ECF05300FCBB52 /* Storage */,
+				FAB1E5000000000000000001 /* MLEngine */,
 			);
 			path = APS;
 			sourceTree = "<group>";
@@ -2736,6 +2758,7 @@
 				CEE9A65D2BBC9F6500EB5194 /* CalibrationsTests.swift */,
 				CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */,
 				3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */,
+				FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */,
 				38FCF3F825E902C20078B0D1 /* FileStorageTests.swift */,
 				3B997DCE2DC00A3A006B6BB2 /* JSONImporterTests.swift */,
 				CE1F6DD82BADF4620064EB8D /* PluginManagerTests.swift */,
@@ -4371,6 +4394,10 @@
 				19B0EF2128F6D66200069496 /* Statistics.swift in Sources */,
 				DDF847E82C5DABA30049BB3B /* WatchConfigAppleWatchView.swift in Sources */,
 				3811DF1025CAAAE200A708ED /* APSManager.swift in Sources */,
+				FAB1E5000000000000000012 /* SafetyEnvelope.swift in Sources */,
+				FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */,
+				FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */,
+				FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */,
 				3870FF4725EC187A0088248F /* BloodGlucose.swift in Sources */,
 				DDBD53FC2DAA903100F940A6 /* OverviewStepView.swift in Sources */,
 				38A0364225ED069400FCBB52 /* TempBasal.swift in Sources */,
@@ -4951,6 +4978,7 @@
 				DDDD0FFF2F4E231B00F9C645 /* MockTDDStorage.swift in Sources */,
 				BD8FC05B2D6618AF00B95AED /* DeterminationStorageTests.swift in Sources */,
 				3BAAE60C2DE7766C0049589B /* DynamicISFEnableTests.swift in Sources */,
+				FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */,
 				CE1F6DD92BADF4620064EB8D /* PluginManagerTests.swift in Sources */,
 				38FCF3F925E902C20078B0D1 /* FileStorageTests.swift in Sources */,
 				BD8FC0602D6619DB00B95AED /* CarbsStorageTests.swift in Sources */,
