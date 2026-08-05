@@ -84,6 +84,8 @@ struct NotificationsView: BaseView {
                     }
 
                     Text("Calendar Events").navigationLink(to: .calendarEventSettings, from: self)
+
+                    Text("Caregiver Messaging").navigationLink(to: .caregiverMessagingSettings, from: self)
                 }
             ).listRowBackground(Color.chart)
         }

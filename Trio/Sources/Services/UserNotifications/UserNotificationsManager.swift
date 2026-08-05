@@ -72,6 +72,10 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
     // reading, so we persist the last alert token to avoid enqueueing identical high/low notifications multiple times.
     @Persisted(key: "UserNotificationsManager.lastGlucoseAlertToken") private var lastGlucoseAlertToken: String = ""
 
+    // Tracks whether the glucose category currently carries the "Text Caregiver" action,
+    // so categories are only re-registered when the relevant settings actually change.
+    private var lastCaregiverActionEnabled: Bool?
+
     private let notificationCenter = UNUserNotificationCenter.current()
     private var lifetime = Lifetime()
 
@@ -101,6 +105,7 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
         broadcaster.register(BolusFailureObserver.self, observer: self)
         broadcaster.register(pumpNotificationObserver.self, observer: self)
         broadcaster.register(alertMessageNotificationObserver.self, observer: self)
+        broadcaster.register(SettingsObserver.self, observer: self)
 //        requestNotificationPermissionsIfNeeded()
         Task {
             await sendGlucoseNotification()
@@ -112,13 +117,20 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
     }
 
     private func configureNotificationCategories() {
+        let includeCaregiverAction = settingsManager.settings.caregiverMessagingEnabled &&
+            settingsManager.settings.caregiverAlertQuickAction
+        lastCaregiverActionEnabled = includeCaregiverAction
+
         notificationCenter.getNotificationCategories { [weak self] existingCategories in
             guard let self else { return }
 
-            let glucoseCategory = NotificationCategoryFactory.createGlucoseCategory()
+            let glucoseCategory = NotificationCategoryFactory
+                .createGlucoseCategory(includeCaregiverMessageAction: includeCaregiverAction)
 
-            var categories = existingCategories
-            categories.update(with: glucoseCategory)
+            // Remove any previously registered variant of the glucose category before inserting,
+            // since categories with the same identifier but different actions are not equal.
+            var categories = existingCategories.filter { $0.identifier != glucoseCategory.identifier }
+            categories.insert(glucoseCategory)
             // UNUserNotificationCenter methods should be called on main thread
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -655,6 +667,14 @@ extension BaseUserNotificationsManager: pumpNotificationObserver {
     }
 }
 
+extension BaseUserNotificationsManager: SettingsObserver {
+    func settingsDidChange(_ settings: TrioSettings) {
+        let caregiverActionEnabled = settings.caregiverMessagingEnabled && settings.caregiverAlertQuickAction
+        guard caregiverActionEnabled != lastCaregiverActionEnabled else { return }
+        configureNotificationCategories()
+    }
+}
+
 extension BaseUserNotificationsManager: DeterminationObserver {
     func determinationDidUpdate(_ determination: Determination) {
         guard let carndRequired = determination.carbsReq else { return }
@@ -685,6 +705,15 @@ extension BaseUserNotificationsManager: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         defer { completionHandler() }
+
+        // Handle the "Text Caregiver" action: iOS foregrounds the app, where a pre-filled
+        // Messages sheet is presented for the user to confirm sending.
+        if response.actionIdentifier == CaregiverNotificationAction.identifier {
+            Task { @MainActor [weak self] in
+                self?.router.mainModalScreen.send(.caregiverQuickMessage)
+            }
+            return
+        }
 
         // Handle quick snooze actions (from notification action buttons)
         if let quickAction = NotificationResponseAction(rawValue: response.actionIdentifier) {

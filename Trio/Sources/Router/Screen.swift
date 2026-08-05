@@ -9,6 +9,7 @@ enum Screen: Identifiable, Hashable {
     case nighscoutConfig
     case nighscoutConfigDirect
     case tidepoolConfig
+    case twilioConfig
     case pumpConfig
     case pumpConfigDirect
     case basalProfileEditor
@@ -21,6 +22,8 @@ enum Screen: Identifiable, Hashable {
     case cgm
     case healthkit
     case glucoseNotificationSettings
+    case caregiverMessagingSettings
+    case caregiverQuickMessage
     case mealSettings
     case iconConfig
     case overrideConfig
@@ -73,6 +76,8 @@ extension Screen {
             NightscoutConfig.RootView(resolver: resolver, displayClose: true)
         case .tidepoolConfig:
             TidepoolStartView(resolver: resolver, state: Settings.StateModel())
+        case .twilioConfig:
+            TwilioConfig.RootView(resolver: resolver)
         case .pumpConfig:
             PumpConfig.RootView(
                 resolver: resolver,
@@ -109,6 +114,10 @@ extension Screen {
             AppleHealthKit.RootView(resolver: resolver)
         case .glucoseNotificationSettings:
             GlucoseNotificationSettings.RootView(resolver: resolver)
+        case .caregiverMessagingSettings:
+            CaregiverMessagingSettings.RootView(resolver: resolver)
+        case .caregiverQuickMessage:
+            CaregiverQuickMessageView(resolver: resolver)
         case .mealSettings:
             MealSettings.RootView(resolver: resolver)
         case .iconConfig:

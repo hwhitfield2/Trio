@@ -377,6 +377,17 @@ enum SettingItems {
                 "Display IOB and COB"
             ],
             path: ["Notifications", "Calendar Events"]
+        ),
+        SettingItem(
+            title: "Caregiver Messaging",
+            view: .caregiverMessagingSettings,
+            searchContents: [
+                "Enable Caregiver Messaging",
+                "Include IOB and COB",
+                "Text Caregiver from Alerts",
+                "Send Update Now"
+            ],
+            path: ["Notifications", "Caregiver Messaging"]
         )
     ]
 
@@ -408,6 +419,21 @@ enum SettingItems {
             path: ["Services", "Nightscout", "Fetch and Remote Control"]
         ),
         SettingItem(title: "Tidepool", view: .serviceSettings, path: ["Services"]),
+        SettingItem(
+            title: "Twilio SMS",
+            view: .twilioConfig,
+            searchContents: [
+                "Enable Twilio SMS Alerts",
+                "Urgent Low Glucose",
+                "Low Glucose",
+                "High Glucose",
+                "Loop Failure",
+                "Urgent Low Threshold",
+                "Cooldown",
+                "Send Test SMS"
+            ],
+            path: ["Services", "Twilio SMS"]
+        ),
         SettingItem(title: "Apple Health", view: .healthkit, path: ["Services"])
     ]
 
