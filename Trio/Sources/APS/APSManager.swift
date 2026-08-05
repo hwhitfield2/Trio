@@ -111,6 +111,16 @@ final class BaseAPSManager: APSManager, Injectable {
 
     @Persisted(key: "isSuspended") var isSuspended: Bool = false
 
+    /// Timestamp of the newest glucose value the last dosing cycle ran on. The loop
+    /// is strictly CGM-event-driven (docs/ML_DOSING_REPLACEMENT_PLAN.md §2.1): a new
+    /// cycle requires a value newer than this, so duplicate deliveries, backfill
+    /// re-sends, and pump heartbeats alone never start a cycle.
+    @Persisted(key: "lastLoopGlucoseDate") var lastLoopGlucoseDate: Date = .distantPast
+
+    /// Set by `heartbeat(date:)` (the user-initiated refresh path) so the next cycle
+    /// may re-evaluate on the newest already-delivered value.
+    private var manualCycleRequested = false
+
     let isLooping = CurrentValueSubject<Bool, Never>(false)
     let lastLoopDateSubject = PassthroughSubject<Date, Never>()
     let lastError = CurrentValueSubject<Error?, Never>(nil)
@@ -217,6 +227,9 @@ final class BaseAPSManager: APSManager, Injectable {
                 } else {
                     if self.isManualTempBasal {
                         self.isManualTempBasal = false
+                        // Pump-state change, not a new CGM value: re-evaluate on the
+                        // newest already-delivered value.
+                        self.manualCycleRequested = true
                         self.loop()
                     }
                 }
@@ -225,6 +238,10 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     func heartbeat(date: Date) {
+        // Only the user-initiated refresh (Home) calls this entry point; automatic
+        // triggers go through deviceDataManager directly. Mark the next cycle as
+        // manual so it may re-evaluate without a new CGM value.
+        manualCycleRequested = true
         deviceDataManager.heartbeat(date: date)
     }
 
@@ -277,6 +294,29 @@ final class BaseAPSManager: APSManager, Injectable {
         guard !isLooping.value else {
             warning(.apsManager, "Loop already in progress. Skip recommendation.")
             return false
+        }
+
+        // Strictly CGM-event-driven cycles (docs/ML_DOSING_REPLACEMENT_PLAN.md §2.1):
+        // a dosing cycle requires a genuinely new glucose value — pump heartbeats and
+        // timers only refresh pump state and never start a cycle on their own. A burst
+        // of backfilled values runs one cycle on the newest. Manual triggers
+        // re-evaluate on the newest already-delivered value.
+        let isManualCycle = manualCycleRequested
+        manualCycleRequested = false
+        if !isManualCycle {
+            do {
+                let newest = try await fetchGlucose(predicate: NSPredicate.predicateForOneHourAgo, fetchLimit: 1)
+                let newestDate = await privateContext.perform { newest.first?.date }
+                guard let newestDate, newestDate > lastLoopGlucoseDate else {
+                    debug(.apsManager, "No new CGM value since last cycle. Skip loop.")
+                    return false
+                }
+                // Claim the value now: one cycle per new value, even if this cycle fails.
+                lastLoopGlucoseDate = newestDate
+            } catch {
+                debug(.apsManager, "Could not check for a new CGM value: \(error.localizedDescription). Skip loop.")
+                return false
+            }
         }
 
         return true

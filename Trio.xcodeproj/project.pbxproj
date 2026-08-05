@@ -98,6 +98,7 @@
 		FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000003 /* DecisionAudit.swift */; };
 		FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000004 /* DosingAlgorithm.swift */; };
 		FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000005 /* MLDataExporter.swift */; };
+		FAB1E5000000000000000017 /* CGMSilenceWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */; };
 		FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */; };
 		38192E04261B82FA0094D973 /* ReachabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E03261B82FA0094D973 /* ReachabilityManager.swift */; };
 		38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */; };
@@ -973,6 +974,7 @@
 		FAB1E5000000000000000003 /* DecisionAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionAudit.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000004 /* DosingAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DosingAlgorithm.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000005 /* MLDataExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLDataExporter.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMSilenceWatchdog.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelopeTests.swift; sourceTree = "<group>"; };
 		3818AA45274C229000843DB3 /* LibreTransmitter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LibreTransmitter; path = Dependencies/LibreTransmitter; sourceTree = "<group>"; };
 		3818AA49274C267000843DB3 /* CGMBLEKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = CGMBLEKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -2282,6 +2284,7 @@
 				FAB1E5000000000000000003 /* DecisionAudit.swift */,
 				FAB1E5000000000000000004 /* DosingAlgorithm.swift */,
 				FAB1E5000000000000000005 /* MLDataExporter.swift */,
+				FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */,
 			);
 			path = MLEngine;
 			sourceTree = "<group>";
@@ -4398,6 +4401,7 @@
 				FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */,
 				FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */,
 				FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */,
+				FAB1E5000000000000000017 /* CGMSilenceWatchdog.swift in Sources */,
 				3870FF4725EC187A0088248F /* BloodGlucose.swift in Sources */,
 				DDBD53FC2DAA903100F940A6 /* OverviewStepView.swift in Sources */,
 				38A0364225ED069400FCBB52 /* TempBasal.swift in Sources */,

@@ -351,9 +351,17 @@ Built:
    insulin curves, baselines, backtest harness, promotion gates, torch-guarded
    quantile-TCN skeleton; 23 passing stdlib tests (`python3 -m unittest discover -s ml/tests`).
 
+6. ✅ CGM-event-only trigger (§2.1) — `canStartNewLoop` now requires a glucose value
+   newer than the persisted `lastLoopGlucoseDate` (claimed at cycle start: one cycle
+   per value, deduped against backfill/duplicate delivery); pump heartbeats and
+   timers only refresh pump state. Manual refresh and manual-temp-basal-end
+   re-evaluate on the newest already-delivered value via `manualCycleRequested`.
+7. ✅ `CGMSilenceWatchdog` (`.../MLEngine/CGMSilenceWatchdog.swift`) — non-dosing
+   escalating notifications at 10/20/30 min without a newly stored value,
+   pre-scheduled on every store so they fire while the app is suspended.
+
 Next:
 
-6. Export UI entry point (share sheet) + audit browser view.
-7. CGM-event-only trigger rework with silence watchdog (§2.1).
-8. StateEstimator prototype in `ml/` against exported data.
-9. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.
+8. Export UI entry point (share sheet) + audit browser view.
+9. StateEstimator prototype in `ml/` against exported data.
+10. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.
