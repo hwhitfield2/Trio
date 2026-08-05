@@ -32,5 +32,6 @@ final class ServiceAssembly: Assembly {
         container.register(BolusSafetyValidator.self) { r in BaseBolusSafetyValidator(resolver: r) }
         container.register(DecisionAuditService.self) { r in BaseDecisionAuditService(resolver: r) }
         container.register(CGMSilenceWatchdog.self) { r in BaseCGMSilenceWatchdog(resolver: r) }
+        container.register(MealPhotoAnalysisManager.self) { r in BaseMealPhotoAnalysisManager(resolver: r) }
     }
 }
