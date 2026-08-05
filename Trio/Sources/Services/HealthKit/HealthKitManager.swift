@@ -536,8 +536,11 @@ final class BaseHealthKitManager: HealthKitManager, Injectable {
         guard let predecessorTimestamp = predecessorEntry.timestamp,
               let predecessorEntryId = predecessorEntry.id else { return nil }
 
-        // Calculate the original end date of the predecessor temp basal
-        let predecessorDurationMinutes = predecessorEntry.tempBasal?.duration ?? 0
+        // Calculate the original end date of the predecessor temp basal.
+        // Promote to Int before multiplying: the stored duration is Int16, and
+        // Int16 arithmetic traps (arithmetic overflow crash) for any temp basal
+        // longer than 546 minutes — e.g. a long manual temp basal.
+        let predecessorDurationMinutes = Int(predecessorEntry.tempBasal?.duration ?? 0)
         let predecessorEndDate = predecessorTimestamp.addingTimeInterval(TimeInterval(predecessorDurationMinutes * 60))
 
         // Check if the predecessor temp basal overlaps with the next event
