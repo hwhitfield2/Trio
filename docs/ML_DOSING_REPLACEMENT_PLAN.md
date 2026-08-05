@@ -365,7 +365,12 @@ Built:
    browser with per-file sharing; reachable from Settings → ML Engine and via
    settings search.
 
+9. ✅ StateEstimator prototype (`ml/trioml/estimator.py`) — 2-state Kalman filter
+   with lag-aware measurement model, QC (implausible jumps, duplicates, gap
+   staleness), tuned on synthetic sweeps; validates against real exports next.
+
 Next:
 
-9. StateEstimator prototype in `ml/` against exported data.
-10. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.
+10. Validate the StateEstimator against a real export (estimate at t vs. the
+    reading that arrives at t + lag), then port to Swift with golden-file parity.
+11. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.
