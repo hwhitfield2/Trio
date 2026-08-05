@@ -94,11 +94,14 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
-      # This syncs any target branch to upstream branch of the same name
+      # This syncs any target branch to upstream branch of the same name.
+      # Non-blocking: working branches (claude/**) have no upstream counterpart,
+      # and a failed sync must not prevent a manually dispatched build.
       - name: Sync upstream changes
         if: | # do not run the upstream sync action on the upstream repository
           steps.workflow-permission.outputs.has_permission == 'true' &&
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'nightscout'
+        continue-on-error: true
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.2
         with:
