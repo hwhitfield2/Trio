@@ -98,7 +98,8 @@ jobs:
       - name: Sync upstream changes
         if: | # do not run the upstream sync action on the upstream repository
           steps.workflow-permission.outputs.has_permission == 'true' &&
-          vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'nightscout'
+          vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'nightscout' &&
+          (github.ref_name == 'main' || github.ref_name == 'dev')
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.2
         with:
