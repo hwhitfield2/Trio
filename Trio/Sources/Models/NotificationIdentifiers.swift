@@ -42,11 +42,21 @@ enum NotificationResponseAction: String, CaseIterable {
     }
 }
 
+// MARK: - CaregiverNotificationAction
+
+enum CaregiverNotificationAction {
+    static let identifier = "Trio.messageCaregiver"
+
+    static var localizedTitle: String {
+        String(localized: "Text Caregiver", comment: "Notification action to text a caregiver")
+    }
+}
+
 // MARK: - NotificationCategoryFactory
 
 enum NotificationCategoryFactory {
-    static func createGlucoseCategory() -> UNNotificationCategory {
-        let snoozeActions = NotificationResponseAction.allCases.map { action in
+    static func createGlucoseCategory(includeCaregiverMessageAction: Bool = false) -> UNNotificationCategory {
+        var actions = NotificationResponseAction.allCases.map { action in
             UNNotificationAction(
                 identifier: action.rawValue,
                 title: action.localizedTitle,
@@ -54,9 +64,21 @@ enum NotificationCategoryFactory {
             )
         }
 
+        if includeCaregiverMessageAction {
+            // .foreground opens the app, where a pre-filled Messages sheet is presented —
+            // iOS does not allow sending the message without user confirmation.
+            actions.append(
+                UNNotificationAction(
+                    identifier: CaregiverNotificationAction.identifier,
+                    title: CaregiverNotificationAction.localizedTitle,
+                    options: [.foreground]
+                )
+            )
+        }
+
         return UNNotificationCategory(
             identifier: NotificationCategoryIdentifier.trioAlert.rawValue,
-            actions: snoozeActions,
+            actions: actions,
             intentIdentifiers: [],
             options: []
         )

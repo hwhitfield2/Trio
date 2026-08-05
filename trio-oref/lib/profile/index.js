@@ -155,8 +155,11 @@ function generate (inputs, opts) {
     return -1;
   }
   if (profile.max_daily_basal === 0) {
-    console.error("max_daily_basal of",profile.max_daily_basal,"is not supported");
-    return -1;
+    // Zero-basal profiles are allowed: the loop must still run (and can SMB /
+    // high-temp as needed). Downstream limits that would otherwise scale off a
+    // zero basal fall back to max_basal-derived scales (see basal-set-temp.js
+    // getMaxSafeBasal and determine-basal.js scale_basal).
+    console.error("max_daily_basal is 0: zero-basal profile, continuing");
   }
   if (profile.max_basal < 0.1) {
     console.error("max_basal of",profile.max_basal,"is not supported");

@@ -1,7 +1,10 @@
+import Combine
 import SwiftUI
 
 extension MealSettings {
     final class StateModel: BaseStateModel<Provider> {
+        @Injected() private var keychain: Keychain!
+
         @Published var units: GlucoseUnits = .mgdL
         @Published var useFPUconversion: Bool = false
         @Published var maxCarbs: Decimal = 250
@@ -11,9 +14,28 @@ extension MealSettings {
         @Published var minuteInterval: Decimal = 30
         @Published var delay: Decimal = 60
         @Published var maxMealAbsorptionTime: Decimal = 6
+        @Published var mealPhotoAnalysisEnabled: Bool = false
+        @Published var mealPhotoApiKey: String = ""
 
         override func subscribe() {
             units = settingsManager.settings.units
+
+            mealPhotoApiKey = keychain.getValue(String.self, forKey: MealPhotoAnalysis.Config.apiKeyKey) ?? ""
+
+            $mealPhotoApiKey
+                .dropFirst()
+                .removeDuplicates()
+                .sink { [weak self] key in
+                    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty {
+                        self?.keychain.removeObject(forKey: MealPhotoAnalysis.Config.apiKeyKey)
+                    } else {
+                        self?.keychain.setValue(trimmed, forKey: MealPhotoAnalysis.Config.apiKeyKey)
+                    }
+                }
+                .store(in: &lifetime)
+
+            subscribeSetting(\.mealPhotoAnalysisEnabled, on: $mealPhotoAnalysisEnabled) { mealPhotoAnalysisEnabled = $0 }
 
             subscribeSetting(\.maxCarbs, on: $maxCarbs) { maxCarbs = $0 }
             subscribeSetting(\.maxFat, on: $maxFat) { maxFat = $0 }

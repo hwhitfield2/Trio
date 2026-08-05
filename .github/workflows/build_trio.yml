@@ -2,6 +2,13 @@ name: 4. Build Trio
 run-name: Build Trio (${{ github.ref_name }})
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'ml/**'
   schedule:
     # Check for updates every Sunday
     #   Later logic builds if there are updates or if it is the 2nd Sunday of the month
@@ -94,11 +101,17 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
-      # This syncs any target branch to upstream branch of the same name
+      # This syncs any target branch to upstream branch of the same name.
+      # Non-blocking: working branches (claude/**) have no upstream counterpart,
+      # and a failed sync must not prevent a manually dispatched build.
+      # Skipped on push events: a CI/CD build must deploy exactly the pushed commit,
+      # not the pushed commit plus whatever upstream changed since.
       - name: Sync upstream changes
         if: | # do not run the upstream sync action on the upstream repository
           steps.workflow-permission.outputs.has_permission == 'true' &&
+          github.event_name != 'push' &&
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'nightscout'
+        continue-on-error: true
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.2
         with:
@@ -158,6 +171,7 @@ jobs:
       secrets: inherit
       if: |
         github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'push' ||
           (vars.SCHEDULED_BUILD != 'false' && needs.check_status.outputs.IS_SECOND_IN_MONTH == 'true') ||
           (vars.SCHEDULED_SYNC != 'false' && needs.check_status.outputs.NEW_COMMITS == 'true' )
 
@@ -169,8 +183,9 @@ jobs:
     permissions:
       contents: write
     if:
-      | # builds with manual start; if scheduled: once a month or when new commits are found
+      | # builds with manual start or push to main; if scheduled: once a month or when new commits are found
       github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'push' ||
         (vars.SCHEDULED_BUILD != 'false' && needs.check_status.outputs.IS_SECOND_IN_MONTH == 'true') ||
         (vars.SCHEDULED_SYNC != 'false' && needs.check_status.outputs.NEW_COMMITS == 'true' )
     steps:

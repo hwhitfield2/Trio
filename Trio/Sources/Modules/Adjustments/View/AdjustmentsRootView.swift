@@ -217,8 +217,11 @@ extension Adjustments {
             switch state.selectedTab {
             case .overrides:
                 Section {
-                    HStack {
+                    HStack(spacing: 10) {
+                        Image(systemName: "clock.arrow.2.circlepath")
+                            .font(.system(size: 16, weight: .semibold))
                         Text("\(state.activeOverrideName) is running")
+                            .font(.system(size: 15, weight: .semibold))
 
                         Spacer()
                         Image(systemName: "square.and.pencil")
@@ -242,8 +245,11 @@ extension Adjustments {
                 .listRowBackground(Color.purple.opacity(0.8))
             case .tempTargets:
                 Section {
-                    HStack {
+                    HStack(spacing: 10) {
+                        Image(systemName: "target")
+                            .font(.system(size: 16, weight: .semibold))
                         Text("\(state.activeTempTargetName) is running")
+                            .font(.system(size: 15, weight: .semibold))
 
                         Spacer()
                         Image(systemName: "square.and.pencil")
@@ -307,6 +313,66 @@ extension Adjustments {
                 return "\(minutes)m \(seconds)s"
             } else {
                 return "<1m"
+            }
+        }
+
+        /// Trailing capsule action for a preset card: "Start" when inactive, "End" when this preset is the running one.
+        /// Start routes through the same activation path as tapping the row; End opens the existing stop confirmation dialog.
+        func presetActionCapsule(
+            isRunning: Bool,
+            onStart: @escaping () -> Void,
+            onEnd: @escaping () -> Void
+        ) -> some View {
+            Button(action: {
+                if isRunning {
+                    onEnd()
+                } else {
+                    onStart()
+                }
+            }, label: {
+                Text(isRunning ? String(localized: "End") : String(localized: "Start"))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(isRunning ? Color.white : Color.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(
+                                isRunning
+                                    ? Color.loopRed.opacity(0.85)
+                                    : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.06))
+                            )
+                    )
+            })
+                .buttonStyle(.plain)
+        }
+
+        /// Dashed-border quick-create row shown after each preset list; opens the same Add form sheet as the toolbar button.
+        func customAdjustmentCreationRow(_ title: String, action: @escaping () -> Void) -> some View {
+            Section {
+                Button(action: action, label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text(title)
+                            .font(.system(size: 15, weight: .medium))
+                        Spacer()
+                    }
+                    .foregroundStyle(Color.tabBar)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .contentShape(RoundedRectangle(cornerRadius: GlassDesign.tileRadius))
+                })
+                    .buttonStyle(.plain)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: GlassDesign.tileRadius)
+                            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                            .foregroundStyle(Color.secondary.opacity(0.55))
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets())
             }
         }
     }

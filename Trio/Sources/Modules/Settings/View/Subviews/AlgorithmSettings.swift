@@ -19,13 +19,18 @@ struct AlgorithmSettings: BaseView {
     var body: some View {
         Form {
             Section(
-                header: Text("Oref Algorithm"),
+                header: Text("Oref Algorithm").glassCaption(),
                 content: {
-                    Text("Autosens").navigationLink(to: .autosensSettings, from: self)
-                    Text("Super Micro Bolus (SMB)").navigationLink(to: .smbSettings, from: self)
-                    Text("Dynamic Settings").navigationLink(to: .dynamicISF, from: self)
-                    Text("Target Behavior").navigationLink(to: .targetBehavior, from: self)
-                    Text("Additionals").navigationLink(to: .algorithmAdvancedSettings, from: self)
+                    SettingsIconRow(symbol: "dial.max.fill", tint: .loopGreen, label: Text("Autosens"))
+                        .navigationLink(to: .autosensSettings, from: self)
+                    SettingsIconRow(symbol: "bolt.fill", tint: .insulin, label: Text("Super Micro Bolus (SMB)"))
+                        .navigationLink(to: .smbSettings, from: self)
+                    SettingsIconRow(symbol: "function", tint: Color.glassCyan, label: Text("Dynamic Settings"))
+                        .navigationLink(to: .dynamicISF, from: self)
+                    SettingsIconRow(symbol: "scope", tint: .loopYellow, label: Text("Target Behavior"))
+                        .navigationLink(to: .targetBehavior, from: self)
+                    SettingsIconRow(symbol: "ellipsis.circle", tint: .zt, label: Text("Additionals"))
+                        .navigationLink(to: .algorithmAdvancedSettings, from: self)
                 }
             ).listRowBackground(Color.chart)
         }

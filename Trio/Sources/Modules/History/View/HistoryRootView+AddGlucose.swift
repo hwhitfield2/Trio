@@ -44,6 +44,7 @@ extension History.RootView {
                                 isAmountUnconfirmed = false
                                 showManualGlucose = false
                                 state.mode = .glucose
+                                timelineFilter = .glucose
                             }
                             label: { Text("Save") }
                                 .frame(maxWidth: .infinity, alignment: .center)

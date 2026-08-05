@@ -22,7 +22,7 @@ extension History.RootView {
         .listRowBackground(Color.chart)
     }
 
-    fileprivate var combinedAdjustments: [AdjustmentItem] {
+    var combinedAdjustments: [AdjustmentItem] {
         let overrides = overrideRunStored.map { override -> AdjustmentItem in
             AdjustmentItem(
                 id: override.objectID,
@@ -54,7 +54,7 @@ extension History.RootView {
         }
     }
 
-    fileprivate struct AdjustmentItem: Identifiable {
+    struct AdjustmentItem: Identifiable {
         let id: NSManagedObjectID
         let name: String
         let startDate: Date
@@ -63,7 +63,7 @@ extension History.RootView {
         let type: AdjustmentType
     }
 
-    fileprivate enum AdjustmentType {
+    enum AdjustmentType {
         case override
         case tempTarget
 

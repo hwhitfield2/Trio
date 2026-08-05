@@ -18,8 +18,12 @@ function carbRatioLookup (inputs, profile, now) {
                     break;
                 }
             }
-            // disallow impossibly high/low carbRatios due to bad decoding
-            if (carbRatio.ratio < 1 || carbRatio.ratio > 150) {
+            // disallow impossibly high/low carbRatios due to bad decoding.
+            // Upper bound raised from 150 to 500 g/U to support very-low-dose
+            // therapy regimens (a 500:1 ratio with ISF up to 1800 mg/dL/U);
+            // a ratio above bounds previously made carb_ratio undefined,
+            // which surfaced as CR: NaN and silently broke all COB math.
+            if (carbRatio.ratio < 1 || carbRatio.ratio > 500) {
                 console.error("Error: carbRatio of " + carbRatio.ratio + " out of bounds.");
                 return;
             }

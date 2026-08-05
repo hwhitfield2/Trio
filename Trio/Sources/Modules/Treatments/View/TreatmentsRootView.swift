@@ -139,6 +139,16 @@ extension Treatments {
         @ViewBuilder private func carbsTextField() -> some View {
             HStack {
                 Text("Carbs")
+                if state.mealPhotoAnalysisEnabled {
+                    Button {
+                        state.showMealPhotoSheet = true
+                    } label: {
+                        Image(systemName: "camera.fill")
+                    }
+                    .foregroundStyle(.blue)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Analyze meal photo")
+                }
                 Spacer()
                 TextFieldWithToolBar(
                     text: $state.carbs,
@@ -441,6 +451,9 @@ extension Treatments {
             }
             .sheet(isPresented: $state.showInfo) {
                 PopupView(state: state)
+            }
+            .sheet(isPresented: $state.showMealPhotoSheet) {
+                MealPhotoAnalysisView(state: state)
             }
             .sheet(isPresented: $showPresetSheet, onDismiss: {
                 showPresetSheet = false

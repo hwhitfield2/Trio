@@ -237,7 +237,10 @@ enum SettingItems {
                 "Fat and Protein Delay",
                 "Spread Interval",
                 "Fat and Protein Percentage",
-                "FPU"
+                "FPU",
+                "Enable AI Meal Photo Analysis",
+                "Meal Photo",
+                "Camera"
             ],
             scrollTargetLabels: [
                 "Max Fat": "Enable Fat and Protein Entries",
@@ -245,7 +248,9 @@ enum SettingItems {
                 "Fat and Protein Delay": "Enable Fat and Protein Entries",
                 "Spread Interval": "Enable Fat and Protein Entries",
                 "Fat and Protein Percentage": "Enable Fat and Protein Entries",
-                "FPU": "Enable Fat and Protein Entries"
+                "FPU": "Enable Fat and Protein Entries",
+                "Meal Photo": "Enable AI Meal Photo Analysis",
+                "Camera": "Enable AI Meal Photo Analysis"
             ],
             path: ["Features", "Meal Settings"]
         ),
@@ -316,6 +321,18 @@ enum SettingItems {
             view: .appDiagnostics,
             searchContents: ["Anonymized Data Sharing"],
             path: ["Features", "App Diagnostics"]
+        ),
+        SettingItem(
+            title: "ML Data & Audit",
+            view: .mlEngineData,
+            searchContents: ["Training Data Export", "Decision Audit Records"],
+            path: ["ML Engine", "ML Data & Audit"]
+        ),
+        SettingItem(
+            title: "Scheduled Delivery Caps",
+            view: .deliveryCapEditor,
+            searchContents: ["Max Basal", "Max SMB", "Delivery Cap", "No insulin"],
+            path: ["ML Engine", "Scheduled Delivery Caps"]
         )
     ]
 
@@ -360,6 +377,17 @@ enum SettingItems {
                 "Display IOB and COB"
             ],
             path: ["Notifications", "Calendar Events"]
+        ),
+        SettingItem(
+            title: "Caregiver Messaging",
+            view: .caregiverMessagingSettings,
+            searchContents: [
+                "Enable Caregiver Messaging",
+                "Include IOB and COB",
+                "Text Caregiver from Alerts",
+                "Send Update Now"
+            ],
+            path: ["Notifications", "Caregiver Messaging"]
         )
     ]
 
@@ -391,6 +419,21 @@ enum SettingItems {
             path: ["Services", "Nightscout", "Fetch and Remote Control"]
         ),
         SettingItem(title: "Tidepool", view: .serviceSettings, path: ["Services"]),
+        SettingItem(
+            title: "Twilio SMS",
+            view: .twilioConfig,
+            searchContents: [
+                "Enable Twilio SMS Alerts",
+                "Urgent Low Glucose",
+                "Low Glucose",
+                "High Glucose",
+                "Loop Failure",
+                "Urgent Low Threshold",
+                "Cooldown",
+                "Send Test SMS"
+            ],
+            path: ["Services", "Twilio SMS"]
+        ),
         SettingItem(title: "Apple Health", view: .healthkit, path: ["Services"])
     ]
 

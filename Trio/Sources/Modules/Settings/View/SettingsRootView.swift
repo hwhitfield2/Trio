@@ -4,6 +4,26 @@ import LoopKitUI
 import SwiftUI
 import Swinject
 
+/// Leading-icon settings row used across the redesigned settings screens:
+/// a 19pt colored SF symbol centered in a fixed 22pt frame, followed by the row title.
+/// The label is passed as `Text` so call sites keep their exact localized string keys
+/// (the settings search highlight depends on unchanged row labels).
+struct SettingsIconRow: View {
+    let symbol: String
+    let tint: Color
+    let label: Text
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 19))
+                .foregroundColor(tint)
+                .frame(width: 22, height: 22)
+            label
+        }
+    }
+}
+
 extension Settings {
     struct VersionInfo: Equatable {
         var latestVersion: String?
@@ -42,6 +62,19 @@ extension Settings {
 
         private var filteredItems: [FilteredSettingItem] {
             SettingItems.filteredItems(searchText: searchText)
+        }
+
+        /// Icon + tint for the Trio Configuration hub rows (glass redesign).
+        private func configIcon(for screen: Screen) -> (symbol: String, tint: Color) {
+            switch screen {
+            case .devices: return ("sensor.tag.radiowaves.forward.fill", .loopGreen)
+            case .therapySettings: return ("cross.case.fill", .insulin)
+            case .algorithmSettings: return ("gearshape.2.fill", .zt)
+            case .featureSettings: return ("wand.and.stars", Color.tabBar)
+            case .notificationSettings: return ("bell.fill", .loopYellow)
+            case .serviceSettings: return ("network", Color.glassCyan)
+            default: return ("gearshape.fill", .secondary)
+            }
         }
 
         @ViewBuilder var versionInfoView: some View {
@@ -133,6 +166,8 @@ extension Settings {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Trio v\(devVersion) (\(buildNumber))")
                                             .font(.headline)
+                                            .fontWeight(.bold)
+                                            .fontDesign(.rounded)
                                         if let expirationDate = buildDetails.calculateExpirationDate() {
                                             let formattedDate = DateFormatter.localizedString(
                                                 from: expirationDate,
@@ -192,24 +227,33 @@ extension Settings {
                     }
 
                     Section(
-                        header: Text("Trio Configuration"),
+                        header: Text("Trio Configuration").glassCaption(),
                         content: {
                             ForEach(SettingItems.trioConfig) { item in
-                                Text(LocalizedStringKey(item.title)).navigationLink(to: item.view, from: self)
+                                let icon = configIcon(for: item.view)
+                                SettingsIconRow(
+                                    symbol: icon.symbol,
+                                    tint: icon.tint,
+                                    label: Text(LocalizedStringKey(item.title))
+                                )
+                                .navigationLink(to: item.view, from: self)
                             }
                         }
                     )
                     .listRowBackground(Color.chart)
 
                     Section(
-                        header: Text("Support & Community"),
+                        header: Text("Support & Community").glassCaption(),
                         content: {
                             Button {
                                 showShareSheet.toggle()
                             } label: {
                                 HStack {
-                                    Text("Share Logs")
-                                        .foregroundColor(.primary)
+                                    SettingsIconRow(
+                                        symbol: "square.and.arrow.up",
+                                        tint: .secondary,
+                                        label: Text("Share Logs").foregroundColor(.primary)
+                                    )
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .foregroundColor(.secondary)
@@ -224,8 +268,11 @@ extension Settings {
                                 }
                             } label: {
                                 HStack {
-                                    Text("Submit Ticket on GitHub")
-                                        .foregroundColor(.primary)
+                                    SettingsIconRow(
+                                        symbol: "ladybug.fill",
+                                        tint: .secondary,
+                                        label: Text("Submit Ticket on GitHub").foregroundColor(.primary)
+                                    )
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .foregroundColor(.secondary)
@@ -240,8 +287,11 @@ extension Settings {
                                 }
                             } label: {
                                 HStack {
-                                    Text("Trio Discord")
-                                        .foregroundColor(.primary)
+                                    SettingsIconRow(
+                                        symbol: "bubble.left.and.bubble.right.fill",
+                                        tint: .secondary,
+                                        label: Text("Trio Discord").foregroundColor(.primary)
+                                    )
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .foregroundColor(.secondary)
@@ -256,8 +306,11 @@ extension Settings {
                                 }
                             } label: {
                                 HStack {
-                                    Text("Trio Facebook")
-                                        .foregroundColor(.primary)
+                                    SettingsIconRow(
+                                        symbol: "hand.thumbsup.fill",
+                                        tint: .secondary,
+                                        label: Text("Trio Facebook").foregroundColor(.primary)
+                                    )
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .foregroundColor(.secondary)
@@ -269,19 +322,47 @@ extension Settings {
                     ).listRowBackground(Color.chart)
 
                     Section(
-                        header: Text("Trio Backup"),
+                        header: Text("Trio Backup").glassCaption(),
                         content: {
-                            Text(String(
-                                localized: "Export Settings",
-                                comment: "Export Settings menu item in Trio Settings Root View"
-                            ))
-                                .navigationLink(to: .settingsExport, from: self)
+                            SettingsIconRow(
+                                symbol: "arrow.down.doc.fill",
+                                tint: .insulin,
+                                label: Text(String(
+                                    localized: "Export Settings",
+                                    comment: "Export Settings menu item in Trio Settings Root View"
+                                ))
+                            )
+                            .navigationLink(to: .settingsExport, from: self)
+                        }
+                    ).listRowBackground(Color.chart)
+
+                    Section(
+                        header: Text("ML Engine").glassCaption(),
+                        content: {
+                            SettingsIconRow(
+                                symbol: "brain.head.profile",
+                                tint: .uam,
+                                label: Text(String(
+                                    localized: "ML Data & Audit",
+                                    comment: "ML Data & Audit menu item in Trio Settings Root View"
+                                ))
+                            )
+                            .navigationLink(to: .mlEngineData, from: self)
+                            SettingsIconRow(
+                                symbol: "chart.bar.doc.horizontal",
+                                tint: .insulin,
+                                label: Text(String(
+                                    localized: "Scheduled Delivery Caps",
+                                    comment: "Scheduled Delivery Caps menu item in Trio Settings Root View"
+                                ))
+                            )
+                            .navigationLink(to: .deliveryCapEditor, from: self)
                         }
                     ).listRowBackground(Color.chart)
 
                 } else {
                     Section(
-                        header: Text("Search Results"),
+                        header: Text("Search Results").glassCaption(),
                         content: {
                             if filteredItems.isNotEmpty {
                                 ForEach(filteredItems) { filteredItem in

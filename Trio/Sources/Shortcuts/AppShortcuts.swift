@@ -67,6 +67,15 @@ struct AppShortcuts: AppShortcutsProvider {
             systemImageName: "xmark.circle.fill"
         )
         AppShortcut(
+            intent: CaregiverMessageIntent(),
+            phrases: [
+                "Get \(.applicationName) caregiver update",
+                "\(.applicationName) caregiver update"
+            ],
+            shortTitle: "Caregiver Update",
+            systemImageName: "message.fill"
+        )
+        AppShortcut(
             intent: RestartLiveActivityIntent(),
             phrases: [
                 "Restart \(.applicationName) Live Activity",

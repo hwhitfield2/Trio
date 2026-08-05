@@ -11,6 +11,9 @@ extension Adjustments.RootView {
         } else {
             defaultText
         }
+        customAdjustmentCreationRow(String(localized: "Custom override…")) {
+            showOverrideCreationSheet = true
+        }
     }
 
     var overridePresets: some View {
@@ -65,9 +68,11 @@ extension Adjustments.RootView {
                     )
                 }
             }
-            .listRowBackground(Color.chart)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets())
         } header: {
-            Text("Override Presets")
+            Text("Override Presets").glassCaption()
         } footer: {
             HStack {
                 Image(systemName: "hand.draw.fill").foregroundStyle(.primary)
@@ -124,14 +129,15 @@ extension Adjustments.RootView {
                 showCancelOverrideConfirmDialog = true
             }, label: {
                 Text("Stop Override")
+                    .fontWeight(.semibold)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(10)
             })
                 .frame(width: UIScreen.main.bounds.width * 0.9, height: 40, alignment: .center)
                 .disabled(!state.isOverrideEnabled)
-                .background(!state.isOverrideEnabled ? Color(.systemGray4) : Color(.systemRed))
+                .background(!state.isOverrideEnabled ? Color(.systemGray4) : Color.loopRed)
                 .tint(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 .padding(5)
         }
@@ -149,6 +155,7 @@ extension Adjustments.RootView {
         let percentage = preset.percentage
         let smbMinutes = preset.smbMinutes?.decimalValue ?? Decimal(0)
         let uamMinutes = preset.uamMinutes?.decimalValue ?? Decimal(0)
+        let isActive = state.isOverrideEnabled && preset == state.currentActiveOverride
 
         let target: String = {
             guard let targetValue = preset.target, targetValue != 0 else { return "" }
@@ -208,31 +215,39 @@ extension Adjustments.RootView {
         ].filter { !$0.isEmpty }
 
         if !name.isEmpty {
-            ZStack(alignment: .trailing) {
-                HStack {
-                    VStack {
-                        HStack {
-                            Text(name)
-                            Spacer()
-                        }
-                        HStack(spacing: 5) {
-                            ForEach(labels, id: \.self) { label in
-                                Text(label)
-                                if label != labels.last { // Add divider between labels
-                                    overrideLabelDivider
+            HStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    Image(systemName: "clock.arrow.2.circlepath")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color.purple)
+                        .frame(width: 28)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(name)
+                            .font(.system(size: 16, weight: .semibold))
+                            .lineLimit(1)
+
+                        if !labels.isEmpty {
+                            HStack(spacing: 5) {
+                                ForEach(labels, id: \.self) { label in
+                                    Text(label)
+                                    if label != labels.last { // Add divider between labels
+                                        overrideLabelDivider
+                                    }
                                 }
                             }
-                            Spacer()
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
-                        .padding(.top, 2)
-                        .foregroundColor(.secondary)
-                        .font(.caption)
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        onTap?()
-                    }
+
+                    Spacer(minLength: 8)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onTap?()
+                }
+
                 // show checkmark to indicate if the preset was actually pressed
                 if showOverrideCheckmark && isSelected {
                     Image(systemName: "checkmark.circle.fill")
@@ -240,11 +255,23 @@ extension Adjustments.RootView {
                         .fontWeight(.bold)
                         .foregroundStyle(Color.green)
                 } else {
-                    Image(systemName: "line.3.horizontal")
-                        .imageScale(.medium)
-                        .foregroundStyle(.secondary)
+                    presetActionCapsule(isRunning: isActive, onStart: {
+                        onTap?()
+                    }, onEnd: {
+                        showCancelOverrideConfirmDialog = true
+                    })
                 }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .glassCard()
+            .overlay {
+                if isActive {
+                    RoundedRectangle(cornerRadius: GlassDesign.cardRadius)
+                        .stroke(Color.purple.opacity(0.6), lineWidth: 1)
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 }

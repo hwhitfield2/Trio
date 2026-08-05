@@ -19,6 +19,7 @@ extension Treatments {
         @ObservationIgnored @Injected() var glucoseStorage: GlucoseStorage!
         @ObservationIgnored @Injected() var determinationStorage: DeterminationStorage!
         @ObservationIgnored @Injected() var bolusCalculationManager: BolusCalculationManager!
+        @ObservationIgnored @Injected() var mealPhotoAnalysisManager: MealPhotoAnalysisManager!
 
         var lowGlucose: Decimal = 70
         var highGlucose: Decimal = 180
@@ -48,6 +49,24 @@ extension Treatments {
         var carbRatio: Decimal = 0
 
         var addButtonPressed: Bool = false
+
+        /// True when the most recent pump bolus attempt failed (BolusFailureObserver);
+        /// reset at the start of each treatments task. Lets non-router presenters
+        /// (the Home quick-entry drawer) distinguish failure from success when
+        /// isAwaitingDeterminationResult clears.
+        var lastBolusFailed: Bool = false
+
+        /// The Treatments screen is normally presented through the Router's modal
+        /// (MainRootView sheet), which hideModal() dismisses. Non-router presenters
+        /// (the Home quick-entry drawer) set this false so completing a treatment
+        /// cannot dismiss an unrelated router modal.
+        var isPresentedAsRouterModal = true
+
+        /// hideModal() gated on the presentation mode — see isPresentedAsRouterModal.
+        func endRouterPresentation() {
+            guard isPresentedAsRouterModal else { return }
+            hideModal()
+        }
 
         var target: Decimal = 0
         var cob: Int16 = 0
@@ -81,6 +100,9 @@ extension Treatments {
         var sweetMealFactor: Decimal = 0
         var useSuperBolus: Bool = false
         var superBolusInsulin: Decimal = 0
+
+        var showMealPhotoSheet: Bool = false
+        var mealPhotoAnalysisEnabled: Bool = false
 
         var meal: [CarbsEntry]?
         var carbs: Decimal = 0
@@ -304,6 +326,7 @@ extension Treatments {
             maxFat = settings.settings.maxFat
             maxProtein = settings.settings.maxProtein
             useFPUconversion = settingsManager.settings.useFPUconversion
+            mealPhotoAnalysisEnabled = settingsManager.settings.mealPhotoAnalysisEnabled
             isSmoothingEnabled = settingsManager.settings.smoothGlucose
             glucoseColorScheme = settingsManager.settings.glucoseColorScheme
         }
@@ -431,6 +454,7 @@ extension Treatments {
                 debug(.bolusState, "invokeTreatmentsTask fired")
                 await MainActor.run {
                     self.addButtonPressed = true
+                    self.lastBolusFailed = false
                 }
                 let isInsulinGiven = amount > 0
                 let isCarbsPresent = carbs > 0
@@ -444,7 +468,7 @@ extension Treatments {
                 if isInsulinGiven {
                     await handleInsulin(isExternal: externalInsulin)
                 } else {
-                    hideModal()
+                    endRouterPresentation()
                     return
                 }
 
@@ -460,7 +484,7 @@ extension Treatments {
                         showDeterminationFailureAlert = true
                         determinationFailureMessage = "Glucose data is stale"
                     }
-                    return hideModal()
+                    return endRouterPresentation()
                 }
             }
         }
@@ -716,7 +740,7 @@ extension Treatments.StateModel: DeterminationObserver, BolusFailureObserver {
             debug(.bolusState, "determinationDidUpdate fired")
             self.isAwaitingDeterminationResult = false
             if self.addButtonPressed {
-                self.hideModal()
+                self.endRouterPresentation()
             }
         }
     }
@@ -724,9 +748,10 @@ extension Treatments.StateModel: DeterminationObserver, BolusFailureObserver {
     func bolusDidFail() {
         DispatchQueue.main.async {
             debug(.bolusState, "bolusDidFail fired")
+            self.lastBolusFailed = true
             self.isAwaitingDeterminationResult = false
             if self.addButtonPressed {
-                self.hideModal()
+                self.endRouterPresentation()
             }
         }
     }

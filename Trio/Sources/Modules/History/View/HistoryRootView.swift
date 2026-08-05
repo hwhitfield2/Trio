@@ -13,9 +13,15 @@ extension History {
         @State var errorMessage: String = ""
         @State var showFutureEntries: Bool = false // default to hide future entries
         @State var showManualGlucose: Bool = false
+        /// Row builders read injected services (settingsManager) that are nil until
+        /// configureView wires the resolver in onAppear — and List materializes
+        /// visible rows ahead of onAppear on the first tab visit. Rendering waits
+        /// on this flag; it is @State so flipping it reliably re-renders.
+        @State var isTimelineReady: Bool = false
         @State var isAmountUnconfirmed: Bool = true
         @State var showTreatmentTypeFilter = false
         @State var selectedTreatmentTypes: Set<TreatmentType> = Set(TreatmentType.allCases)
+        @State var timelineFilter: TimelineFilter = .all
 
         @Environment(\.colorScheme) var colorScheme
         @Environment(\.managedObjectContext) var context
@@ -59,27 +65,13 @@ extension History {
         var body: some View {
             historyConfirmations(
                 ZStack(alignment: .center, content: {
-                    VStack {
-                        Picker("Mode", selection: $state.mode) {
-                            ForEach(
-                                Mode.allCases.indexed(),
-                                id: \.1
-                            ) { index, item in
-                                Text(item.name).tag(index)
-                            }
+                    VStack(spacing: 6) {
+                        if isTimelineReady {
+                            timelineFilterBar
+                            timelineList
+                        } else {
+                            Spacer()
                         }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .padding(.horizontal)
-
-                        Form {
-                            switch state.mode {
-                            case .treatments: treatmentsList
-                            case .glucose: glucoseList
-                            case .meals: mealsList
-                            case .adjustments: adjustmentsList
-                            }
-                        }.scrollContentBackground(.hidden)
-                            .background(appState.trioBackgroundColor(for: colorScheme))
                     }.blur(radius: state.waitForSuggestion ? 8 : 0)
 
                     // Show custom progress view
@@ -89,10 +81,17 @@ extension History {
                     }
                 })
                     .background(appState.trioBackgroundColor(for: colorScheme))
-                    .onAppear(perform: configureView)
+                    .onAppear {
+                        configureView()
+                        isTimelineReady = true
+                    }
                     .onDisappear {
                         state.carbEntryDeleted = false
                         state.insulinEntryDeleted = false
+                    }
+                    .onReceive(Foundation.NotificationCenter.default.publisher(for: .presentManualGlucoseEntry)) { _ in
+                        showManualGlucose = true
+                        state.manualGlucose = 0
                     }
                     .navigationTitle("History")
                     .navigationBarTitleDisplayMode(.large)

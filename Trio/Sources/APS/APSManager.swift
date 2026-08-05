@@ -111,6 +111,16 @@ final class BaseAPSManager: APSManager, Injectable {
 
     @Persisted(key: "isSuspended") var isSuspended: Bool = false
 
+    /// Timestamp of the newest glucose value the last dosing cycle ran on. The loop
+    /// is strictly CGM-event-driven (docs/ML_DOSING_REPLACEMENT_PLAN.md §2.1): a new
+    /// cycle requires a value newer than this, so duplicate deliveries, backfill
+    /// re-sends, and pump heartbeats alone never start a cycle.
+    @Persisted(key: "lastLoopGlucoseDate") var lastLoopGlucoseDate: Date = .distantPast
+
+    /// Set by `heartbeat(date:)` (the user-initiated refresh path) so the next cycle
+    /// may re-evaluate on the newest already-delivered value.
+    private var manualCycleRequested = false
+
     let isLooping = CurrentValueSubject<Bool, Never>(false)
     let lastLoopDateSubject = PassthroughSubject<Date, Never>()
     let lastError = CurrentValueSubject<Error?, Never>(nil)
@@ -217,6 +227,9 @@ final class BaseAPSManager: APSManager, Injectable {
                 } else {
                     if self.isManualTempBasal {
                         self.isManualTempBasal = false
+                        // Pump-state change, not a new CGM value: re-evaluate on the
+                        // newest already-delivered value.
+                        self.manualCycleRequested = true
                         self.loop()
                     }
                 }
@@ -225,6 +238,10 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     func heartbeat(date: Date) {
+        // Only the user-initiated refresh (Home) calls this entry point; automatic
+        // triggers go through deviceDataManager directly. Mark the next cycle as
+        // manual so it may re-evaluate without a new CGM value.
+        manualCycleRequested = true
         deviceDataManager.heartbeat(date: date)
     }
 
@@ -277,6 +294,29 @@ final class BaseAPSManager: APSManager, Injectable {
         guard !isLooping.value else {
             warning(.apsManager, "Loop already in progress. Skip recommendation.")
             return false
+        }
+
+        // Strictly CGM-event-driven cycles (docs/ML_DOSING_REPLACEMENT_PLAN.md §2.1):
+        // a dosing cycle requires a genuinely new glucose value — pump heartbeats and
+        // timers only refresh pump state and never start a cycle on their own. A burst
+        // of backfilled values runs one cycle on the newest. Manual triggers
+        // re-evaluate on the newest already-delivered value.
+        let isManualCycle = manualCycleRequested
+        manualCycleRequested = false
+        if !isManualCycle {
+            do {
+                let newest = try await fetchGlucose(predicate: NSPredicate.predicateForOneHourAgo, fetchLimit: 1)
+                let newestDate = await privateContext.perform { newest.first?.date }
+                guard let newestDate, newestDate > lastLoopGlucoseDate else {
+                    debug(.apsManager, "No new CGM value since last cycle. Skip loop.")
+                    return false
+                }
+                // Claim the value now: one cycle per new value, even if this cycle fails.
+                lastLoopGlucoseDate = newestDate
+            } catch {
+                debug(.apsManager, "Could not check for a new CGM value: \(error.localizedDescription). Skip loop.")
+                return false
+            }
         }
 
         return true
@@ -729,7 +769,31 @@ final class BaseAPSManager: APSManager, Injectable {
             throw APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp")
         }
 
-        let (rateDecimal, durationInSeconds, smbToDeliver) = try await setValues(determinationID: determinationID)
+        var (rateDecimal, durationInSeconds, smbToDeliver) = try await setValues(determinationID: determinationID)
+
+        // Scheduled delivery caps (docs/ML_DOSING_REPLACEMENT_PLAN.md §2.4): the loop
+        // always runs and records its determination — only delivery is clamped here.
+        // A cap below current/scheduled delivery actively issues a capped temp, so a
+        // 0 U/hr window suppresses scheduled basal too. Manual boluses are unaffected.
+        let capWindows = await storage.retrieveAsync(OpenAPS.Settings.deliveryCaps, as: [DeliveryCapWindow].self) ?? []
+        if let cap = DeliveryCaps.activeCap(in: capWindows, at: Date()) {
+            let currentTemp = try await fetchCurrentTempBasal(date: Date())
+            let scheduledRate = await currentScheduledBasalRate()
+            let effectiveRate = currentTemp.duration > 0 ? currentTemp.rate : scheduledRate
+            let resolved = DeliveryCaps.resolveEnactment(
+                cap: cap,
+                determinationRate: rateDecimal?.decimalValue,
+                determinationDurationSeconds: durationInSeconds,
+                smb: smbToDeliver?.decimalValue,
+                effectiveUncappedRate: effectiveRate
+            )
+            if !resolved.notes.isEmpty {
+                debug(.apsManager, "Scheduled delivery cap active: \(resolved.notes.joined(separator: "; "))")
+            }
+            rateDecimal = resolved.rate.map { NSDecimalNumber(decimal: $0) }
+            durationInSeconds = resolved.durationSeconds
+            smbToDeliver = resolved.smb.map { NSDecimalNumber(decimal: $0) }
+        }
 
         if let rate = rateDecimal, let duration = durationInSeconds {
             try await performBasal(pump: pump, rate: rate, duration: duration)
@@ -739,6 +803,12 @@ final class BaseAPSManager: APSManager, Injectable {
         if let smb = smbToDeliver, smb.compare(NSDecimalNumber(value: 0)) == .orderedDescending {
             try await performBolus(pump: pump, smbToDeliver: smb)
         }
+    }
+
+    /// Scheduled basal rate at `date` from the stored basal profile.
+    private func currentScheduledBasalRate(at date: Date = Date()) async -> Decimal {
+        let entries = await storage.retrieveAsync(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self) ?? []
+        return DeliveryCaps.scheduledRate(from: entries.map { (minutes: $0.minutes, rate: $0.rate) }, at: date)
     }
 
     private func setValues(determinationID: NSManagedObjectID) async throws
