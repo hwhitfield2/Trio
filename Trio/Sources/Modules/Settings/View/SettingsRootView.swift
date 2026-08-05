@@ -279,6 +279,17 @@ extension Settings {
                         }
                     ).listRowBackground(Color.chart)
 
+                    Section(
+                        header: Text("ML Engine"),
+                        content: {
+                            Text(String(
+                                localized: "ML Data & Audit",
+                                comment: "ML Data & Audit menu item in Trio Settings Root View"
+                            ))
+                                .navigationLink(to: .mlEngineData, from: self)
+                        }
+                    ).listRowBackground(Color.chart)
+
                 } else {
                     Section(
                         header: Text("Search Results"),

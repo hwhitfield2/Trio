@@ -716,6 +716,9 @@
 		DDF691032DA2CA1E008BF16C /* AppDiagnosticsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691022DA2CA14008BF16C /* AppDiagnosticsProvider.swift */; };
 		DDF691052DA2CA23008BF16C /* AppDiagnosticsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691042DA2CA20008BF16C /* AppDiagnosticsStateModel.swift */; };
 		DDF691072DA2CA2D008BF16C /* AppDiagnosticsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691062DA2CA28008BF16C /* AppDiagnosticsRootView.swift */; };
+		FAB1E5000000000000000033 /* MLEngineDataDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */; };
+		FAB1E5000000000000000034 /* MLEngineDataStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */; };
+		FAB1E5000000000000000035 /* MLEngineDataRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000025 /* MLEngineDataRootView.swift */; };
 		DDF691372DA30332008BF16C /* StartupGuideStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691362DA30332008BF16C /* StartupGuideStepView.swift */; };
 		DDF847DD2C5C28720049BB3B /* LiveActivitySettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847DC2C5C28720049BB3B /* LiveActivitySettingsDataFlow.swift */; };
 		DDF847DF2C5C28780049BB3B /* LiveActivitySettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847DE2C5C28780049BB3B /* LiveActivitySettingsProvider.swift */; };
@@ -1586,6 +1589,9 @@
 		DDF691022DA2CA14008BF16C /* AppDiagnosticsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiagnosticsProvider.swift; sourceTree = "<group>"; };
 		DDF691042DA2CA20008BF16C /* AppDiagnosticsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiagnosticsStateModel.swift; sourceTree = "<group>"; };
 		DDF691062DA2CA28008BF16C /* AppDiagnosticsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiagnosticsRootView.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataDataFlow.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataStateModel.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000025 /* MLEngineDataRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataRootView.swift; sourceTree = "<group>"; };
 		DDF691362DA30332008BF16C /* StartupGuideStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupGuideStepView.swift; sourceTree = "<group>"; };
 		DDF847DC2C5C28720049BB3B /* LiveActivitySettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitySettingsDataFlow.swift; sourceTree = "<group>"; };
 		DDF847DE2C5C28780049BB3B /* LiveActivitySettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitySettingsProvider.swift; sourceTree = "<group>"; };
@@ -1976,6 +1982,7 @@
 				DDD163032C4C67B400CD525A /* Adjustments */,
 				DD1745382C55BF8B00211FAC /* AlgorithmAdvancedSettings */,
 				DDF690FE2DA2C9EE008BF16C /* AppDiagnostics */,
+				FAB1E5000000000000000021 /* MLEngineData */,
 				DD7E1E30000000000000000B /* Telemetry */,
 				DD1745422C55C5C400211FAC /* AutosensSettings */,
 				A42F1FEDFFD0DDE00AAD54D3 /* BasalProfileEditor */,
@@ -3812,6 +3819,24 @@
 			path = "Classes+Properties";
 			sourceTree = "<group>";
 		};
+		FAB1E5000000000000000021 /* MLEngineData */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */,
+				FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */,
+				FAB1E5000000000000000022 /* View */,
+			);
+			path = MLEngineData;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000022 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000025 /* MLEngineDataRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
 		DDF690FE2DA2C9EE008BF16C /* AppDiagnostics */ = {
 			isa = PBXGroup;
 			children = (
@@ -4507,6 +4532,9 @@
 				DD6A4E802DBEC3EE008C4B26 /* StartupForceCloseWarningStepView.swift in Sources */,
 				DDA6E2852D2361F800C2988C /* LoopStatusView.swift in Sources */,
 				DDF691012DA2CA11008BF16C /* AppDiagnosticsDataFlow.swift in Sources */,
+				FAB1E5000000000000000033 /* MLEngineDataDataFlow.swift in Sources */,
+				FAB1E5000000000000000034 /* MLEngineDataStateModel.swift in Sources */,
+				FAB1E5000000000000000035 /* MLEngineDataRootView.swift in Sources */,
 				DDA6E3202D258E0500C2988C /* OverrideHelpView.swift in Sources */,
 				DDA6E2502D22187500C2988C /* ChartLegendView.swift in Sources */,
 				49090A8D2E9FE8D200D0F5DB /* GarminWatchSettings.swift in Sources */,

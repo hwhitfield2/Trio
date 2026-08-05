@@ -316,6 +316,12 @@ enum SettingItems {
             view: .appDiagnostics,
             searchContents: ["Anonymized Data Sharing"],
             path: ["Features", "App Diagnostics"]
+        ),
+        SettingItem(
+            title: "ML Data & Audit",
+            view: .mlEngineData,
+            searchContents: ["Training Data Export", "Decision Audit Records"],
+            path: ["ML Engine", "ML Data & Audit"]
         )
     ]
 

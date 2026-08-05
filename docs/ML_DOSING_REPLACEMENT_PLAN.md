@@ -360,8 +360,12 @@ Built:
    escalating notifications at 10/20/30 min without a newly stored value,
    pre-scheduled on every store so they fire while the app is suspended.
 
+8. ✅ "ML Data & Audit" settings screen (`Trio/Sources/Modules/MLEngineData/`) —
+   training-data export with share sheet (30/60/90 days) and a decision-audit file
+   browser with per-file sharing; reachable from Settings → ML Engine and via
+   settings search.
+
 Next:
 
-8. Export UI entry point (share sheet) + audit browser view.
 9. StateEstimator prototype in `ml/` against exported data.
 10. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.
