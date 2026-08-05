@@ -1,0 +1,83 @@
+name: Branch CI (build + unit tests)
+
+# Compile check + unit tests for working branches. No signing, no TestFlight —
+# simulator build only. Mirrors the upstream unit_tests.yml invocation.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'claude/**'
+    paths-ignore:
+      - '**.md'
+      - 'ml/**'
+      - 'docs/**'
+
+jobs:
+  test:
+    name: Build and run unit tests
+    runs-on: macos-26
+
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Restore cache
+        id: cache-restore
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            /Users/runner/Library/Developer/Xcode/DerivedData
+            .build
+          key: ${{ runner.os }}-trio-branchci-${{ hashFiles('**/*.swift', '**/*.xcodeproj', '**/*.xcworkspace') }}
+          restore-keys: |
+            ${{ runner.os }}-trio-branchci-
+            ${{ runner.os }}-trio-
+
+      - name: Build for testing
+        run: |
+          set -o pipefail && \
+          time xcodebuild build-for-testing \
+            -workspace Trio.xcworkspace \
+            -scheme "Trio Tests" \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
+            2>&1 | tee xcodebuild-build.log
+
+      - name: Save cache
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            /Users/runner/Library/Developer/Xcode/DerivedData
+            .build
+          key: ${{ runner.os }}-trio-branchci-${{ hashFiles('**/*.swift', '**/*.xcodeproj', '**/*.xcworkspace') }}
+
+      - name: Run tests
+        run: |
+          set -o pipefail
+          time xcodebuild test-without-building \
+            -workspace Trio.xcworkspace \
+            -scheme "Trio Tests" \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
+            2>&1 | tee xcodebuild.log
+
+      - name: Annotate test results
+        if: always()
+        run: |
+          if [ -f xcodebuild.log ]; then
+            if grep -q "Failing tests:" xcodebuild.log; then
+              echo "::error title=Unit Tests Failed::Some tests failed"
+              echo "## ❌ Some tests failed:" >> $GITHUB_STEP_SUMMARY
+              grep -A 20 "Failing tests:" xcodebuild.log | \
+                grep -E '^\s+[A-Za-z0-9]+\..+\(\)' | \
+                sed 's/^/  - /' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "::notice title=Unit Tests Passed::✅ All tests passed"
+              echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
