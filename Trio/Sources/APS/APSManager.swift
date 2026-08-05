@@ -765,7 +765,31 @@ final class BaseAPSManager: APSManager, Injectable {
             throw APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp")
         }
 
-        let (rateDecimal, durationInSeconds, smbToDeliver) = try await setValues(determinationID: determinationID)
+        var (rateDecimal, durationInSeconds, smbToDeliver) = try await setValues(determinationID: determinationID)
+
+        // Scheduled delivery caps (docs/ML_DOSING_REPLACEMENT_PLAN.md §2.4): the loop
+        // always runs and records its determination — only delivery is clamped here.
+        // A cap below current/scheduled delivery actively issues a capped temp, so a
+        // 0 U/hr window suppresses scheduled basal too. Manual boluses are unaffected.
+        let capWindows = await storage.retrieveAsync(OpenAPS.Settings.deliveryCaps, as: [DeliveryCapWindow].self) ?? []
+        if let cap = DeliveryCaps.activeCap(in: capWindows, at: Date()) {
+            let currentTemp = try await fetchCurrentTempBasal(date: Date())
+            let scheduledRate = await currentScheduledBasalRate()
+            let effectiveRate = currentTemp.duration > 0 ? currentTemp.rate : scheduledRate
+            let resolved = DeliveryCaps.resolveEnactment(
+                cap: cap,
+                determinationRate: rateDecimal?.decimalValue,
+                determinationDurationSeconds: durationInSeconds,
+                smb: smbToDeliver?.decimalValue,
+                effectiveUncappedRate: effectiveRate
+            )
+            if !resolved.notes.isEmpty {
+                debug(.apsManager, "Scheduled delivery cap active: \(resolved.notes.joined(separator: "; "))")
+            }
+            rateDecimal = resolved.rate.map { NSDecimalNumber(decimal: $0) }
+            durationInSeconds = resolved.durationSeconds
+            smbToDeliver = resolved.smb.map { NSDecimalNumber(decimal: $0) }
+        }
 
         if let rate = rateDecimal, let duration = durationInSeconds {
             try await performBasal(pump: pump, rate: rate, duration: duration)
@@ -775,6 +799,12 @@ final class BaseAPSManager: APSManager, Injectable {
         if let smb = smbToDeliver, smb.compare(NSDecimalNumber(value: 0)) == .orderedDescending {
             try await performBolus(pump: pump, smbToDeliver: smb)
         }
+    }
+
+    /// Scheduled basal rate at `date` from the stored basal profile.
+    private func currentScheduledBasalRate(at date: Date = Date()) async -> Decimal {
+        let entries = await storage.retrieveAsync(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self) ?? []
+        return DeliveryCaps.scheduledRate(from: entries.map { (minutes: $0.minutes, rate: $0.rate) }, at: date)
     }
 
     private func setValues(determinationID: NSManagedObjectID) async throws

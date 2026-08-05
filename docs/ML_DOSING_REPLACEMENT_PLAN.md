@@ -369,8 +369,19 @@ Built:
    with lag-aware measurement model, QC (implausible jumps, duplicates, gap
    staleness), tuned on synthetic sweeps; validates against real exports next.
 
+10. ✅ Zero-basal profile support — oref sources patched + bundles rebuilt
+    (profile validation, maxSafeBasal zero-term fallback, scale_basal for SMB
+    caps/durations), mirrored in SafetyEnvelope; functionally verified in Node.
+11. ✅ Scheduled delivery caps (`.../MLEngine/DeliveryCapSchedule.swift`, editor at
+    Settings → ML Engine → Scheduled Delivery Caps) — time-of-day windows with
+    Max Basal + Max SMB ceilings (0/0 = no insulin from the loop). The loop runs
+    every cycle regardless; enforcement happens at enactment in
+    `APSManager.enactDetermination`, including issuing a capped temp over running
+    temps/scheduled basal. Windows may wrap midnight; overlaps combine to the most
+    restrictive cap. Manual boluses unaffected.
+
 Next:
 
-10. Validate the StateEstimator against a real export (estimate at t vs. the
+12. Validate the StateEstimator against a real export (estimate at t vs. the
     reading that arrives at t + lag), then port to Swift with golden-file parity.
-11. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.
+13. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.

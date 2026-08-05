@@ -287,6 +287,11 @@ extension Settings {
                                 comment: "ML Data & Audit menu item in Trio Settings Root View"
                             ))
                                 .navigationLink(to: .mlEngineData, from: self)
+                            Text(String(
+                                localized: "Scheduled Delivery Caps",
+                                comment: "Scheduled Delivery Caps menu item in Trio Settings Root View"
+                            ))
+                                .navigationLink(to: .deliveryCapEditor, from: self)
                         }
                     ).listRowBackground(Color.chart)
 

@@ -322,6 +322,12 @@ enum SettingItems {
             view: .mlEngineData,
             searchContents: ["Training Data Export", "Decision Audit Records"],
             path: ["ML Engine", "ML Data & Audit"]
+        ),
+        SettingItem(
+            title: "Scheduled Delivery Caps",
+            view: .deliveryCapEditor,
+            searchContents: ["Max Basal", "Max SMB", "Delivery Cap", "No insulin"],
+            path: ["ML Engine", "Scheduled Delivery Caps"]
         )
     ]
 

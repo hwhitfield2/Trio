@@ -99,6 +99,11 @@
 		FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000004 /* DosingAlgorithm.swift */; };
 		FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000005 /* MLDataExporter.swift */; };
 		FAB1E5000000000000000017 /* CGMSilenceWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */; };
+		FAB1E5000000000000000053 /* DeliveryCapSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */; };
+		FAB1E5000000000000000054 /* DeliveryCapEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */; };
+		FAB1E5000000000000000055 /* DeliveryCapEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */; };
+		FAB1E5000000000000000056 /* DeliveryCapEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */; };
+		FAB1E5000000000000000057 /* DeliveryCapsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000047 /* DeliveryCapsTests.swift */; };
 		FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */; };
 		38192E04261B82FA0094D973 /* ReachabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E03261B82FA0094D973 /* ReachabilityManager.swift */; };
 		38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */; };
@@ -978,6 +983,11 @@
 		FAB1E5000000000000000004 /* DosingAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DosingAlgorithm.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000005 /* MLDataExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLDataExporter.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMSilenceWatchdog.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapSchedule.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorDataFlow.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorStateModel.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorRootView.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000047 /* DeliveryCapsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapsTests.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelopeTests.swift; sourceTree = "<group>"; };
 		3818AA45274C229000843DB3 /* LibreTransmitter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LibreTransmitter; path = Dependencies/LibreTransmitter; sourceTree = "<group>"; };
 		3818AA49274C267000843DB3 /* CGMBLEKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = CGMBLEKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1983,6 +1993,7 @@
 				DD1745382C55BF8B00211FAC /* AlgorithmAdvancedSettings */,
 				DDF690FE2DA2C9EE008BF16C /* AppDiagnostics */,
 				FAB1E5000000000000000021 /* MLEngineData */,
+				FAB1E5000000000000000041 /* DeliveryCapEditor */,
 				DD7E1E30000000000000000B /* Telemetry */,
 				DD1745422C55C5C400211FAC /* AutosensSettings */,
 				A42F1FEDFFD0DDE00AAD54D3 /* BasalProfileEditor */,
@@ -2292,6 +2303,7 @@
 				FAB1E5000000000000000004 /* DosingAlgorithm.swift */,
 				FAB1E5000000000000000005 /* MLDataExporter.swift */,
 				FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */,
+				FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */,
 			);
 			path = MLEngine;
 			sourceTree = "<group>";
@@ -2769,6 +2781,7 @@
 				CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */,
 				3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */,
 				FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */,
+				FAB1E5000000000000000047 /* DeliveryCapsTests.swift */,
 				38FCF3F825E902C20078B0D1 /* FileStorageTests.swift */,
 				3B997DCE2DC00A3A006B6BB2 /* JSONImporterTests.swift */,
 				CE1F6DD82BADF4620064EB8D /* PluginManagerTests.swift */,
@@ -3819,6 +3832,24 @@
 			path = "Classes+Properties";
 			sourceTree = "<group>";
 		};
+		FAB1E5000000000000000041 /* DeliveryCapEditor */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */,
+				FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */,
+				FAB1E5000000000000000042 /* View */,
+			);
+			path = DeliveryCapEditor;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000042 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
 		FAB1E5000000000000000021 /* MLEngineData */ = {
 			isa = PBXGroup;
 			children = (
@@ -4427,6 +4458,10 @@
 				FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */,
 				FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */,
 				FAB1E5000000000000000017 /* CGMSilenceWatchdog.swift in Sources */,
+				FAB1E5000000000000000053 /* DeliveryCapSchedule.swift in Sources */,
+				FAB1E5000000000000000054 /* DeliveryCapEditorDataFlow.swift in Sources */,
+				FAB1E5000000000000000055 /* DeliveryCapEditorStateModel.swift in Sources */,
+				FAB1E5000000000000000056 /* DeliveryCapEditorRootView.swift in Sources */,
 				3870FF4725EC187A0088248F /* BloodGlucose.swift in Sources */,
 				DDBD53FC2DAA903100F940A6 /* OverviewStepView.swift in Sources */,
 				38A0364225ED069400FCBB52 /* TempBasal.swift in Sources */,
@@ -5011,6 +5046,7 @@
 				BD8FC05B2D6618AF00B95AED /* DeterminationStorageTests.swift in Sources */,
 				3BAAE60C2DE7766C0049589B /* DynamicISFEnableTests.swift in Sources */,
 				FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */,
+				FAB1E5000000000000000057 /* DeliveryCapsTests.swift in Sources */,
 				CE1F6DD92BADF4620064EB8D /* PluginManagerTests.swift in Sources */,
 				38FCF3F925E902C20078B0D1 /* FileStorageTests.swift in Sources */,
 				BD8FC0602D6619DB00B95AED /* CarbsStorageTests.swift in Sources */,

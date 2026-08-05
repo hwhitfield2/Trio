@@ -51,6 +51,7 @@ enum Screen: Identifiable, Hashable {
     case appDiagnostics
     case settingsExport
     case mlEngineData
+    case deliveryCapEditor
 
     var id: Int { String(reflecting: self).hashValue }
 }
@@ -168,6 +169,8 @@ extension Screen {
             SettingsExport.RootView(resolver: resolver)
         case .mlEngineData:
             MLEngineData.RootView(resolver: resolver)
+        case .deliveryCapEditor:
+            DeliveryCapEditor.RootView(resolver: resolver)
         }
     }
 
