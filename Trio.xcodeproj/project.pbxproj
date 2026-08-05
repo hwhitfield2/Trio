@@ -341,6 +341,13 @@
 		EB5DCD4A59CED904FAC81529 /* CaregiverQuickMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */; };
 		EAD9A79C03D063035BFB8081 /* CaregiverMessageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */; };
 		B3A991EE84DF9BD0905EBEDA /* CaregiverMessagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */; };
+		DC836AB695F3D419B82966C4 /* TwilioAlertPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */; };
+		FDBF789C701D97FC51FD680B /* TwilioMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */; };
+		C045E227077C7A7FA5040C55 /* TwilioConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */; };
+		CF4F73992729D5E7EE4C25EC /* TwilioConfigProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */; };
+		DE6F3785F6B91B0C74644B72 /* TwilioConfigStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */; };
+		C4122BF6420D6E157CB6D673 /* TwilioConfigRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */; };
+		BBE9CD41EFF3DFF711182D23 /* TwilioMessagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */; };
 		69B9A368029F7EB39F525422 /* CarbRatioEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AA5E04A2761F6EEA6568E1 /* CarbRatioEditorStateModel.swift */; };
 		6B1A8D192B14D91600E76752 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B1A8D182B14D91600E76752 /* WidgetKit.framework */; };
 		6B1A8D1B2B14D91600E76752 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B1A8D1A2B14D91600E76752 /* SwiftUI.framework */; };
@@ -967,6 +974,13 @@
 		E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverQuickMessageView.swift; sourceTree = "<group>"; };
 		C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessageIntent.swift; sourceTree = "<group>"; };
 		EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingTests.swift; sourceTree = "<group>"; };
+		BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioAlertPolicy.swift; sourceTree = "<group>"; };
+		EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioMessagingManager.swift; sourceTree = "<group>"; };
+		B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigDataFlow.swift; sourceTree = "<group>"; };
+		BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigProvider.swift; sourceTree = "<group>"; };
+		C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigStateModel.swift; sourceTree = "<group>"; };
+		DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigRootView.swift; sourceTree = "<group>"; };
+		D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioMessagingTests.swift; sourceTree = "<group>"; };
 		22963BD06A9C83959D4914E4 /* GlucoseNotificationSettingsRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlucoseNotificationSettingsRootView.swift; sourceTree = "<group>"; };
 		2AD22C985B79A2F0D2EA3D9D /* PumpConfigRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpConfigRootView.swift; sourceTree = "<group>"; };
 		2F2A13DF0EDEEEDC4106AA2A /* NightscoutConfigDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NightscoutConfigDataFlow.swift; sourceTree = "<group>"; };
@@ -2035,6 +2049,7 @@
 				CEE9A64D2BBB411C00EB5194 /* Calibrations */,
 				E42231DBF0DBE2B4B92D1B15 /* CarbRatioEditor */,
 				A1A73E9B7F014A77D5CCE8EB /* CaregiverMessagingSettings */,
+				A54374AD60DB8549EDFCF036 /* TwilioConfig */,
 				F75CB57ED6971B46F8756083 /* CGMSettings */,
 				0610F7D6D2EC00E3BA1569F0 /* ConfigEditor */,
 				E592A3762CEEC038009A472C /* ContactImage */,
@@ -2198,6 +2213,7 @@
 				38AEE75025F021F10013F05B /* SettingsManager */,
 				3811DE9825C9D88300A708ED /* Storage */,
 				DD7E1E30000000000000000A /* Telemetry */,
+				F3D0EB00624E17072E61BCF7 /* Twilio */,
 				3811DEA525C9D88300A708ED /* UnlockManager */,
 				38E87406274F9AA500975559 /* UserNotifications */,
 				38E8754D275556E100975559 /* WatchManager */,
@@ -2815,6 +2831,7 @@
 				38FCF3F125E9028E0078B0D1 /* Info.plist */,
 				CEE9A65D2BBC9F6500EB5194 /* CalibrationsTests.swift */,
 				EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */,
+				D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */,
 				CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */,
 				3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */,
 				FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */,
@@ -3544,6 +3561,34 @@
 				C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */,
 			);
 			path = CaregiverMessage;
+			sourceTree = "<group>";
+		};
+		F3D0EB00624E17072E61BCF7 /* Twilio */ = {
+			isa = PBXGroup;
+			children = (
+				BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */,
+				EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */,
+			);
+			path = Twilio;
+			sourceTree = "<group>";
+		};
+		A54374AD60DB8549EDFCF036 /* TwilioConfig */ = {
+			isa = PBXGroup;
+			children = (
+				FB4518300D62EF0611491AEE /* View */,
+				B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */,
+				BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */,
+				C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */,
+			);
+			path = TwilioConfig;
+			sourceTree = "<group>";
+		};
+		FB4518300D62EF0611491AEE /* View */ = {
+			isa = PBXGroup;
+			children = (
+				DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */,
+			);
+			path = View;
 			sourceTree = "<group>";
 		};
 		DD09D6492D2B6253000D82C9 /* Trio Watch Complication */ = {
@@ -5009,6 +5054,12 @@
 				E24CA2E781678C74A2552B26 /* MessageComposeView.swift in Sources */,
 				EB5DCD4A59CED904FAC81529 /* CaregiverQuickMessageView.swift in Sources */,
 				EAD9A79C03D063035BFB8081 /* CaregiverMessageIntent.swift in Sources */,
+				DC836AB695F3D419B82966C4 /* TwilioAlertPolicy.swift in Sources */,
+				FDBF789C701D97FC51FD680B /* TwilioMessagingManager.swift in Sources */,
+				C045E227077C7A7FA5040C55 /* TwilioConfigDataFlow.swift in Sources */,
+				CF4F73992729D5E7EE4C25EC /* TwilioConfigProvider.swift in Sources */,
+				DE6F3785F6B91B0C74644B72 /* TwilioConfigStateModel.swift in Sources */,
+				C4122BF6420D6E157CB6D673 /* TwilioConfigRootView.swift in Sources */,
 				DDF6905C2DA0AFC5008BF16C /* WelcomeStepView.swift in Sources */,
 				1967DFC029D053AC00759F30 /* IconSelection.swift in Sources */,
 				19D4E4EB29FC6A9F00351451 /* Charts.swift in Sources */,
@@ -5148,6 +5199,7 @@
 				DDDD0FFB2F4E22C000F9C645 /* GlucoseSmoothingTests.swift in Sources */,
 				CEE9A65E2BBC9F6500EB5194 /* CalibrationsTests.swift in Sources */,
 				B3A991EE84DF9BD0905EBEDA /* CaregiverMessagingTests.swift in Sources */,
+				BBE9CD41EFF3DFF711182D23 /* TwilioMessagingTests.swift in Sources */,
 				CA02000000000000000010C2 /* DeliveryLimitsSyncTests.swift in Sources */,
 				BD8FC0622D6619E600B95AED /* OverrideStorageTests.swift in Sources */,
 				BD8FC0592D66189700B95AED /* TestAssembly.swift in Sources */,

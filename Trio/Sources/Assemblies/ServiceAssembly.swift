@@ -34,5 +34,6 @@ final class ServiceAssembly: Assembly {
         container.register(CGMSilenceWatchdog.self) { r in BaseCGMSilenceWatchdog(resolver: r) }
         container.register(MealPhotoAnalysisManager.self) { r in BaseMealPhotoAnalysisManager(resolver: r) }
         container.register(CaregiverMessagingManager.self) { r in BaseCaregiverMessagingManager(resolver: r) }
+        container.register(TwilioMessagingManager.self) { r in BaseTwilioMessagingManager(resolver: r) }
     }
 }

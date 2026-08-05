@@ -92,6 +92,33 @@ struct TrioSettings: JSON, Equatable, Encodable {
     /// Show a "Text Caregiver" action on glucose alarm notifications
     var caregiverAlertQuickAction: Bool = true
 
+    /// Twilio SMS alerts: send caregiver texts automatically via the Twilio API
+    var twilioEnabled: Bool = false
+
+    /// Twilio sending phone number (the Twilio number messages are sent from)
+    var twilioFromNumber: String = ""
+
+    /// Twilio destination phone numbers (comma-separated, E.164 format)
+    var twilioRecipients: String = ""
+
+    /// Send an SMS when glucose drops to or below the urgent low threshold
+    var twilioSendUrgentLow: Bool = true
+
+    /// Send an SMS when glucose drops to or below the low alarm limit
+    var twilioSendLow: Bool = true
+
+    /// Send an SMS when glucose rises to or above the high alarm limit
+    var twilioSendHigh: Bool = false
+
+    /// Send an SMS when the loop has not completed for an extended period
+    var twilioSendLoopFailure: Bool = false
+
+    /// Urgent low threshold for Twilio SMS alerts (mg/dL)
+    var twilioUrgentLowThreshold: Decimal = 55
+
+    /// Minimum minutes between two Twilio SMS alerts (urgent lows bypass this)
+    var twilioCooldownMinutes: Decimal = 30
+
     /// Selected Garmin watchface (Trio or SwissAlpine)
     var garminWatchface: GarminWatchface = .trio
     var garminDatafield: GarminDatafield = .none
@@ -396,6 +423,42 @@ extension TrioSettings: Decodable {
 
         if let caregiverAlertQuickAction = try? container.decode(Bool.self, forKey: .caregiverAlertQuickAction) {
             settings.caregiverAlertQuickAction = caregiverAlertQuickAction
+        }
+
+        if let twilioEnabled = try? container.decode(Bool.self, forKey: .twilioEnabled) {
+            settings.twilioEnabled = twilioEnabled
+        }
+
+        if let twilioFromNumber = try? container.decode(String.self, forKey: .twilioFromNumber) {
+            settings.twilioFromNumber = twilioFromNumber
+        }
+
+        if let twilioRecipients = try? container.decode(String.self, forKey: .twilioRecipients) {
+            settings.twilioRecipients = twilioRecipients
+        }
+
+        if let twilioSendUrgentLow = try? container.decode(Bool.self, forKey: .twilioSendUrgentLow) {
+            settings.twilioSendUrgentLow = twilioSendUrgentLow
+        }
+
+        if let twilioSendLow = try? container.decode(Bool.self, forKey: .twilioSendLow) {
+            settings.twilioSendLow = twilioSendLow
+        }
+
+        if let twilioSendHigh = try? container.decode(Bool.self, forKey: .twilioSendHigh) {
+            settings.twilioSendHigh = twilioSendHigh
+        }
+
+        if let twilioSendLoopFailure = try? container.decode(Bool.self, forKey: .twilioSendLoopFailure) {
+            settings.twilioSendLoopFailure = twilioSendLoopFailure
+        }
+
+        if let twilioUrgentLowThreshold = try? container.decode(Decimal.self, forKey: .twilioUrgentLowThreshold) {
+            settings.twilioUrgentLowThreshold = twilioUrgentLowThreshold
+        }
+
+        if let twilioCooldownMinutes = try? container.decode(Decimal.self, forKey: .twilioCooldownMinutes) {
+            settings.twilioCooldownMinutes = twilioCooldownMinutes
         }
 
         if let garminWatchface = try? container.decode(GarminWatchface.self, forKey: .garminWatchface) {

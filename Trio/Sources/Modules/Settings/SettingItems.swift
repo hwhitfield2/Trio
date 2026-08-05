@@ -419,6 +419,21 @@ enum SettingItems {
             path: ["Services", "Nightscout", "Fetch and Remote Control"]
         ),
         SettingItem(title: "Tidepool", view: .serviceSettings, path: ["Services"]),
+        SettingItem(
+            title: "Twilio SMS",
+            view: .twilioConfig,
+            searchContents: [
+                "Enable Twilio SMS Alerts",
+                "Urgent Low Glucose",
+                "Low Glucose",
+                "High Glucose",
+                "Loop Failure",
+                "Urgent Low Threshold",
+                "Cooldown",
+                "Send Test SMS"
+            ],
+            path: ["Services", "Twilio SMS"]
+        ),
         SettingItem(title: "Apple Health", view: .healthkit, path: ["Services"])
     ]
 
