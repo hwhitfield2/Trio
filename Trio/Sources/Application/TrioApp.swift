@@ -466,6 +466,8 @@ extension Notification.Name {
             days: 2,
             relationshipKey: "forecast"
         )
+        async let mlForecastDeletion: () = coreDataStack
+            .batchDeleteOlderThan(MLForecastStored.self, dateKey: "date", days: 90)
         async let overrideDeletion: () = coreDataStack
             .batchDeleteOlderThan(OverrideStored.self, dateKey: "date", days: 3, isPresetKey: "isPreset")
         async let overrideRunDeletion: () = coreDataStack
@@ -482,6 +484,7 @@ extension Notification.Name {
         try await carbEntryDeletion
         try await forecastDeletion
         try await forecastValueDeletion
+        try await mlForecastDeletion
         try await overrideDeletion
         try await overrideRunDeletion
     }

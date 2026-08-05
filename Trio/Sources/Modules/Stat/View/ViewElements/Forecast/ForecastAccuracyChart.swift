@@ -44,15 +44,30 @@ struct ForecastAccuracyChart: View {
                             .font(.caption2)
                             .foregroundStyle(Color.secondary)
                     }
+
+                    if let mlMAE = stat.mlMAE {
+                        BarMark(
+                            x: .value("Error", mlMAE),
+                            y: .value("Situation", stat.situation.displayName)
+                        )
+                        .foregroundStyle(by: .value("Series", String(localized: "ML (shadow)")))
+                        .position(by: .value("Series", String(localized: "ML (shadow)")))
+                        .annotation(position: .trailing, spacing: 4) {
+                            Text(mlMAE.formatted(.number.precision(.fractionLength(0))))
+                                .font(.caption2)
+                                .foregroundStyle(Color.secondary)
+                        }
+                    }
                 }
             }
             .chartForegroundStyleScale([
                 String(localized: "oref forecast"): Color.blue,
-                String(localized: "No-change baseline"): Color.gray.opacity(0.6)
+                String(localized: "No-change baseline"): Color.gray.opacity(0.6),
+                String(localized: "ML (shadow)"): Color.orange
             ])
             .chartLegend(position: .top, alignment: .leading)
             .chartXAxisLabel(String(localized: "Mean forecast error (mg/dL) — lower is better"))
-            .frame(height: CGFloat(max(visibleStats.count, 1)) * 56 + 40)
+            .frame(height: CGFloat(max(visibleStats.count, 1)) * 68 + 40)
 
             if let all = visibleStats.first(where: { $0.situation == .all }) {
                 Text(
@@ -62,6 +77,16 @@ struct ForecastAccuracyChart: View {
                 )
                 .font(.footnote)
                 .foregroundStyle(Color.secondary)
+
+                if all.mlSampleCount > 0 {
+                    Text(
+                        String(
+                            localized: "ML (shadow) is the bundled experimental model, scored on \(all.mlSampleCount) of these forecasts. It is display-only and never influences dosing."
+                        )
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(Color.secondary)
+                }
             }
         }
     }

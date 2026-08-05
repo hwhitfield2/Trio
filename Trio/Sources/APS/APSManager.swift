@@ -500,6 +500,10 @@ final class BaseAPSManager: APSManager, Injectable {
                         $0.determinationDidUpdate(determination)
                     }
                 }
+
+                // Shadow-mode only: record the bundled ML model's forecast so Statistics
+                // can compare it against oref retrospectively. Never influences dosing.
+                MLForecastService.shared.recordShadowForecast()
             }
         } catch {
             iobFileDidUpdate.send(())

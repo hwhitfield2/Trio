@@ -16,9 +16,12 @@ struct ForecastAccuracyPoint: Identifiable {
     let actual: Int
     /// Whether carbs were on board when the forecast was made
     let hadCOB: Bool
+    /// Shadow forecast from the bundled ML model, when one was recorded for this cycle (mg/dL)
+    let mlPredicted: Int?
 
     var orefError: Int { abs(predicted - actual) }
     var persistenceError: Int { abs(glucoseAtDecision - actual) }
+    var mlError: Int? { mlPredicted.map { abs($0 - actual) } }
 }
 
 /// Mean absolute forecast error for one situation at one horizon
@@ -27,7 +30,11 @@ struct ForecastAccuracyStats: Identifiable {
     let horizonMinutes: Int
     let orefMAE: Double
     let persistenceMAE: Double
+    /// Mean error of the shadow ML forecasts; nil when none were recorded in this window.
+    /// Coverage can be partial, so compare against the mlSampleCount, not sampleCount.
+    let mlMAE: Double?
     let sampleCount: Int
+    let mlSampleCount: Int
     var id: String { "\(situation.rawValue)-\(horizonMinutes)" }
 }
 
@@ -105,6 +112,15 @@ extension Stat.StateModel {
             relationshipKeyPathsForPrefetching: ["forecasts", "forecasts.forecastValues"]
         )
 
+        async let mlForecastResult = CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: MLForecastStored.self,
+            onContext: forecastTaskContext,
+            predicate: NSPredicate(format: "date >= %@", accuracyStart as NSDate),
+            key: "date",
+            ascending: true,
+            propertiesToFetch: ["date", "horizonMinutes", "predicted"]
+        )
+
         async let glucoseResult = CoreDataStack.shared.fetchEntitiesAsync(
             ofType: GlucoseStored.self,
             onContext: forecastTaskContext,
@@ -114,7 +130,7 @@ extension Stat.StateModel {
             propertiesToFetch: ["date", "glucose"]
         )
 
-        let (determinations, glucoseDicts) = try await (determinationsResult, glucoseResult)
+        let (determinations, glucoseDicts, mlForecastDicts) = try await (determinationsResult, glucoseResult, mlForecastResult)
 
         return await forecastTaskContext.perform {
             let readings: [(date: Date, glucose: Int)] = (glucoseDicts as? [[String: Any]] ?? [])
@@ -124,6 +140,15 @@ extension Stat.StateModel {
                 }
 
             let gaps = Self.calculateGaps(readings: readings)
+
+            // Shadow ML forecasts keyed by horizon, date-ascending
+            var mlByHorizon: [Int: [(date: Date, predicted: Int)]] = [:]
+            for dict in mlForecastDicts as? [[String: Any]] ?? [] {
+                guard let date = dict["date"] as? Date,
+                      let horizon = dict["horizonMinutes"] as? Int16,
+                      let predicted = dict["predicted"] as? Int16 else { continue }
+                mlByHorizon[Int(horizon), default: []].append((date, Int(predicted)))
+            }
 
             guard let dets = determinations as? [OrefDetermination] else { return ([], gaps) }
 
@@ -142,13 +167,20 @@ extension Stat.StateModel {
                           let actual = Self.nearestReading(in: readings, to: targetDate, tolerance: Self.matchTolerance)
                     else { continue }
 
+                    // ML shadow forecasts anchor on the CGM reading just before this decision
+                    let mlPredicted = mlByHorizon[horizon]?
+                        .filter { abs($0.date.timeIntervalSince(deliverAt)) <= 5 * 60 }
+                        .min { abs($0.date.timeIntervalSince(deliverAt)) < abs($1.date.timeIntervalSince(deliverAt)) }?
+                        .predicted
+
                     points.append(ForecastAccuracyPoint(
                         decisionDate: deliverAt,
                         horizonMinutes: horizon,
                         predicted: Int(curve[index]),
                         glucoseAtDecision: bgAtDecision,
                         actual: actual,
-                        hadCOB: det.cob > 0
+                        hadCOB: det.cob > 0,
+                        mlPredicted: mlPredicted
                     ))
                 }
             }
@@ -234,12 +266,15 @@ extension Stat.StateModel {
             for situation in ForecastSituation.allCases {
                 let subset = points.filter { $0.horizonMinutes == horizon && matches($0, situation) }
                 guard !subset.isEmpty else { continue }
+                let mlErrors = subset.compactMap(\.mlError)
                 stats.append(ForecastAccuracyStats(
                     situation: situation,
                     horizonMinutes: horizon,
                     orefMAE: Double(subset.map(\.orefError).reduce(0, +)) / Double(subset.count),
                     persistenceMAE: Double(subset.map(\.persistenceError).reduce(0, +)) / Double(subset.count),
-                    sampleCount: subset.count
+                    mlMAE: mlErrors.isEmpty ? nil : Double(mlErrors.reduce(0, +)) / Double(mlErrors.count),
+                    sampleCount: subset.count,
+                    mlSampleCount: mlErrors.count
                 ))
             }
         }

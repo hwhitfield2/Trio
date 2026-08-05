@@ -55,6 +55,24 @@ expected to look worse than it is. Exporting the determination `predBGs`
 arrays would make the comparison exact. Shadow mode observes and reports
 only — it changes nothing about dosing.
 
+## Exporting the model into the app
+
+```sh
+python3 ml/export_model.py /path/to/trio-training-export.jsonl
+```
+
+Retrains on all usable samples with `GradientBoostingRegressor` (portable
+plain trees), writes `Trio/Resources/json/defaults/TrioMLForecaster.json`,
+and verifies in-process that a reference evaluator reproduces sklearn's
+predictions exactly before writing anything. It also refreshes
+`TrioTests/JSONImporterData/MLForecasterFixtures.json`, which the app's
+`MLForecasterTests` replay against the Swift evaluator — so a mismatch
+between Python and Swift fails the test suite, not the user.
+
+In the app the model runs in **shadow mode only** (`MLForecastService`):
+it records +30/+60 min forecasts after each loop cycle for retrospective
+comparison in Statistics → Forecasts, and has no influence on dosing.
+
 ## Known limitations
 
 - Delivered basal outside temp segments is assumed to be 0 U/hr. That is

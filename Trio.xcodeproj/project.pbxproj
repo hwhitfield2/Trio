@@ -94,6 +94,7 @@
 		3811DEEB25CA063400A708ED /* PersistedProperty.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DEE725CA063400A708ED /* PersistedProperty.swift */; };
 		3811DF0225CA9FEA00A708ED /* Credentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0125CA9FEA00A708ED /* Credentials.swift */; };
 		3811DF1025CAAAE200A708ED /* APSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0F25CAAAE200A708ED /* APSManager.swift */; };
+		FA6E57A72E0A00000000B004 /* MLForecastService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A004 /* MLForecastService.swift */; };
 		38192E04261B82FA0094D973 /* ReachabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E03261B82FA0094D973 /* ReachabilityManager.swift */; };
 		38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */; };
 		38192E0D261BAF980094D973 /* ConvenienceExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E0C261BAF980094D973 /* ConvenienceExtensions.swift */; };
@@ -244,6 +245,7 @@
 		3B5607A02ECD62AC00C723C1 /* DeletedGlucoseStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B56079F2ECD62AC00C723C1 /* DeletedGlucoseStored+CoreDataProperties.swift */; };
 		3B997DCB2DC00849006B6BB2 /* JSONImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B997DCA2DC00849006B6BB2 /* JSONImporter.swift */; };
 		3B997DCF2DC00A3A006B6BB2 /* JSONImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B997DCE2DC00A3A006B6BB2 /* JSONImporterTests.swift */; };
+		FA6E57A72E0A00000000B007 /* MLForecasterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A007 /* MLForecasterTests.swift */; };
 		3B997DD32DC02AEF006B6BB2 /* glucose.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B997DD12DC02AEF006B6BB2 /* glucose.json */; };
 		3BA8D1B32DDB87150006191F /* DecimalExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BA8D1B22DDB870F0006191F /* DecimalExtensions.swift */; };
 		3BAAE60C2DE7766C0049589B /* DynamicISFEnableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */; };
@@ -674,6 +676,7 @@
 		DDD6D4D32CDE90720029439A /* EstimatedA1cDisplayUnit.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD6D4D22CDE90720029439A /* EstimatedA1cDisplayUnit.swift */; };
 		DDD78A912DC4064800AC63F3 /* carbhistory.json in Resources */ = {isa = PBXBuildFile; fileRef = DDD78A902DC4064800AC63F3 /* carbhistory.json */; };
 		DDD78AD92DC421B500AC63F3 /* enacted.json in Resources */ = {isa = PBXBuildFile; fileRef = DDD78AD72DC421B500AC63F3 /* enacted.json */; };
+		FA6E57A72E0A00000000B008 /* MLForecasterFixtures.json in Resources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A008 /* MLForecasterFixtures.json */; };
 		DDD78ADA2DC421B500AC63F3 /* suggested.json in Resources */ = {isa = PBXBuildFile; fileRef = DDD78AD82DC421B500AC63F3 /* suggested.json */; };
 		DDD7C8C12F4DB45400E5CF09 /* GlucoseStored+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD7C8BF2F4DB45400E5CF09 /* GlucoseStored+CoreDataClass.swift */; };
 		DDD7C8C22F4DB45400E5CF09 /* GlucoseStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD7C8C02F4DB45400E5CF09 /* GlucoseStored+CoreDataProperties.swift */; };
@@ -683,6 +686,8 @@
 		DDE179532C910127003CDDB7 /* MealPresetStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179332C910127003CDDB7 /* MealPresetStored+CoreDataProperties.swift */; };
 		DDE179542C910127003CDDB7 /* LoopStatRecord+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179342C910127003CDDB7 /* LoopStatRecord+CoreDataClass.swift */; };
 		DDE179552C910127003CDDB7 /* LoopStatRecord+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179352C910127003CDDB7 /* LoopStatRecord+CoreDataProperties.swift */; };
+		FA6E57A72E0A00000000B005 /* MLForecastStored+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A005 /* MLForecastStored+CoreDataClass.swift */; };
+		FA6E57A72E0A00000000B006 /* MLForecastStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A006 /* MLForecastStored+CoreDataProperties.swift */; };
 		DDE179562C910127003CDDB7 /* BolusStored+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179362C910127003CDDB7 /* BolusStored+CoreDataClass.swift */; };
 		DDE179572C910127003CDDB7 /* BolusStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179372C910127003CDDB7 /* BolusStored+CoreDataProperties.swift */; };
 		DDE179582C910127003CDDB7 /* ForecastValue+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179382C910127003CDDB7 /* ForecastValue+CoreDataClass.swift */; };
@@ -967,6 +972,7 @@
 		3811DEE725CA063400A708ED /* PersistedProperty.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PersistedProperty.swift; sourceTree = "<group>"; };
 		3811DF0125CA9FEA00A708ED /* Credentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Credentials.swift; sourceTree = "<group>"; };
 		3811DF0F25CAAAE200A708ED /* APSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APSManager.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A004 /* MLForecastService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLForecastService.swift; sourceTree = "<group>"; };
 		3818AA45274C229000843DB3 /* LibreTransmitter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LibreTransmitter; path = Dependencies/LibreTransmitter; sourceTree = "<group>"; };
 		3818AA49274C267000843DB3 /* CGMBLEKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = CGMBLEKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		3818AA4C274C26A300843DB3 /* LoopKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = LoopKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1112,6 +1118,7 @@
 		3B56079F2ECD62AC00C723C1 /* DeletedGlucoseStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeletedGlucoseStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		3B997DCA2DC00849006B6BB2 /* JSONImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONImporter.swift; sourceTree = "<group>"; };
 		3B997DCE2DC00A3A006B6BB2 /* JSONImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONImporterTests.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A007 /* MLForecasterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLForecasterTests.swift; sourceTree = "<group>"; };
 		3B997DD12DC02AEF006B6BB2 /* glucose.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = glucose.json; sourceTree = "<group>"; };
 		3BA8D1B22DDB870F0006191F /* DecimalExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecimalExtensions.swift; sourceTree = "<group>"; };
 		3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicISFEnableTests.swift; sourceTree = "<group>"; };
@@ -1541,6 +1548,7 @@
 		DDD6D4D22CDE90720029439A /* EstimatedA1cDisplayUnit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EstimatedA1cDisplayUnit.swift; sourceTree = "<group>"; };
 		DDD78A902DC4064800AC63F3 /* carbhistory.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = carbhistory.json; sourceTree = "<group>"; };
 		DDD78AD72DC421B500AC63F3 /* enacted.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = enacted.json; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A008 /* MLForecasterFixtures.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = MLForecasterFixtures.json; sourceTree = "<group>"; };
 		DDD78AD82DC421B500AC63F3 /* suggested.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = suggested.json; sourceTree = "<group>"; };
 		DDD7C8BF2F4DB45400E5CF09 /* GlucoseStored+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlucoseStored+CoreDataClass.swift"; sourceTree = "<group>"; };
 		DDD7C8C02F4DB45400E5CF09 /* GlucoseStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlucoseStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
@@ -1550,6 +1558,8 @@
 		DDE179332C910127003CDDB7 /* MealPresetStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPresetStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		DDE179342C910127003CDDB7 /* LoopStatRecord+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LoopStatRecord+CoreDataClass.swift"; sourceTree = "<group>"; };
 		DDE179352C910127003CDDB7 /* LoopStatRecord+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LoopStatRecord+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A005 /* MLForecastStored+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MLForecastStored+CoreDataClass.swift"; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A006 /* MLForecastStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MLForecastStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		DDE179362C910127003CDDB7 /* BolusStored+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BolusStored+CoreDataClass.swift"; sourceTree = "<group>"; };
 		DDE179372C910127003CDDB7 /* BolusStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BolusStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		DDE179382C910127003CDDB7 /* ForecastValue+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ForecastValue+CoreDataClass.swift"; sourceTree = "<group>"; };
@@ -2276,6 +2286,7 @@
 			children = (
 				CE95BF562BA5F5FE00DC3DE3 /* PluginManager.swift */,
 				3811DF0F25CAAAE200A708ED /* APSManager.swift */,
+				FA6E57A72E0A00000000A004 /* MLForecastService.swift */,
 				38BF021E25E7F0DE00579895 /* DeviceDataManager.swift */,
 				38DAB289260D349500F74C1A /* FetchGlucoseManager.swift */,
 				38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */,
@@ -2744,6 +2755,7 @@
 				3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */,
 				38FCF3F825E902C20078B0D1 /* FileStorageTests.swift */,
 				3B997DCE2DC00A3A006B6BB2 /* JSONImporterTests.swift */,
+				FA6E57A72E0A00000000A007 /* MLForecasterTests.swift */,
 				CE1F6DD82BADF4620064EB8D /* PluginManagerTests.swift */,
 				B3919BBB515547118D684CA2 /* SettingsSearchTests.swift */,
 				BD8FC0532D66186000B95AED /* TestError.swift */,
@@ -2758,6 +2770,7 @@
 				3BCA5F7B2DC7B15400A7EAC7 /* pumphistory-with-external.json */,
 				DD3C47B22DC5608A003DD20D /* newerSuggested.json */,
 				DDD78AD72DC421B500AC63F3 /* enacted.json */,
+				FA6E57A72E0A00000000A008 /* MLForecasterFixtures.json */,
 				DDD78AD82DC421B500AC63F3 /* suggested.json */,
 				DDD78A902DC4064800AC63F3 /* carbhistory.json */,
 				3B997DD12DC02AEF006B6BB2 /* glucose.json */,
@@ -3779,6 +3792,8 @@
 				DDE179392C910127003CDDB7 /* ForecastValue+CoreDataProperties.swift */,
 				DDE179342C910127003CDDB7 /* LoopStatRecord+CoreDataClass.swift */,
 				DDE179352C910127003CDDB7 /* LoopStatRecord+CoreDataProperties.swift */,
+				FA6E57A72E0A00000000A005 /* MLForecastStored+CoreDataClass.swift */,
+				FA6E57A72E0A00000000A006 /* MLForecastStored+CoreDataProperties.swift */,
 				DDE179322C910127003CDDB7 /* MealPresetStored+CoreDataClass.swift */,
 				DDE179332C910127003CDDB7 /* MealPresetStored+CoreDataProperties.swift */,
 				DDE179462C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift */,
@@ -4217,6 +4232,7 @@
 				DDD78A912DC4064800AC63F3 /* carbhistory.json in Resources */,
 				3B997DD32DC02AEF006B6BB2 /* glucose.json in Resources */,
 				DDD78AD92DC421B500AC63F3 /* enacted.json in Resources */,
+				FA6E57A72E0A00000000B008 /* MLForecasterFixtures.json in Resources */,
 				DD3C47B32DC5608A003DD20D /* newerSuggested.json in Resources */,
 				3BCA5F7C2DC7B16400A7EAC7 /* pumphistory-with-external.json in Resources */,
 				DDD78ADA2DC421B500AC63F3 /* suggested.json in Resources */,
@@ -4388,6 +4404,7 @@
 				19B0EF2128F6D66200069496 /* Statistics.swift in Sources */,
 				DDF847E82C5DABA30049BB3B /* WatchConfigAppleWatchView.swift in Sources */,
 				3811DF1025CAAAE200A708ED /* APSManager.swift in Sources */,
+				FA6E57A72E0A00000000B004 /* MLForecastService.swift in Sources */,
 				3870FF4725EC187A0088248F /* BloodGlucose.swift in Sources */,
 				DDBD53FC2DAA903100F940A6 /* OverviewStepView.swift in Sources */,
 				38A0364225ED069400FCBB52 /* TempBasal.swift in Sources */,
@@ -4895,6 +4912,8 @@
 				BDC530FF2D0F6BE300088832 /* ContactImageManager.swift in Sources */,
 				BDC531122D1060FA00088832 /* ContactImageDetailView.swift in Sources */,
 				DDE179552C910127003CDDB7 /* LoopStatRecord+CoreDataProperties.swift in Sources */,
+				FA6E57A72E0A00000000B005 /* MLForecastStored+CoreDataClass.swift in Sources */,
+				FA6E57A72E0A00000000B006 /* MLForecastStored+CoreDataProperties.swift in Sources */,
 				BD10516D2DA986E1007C6D89 /* PulsingLogoAnimation.swift in Sources */,
 				DDE179562C910127003CDDB7 /* BolusStored+CoreDataClass.swift in Sources */,
 				DDE179572C910127003CDDB7 /* BolusStored+CoreDataProperties.swift in Sources */,
@@ -4967,6 +4986,7 @@
 				BD8FC0592D66189700B95AED /* TestAssembly.swift in Sources */,
 				DDC6CA6D2DD90A2A0060EE25 /* LocalizationTests.swift in Sources */,
 				3B997DCF2DC00A3A006B6BB2 /* JSONImporterTests.swift in Sources */,
+				FA6E57A72E0A00000000B007 /* MLForecasterTests.swift in Sources */,
 				BD8FC0662D661A0000B95AED /* GlucoseStorageTests.swift in Sources */,
 				DDDD0FFF2F4E231B00F9C645 /* MockTDDStorage.swift in Sources */,
 				BD8FC05B2D6618AF00B95AED /* DeterminationStorageTests.swift in Sources */,
