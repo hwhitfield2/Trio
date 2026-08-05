@@ -82,7 +82,7 @@ import Testing
         )
         #expect(resolved.rate == 0)
         #expect(resolved.smb == 0)
-        #expect(resolved.durationSeconds == 30 * 60)
+        #expect(resolved.durationSeconds == TimeInterval(1800))
         #expect(!resolved.notes.isEmpty)
     }
 
@@ -95,7 +95,7 @@ import Testing
             effectiveUncappedRate: 1 // scheduled basal running
         )
         #expect(resolved.rate == 0)
-        #expect(resolved.durationSeconds == 30 * 60)
+        #expect(resolved.durationSeconds == TimeInterval(1800))
         #expect(resolved.smb == nil)
     }
 
@@ -146,6 +146,6 @@ import Testing
             effectiveUncappedRate: 2 // running temp at 2 U/hr
         )
         #expect(resolved.rate == 0.5)
-        #expect(resolved.durationSeconds == 30 * 60)
+        #expect(resolved.durationSeconds == TimeInterval(1800))
     }
 }
