@@ -185,13 +185,19 @@ enum SafetyEnvelope {
     // MARK: - Ported oref formulas
 
     /// `basal-set-temp.js getMaxSafeBasal`:
-    /// min(max_basal, max_daily_safety_multiplier × max_daily_basal, current_basal_safety_multiplier × current_basal)
+    /// min(max_basal, max_daily_safety_multiplier × max_daily_basal, current_basal_safety_multiplier × current_basal).
+    /// Zero-basal profiles/segments: a multiplier term with a zero basal would clamp
+    /// every dose to 0 and disable dosing entirely, so zero-valued scale terms are
+    /// treated as absent — the user-set max_basal always applies.
     static func maxSafeBasal(limits: SafetyLimits) -> Decimal {
-        min(
-            limits.maxBasal,
-            limits.maxDailySafetyMultiplier * limits.maxDailyBasal,
-            limits.currentBasalSafetyMultiplier * limits.currentBasal
-        )
+        var cap = limits.maxBasal
+        if limits.maxDailyBasal > 0 {
+            cap = min(cap, limits.maxDailySafetyMultiplier * limits.maxDailyBasal)
+        }
+        if limits.currentBasal > 0 {
+            cap = min(cap, limits.currentBasalSafetyMultiplier * limits.currentBasal)
+        }
+        return cap
     }
 
     /// `determine-basal.js` threshold: `min_bg - 0.5*(min_bg-40)`, then
@@ -203,8 +209,19 @@ enum SafetyEnvelope {
     }
 
     /// oref SMB size cap: `current_basal × maxSMBBasalMinutes / 60`.
+    /// With a zero scheduled basal the scale falls back to max_daily_basal, then to
+    /// a quarter of max_basal (mirrors determine-basal.js `scale_basal`), so a
+    /// zero-basal profile does not silently disable SMBs.
     static func smbBasalMinutesCap(limits: SafetyLimits) -> Decimal {
-        limits.currentBasal * limits.maxSMBBasalMinutes / 60
+        let scaleBasal: Decimal
+        if limits.currentBasal > 0 {
+            scaleBasal = limits.currentBasal
+        } else if limits.maxDailyBasal > 0 {
+            scaleBasal = limits.maxDailyBasal
+        } else {
+            scaleBasal = limits.maxBasal / 4
+        }
+        return scaleBasal * limits.maxSMBBasalMinutes / 60
     }
 
     // MARK: - Evaluation

@@ -69,6 +69,28 @@ import Testing
         #expect(SafetyEnvelope.maxSafeBasal(limits: limits(maxBasal: 10, maxDailyBasal: 3, currentBasal: 0.5)) == 2)
     }
 
+    @Test("Zero-basal profiles do not zero the caps") func testZeroBasalCaps() {
+        // Zero segment (current 0, daily max > 0): min(max_basal, 3 × max_daily_basal).
+        #expect(SafetyEnvelope.maxSafeBasal(limits: limits(maxBasal: 4, maxDailyBasal: 1, currentBasal: 0)) == 3)
+        // All-zero profile: max_basal alone applies.
+        #expect(SafetyEnvelope.maxSafeBasal(limits: limits(maxBasal: 4, maxDailyBasal: 0, currentBasal: 0)) == 4)
+        // SMB scale falls back to max_daily_basal, then max_basal/4.
+        #expect(SafetyEnvelope.smbBasalMinutesCap(limits: limits(maxDailyBasal: 1, currentBasal: 0)) == 0.5)
+        #expect(SafetyEnvelope.smbBasalMinutesCap(limits: limits(maxBasal: 4, maxDailyBasal: 0, currentBasal: 0)) == 0.5)
+    }
+
+    @Test("Zero-basal profile can still dose within the envelope") func testZeroBasalDosing() {
+        let zeroBasalLimits = limits(maxBasal: 4, maxDailyBasal: 0, currentBasal: 0, maxHourlyInsulin: 3)
+        let verdict = SafetyEnvelope.apply(
+            .init(rate: 2, durationMinutes: 30, smbUnits: 0.5),
+            limits: zeroBasalLimits,
+            state: state(currentIOB: 0, glucose: 190)
+        )
+        #expect(verdict.outcome == .allowed)
+        #expect(verdict.dose.rate == 2)
+        #expect(verdict.dose.smbUnits == 0.5)
+    }
+
     @Test("hypo threshold matches the oref min_bg table") func testHypoThreshold() {
         // determine-basal.js comment: min_bg thresholds: 80→60, 90→65, 100→70, 110→75, 120→80
         #expect(SafetyEnvelope.hypoThreshold(minBG: 80, thresholdSetting: 60) == 60)

@@ -385,6 +385,14 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     var profile_current_basal = round_basal(profile.current_basal, profile) * overrideFactor;
     var basal = profile_current_basal;
 
+    // Basal scale used for SMB size caps and zero-temp duration math when the
+    // scheduled basal is 0 (zero-basal profiles or segments): fall back to
+    // max_daily_basal, then to a quarter of max_basal, so a zero scheduled
+    // rate neither disables SMBs nor divides by zero. Everywhere else,
+    // current_basal continues to be used as-is.
+    var scale_basal = profile.current_basal > 0 ? profile.current_basal
+        : (profile.max_daily_basal > 0 ? profile.max_daily_basal : profile.max_basal / 4);
+
     // Print Current Override factor, if any
     if (trio_custom_variables.useOverride) {
         if (trio_custom_variables.duration == 0) {
@@ -1273,7 +1281,7 @@ var maxDelta_bg_threshold;
         rT.insulinForManualBolus =  round((eventualBG - target_bg) / sens, 2);
 
         worstCaseInsulinReq = bgUndershoot / sens;
-        durationReq = round(60*worstCaseInsulinReq / profile.current_basal*overrideFactor);
+        durationReq = round(60*worstCaseInsulinReq / scale_basal*overrideFactor);
         durationReq = round(durationReq/30)*30;
         // always set a 30-120m zero temp (oref0-pump-loop will let any longer SMB zero temp run)
         durationReq = Math.min(120,Math.max(30,durationReq));
@@ -1356,7 +1364,7 @@ var maxDelta_bg_threshold;
             if ( rate <=0 ) {
                 bgUndershoot = target_bg - naive_eventualBG;
                 worstCaseInsulinReq = bgUndershoot / sens;
-                durationReq = round(60*worstCaseInsulinReq / profile.current_basal * overrideFactor);
+                durationReq = round(60*worstCaseInsulinReq / scale_basal * overrideFactor);
                 if (durationReq < 0) {
                     durationReq = 0;
                 // don't set a temp longer than 120 minutes
@@ -1511,7 +1519,7 @@ var maxDelta_bg_threshold;
             var mealInsulinReq = round( meal_data.mealCOB / carbRatio ,3);
             var maxBolus = 0;
             if (typeof smbMinutesSetting === 'undefined' ) {
-                maxBolus = round(profile.current_basal *overrideFactor * 30 / 60 ,1);
+                maxBolus = round(scale_basal *overrideFactor * 30 / 60 ,1);
                 console.error("smbMinutesSetting undefined: defaulting to 30m");
 
                 if( insulinReq > maxBolus ) {
@@ -1521,17 +1529,17 @@ var maxDelta_bg_threshold;
                 console.error("IOB" + iob_data.iob + "> COB" + meal_data.mealCOB + "; mealInsulinReq =" + mealInsulinReq);
                 if (uamMinutesSetting) {
                     console.error("maxUAMSMBBasalMinutes: " + uamMinutesSetting + ", profile.current_basal: " + profile.current_basal * overrideFactor);
-                    maxBolus = round(profile.current_basal * overrideFactor * uamMinutesSetting / 60 ,1);
+                    maxBolus = round(scale_basal * overrideFactor * uamMinutesSetting / 60 ,1);
                 } else {
                     console.error("maxUAMSMBBasalMinutes undefined: defaulting to 30m");
-                    maxBolus = round( profile.current_basal  * overrideFactor * 30 / 60 ,1);
+                    maxBolus = round( scale_basal  * overrideFactor * 30 / 60 ,1);
                 }
                 if( insulinReq > maxBolus ) {
                   console.error("SMB limited by maxUAMSMBBasalMinutes [ " + uamMinutesSetting + "m ]: " + maxBolus + "U ( " + insulinReq + "U )");
                 } else { console.error("SMB is not limited by maxUAMSMBBasalMinutes. ( insulinReq: " + insulinReq + "U )"); }
             } else {
                 console.error(".maxSMBBasalMinutes: " + smbMinutesSetting + ", profile.current_basal: " + profile.current_basal * overrideFactor);
-                maxBolus = round(profile.current_basal  * overrideFactor * smbMinutesSetting / 60 ,1);
+                maxBolus = round(scale_basal  * overrideFactor * smbMinutesSetting / 60 ,1);
                 if( insulinReq > maxBolus ) {
                   console.error("SMB limited by maxSMBBasalMinutes: " + smbMinutesSetting + "m ]: " + maxBolus + "U ( insulinReq: " + insulinReq + "U )");
                 } else { console.error("SMB is not limited by maxSMBBasalMinutes. ( insulinReq: " + insulinReq + "U )"); }
@@ -1552,7 +1560,7 @@ var maxDelta_bg_threshold;
             // calculate a long enough zero temp to eventually correct back up to target
             var smbTarget = target_bg;
             worstCaseInsulinReq = (smbTarget - (naive_eventualBG + minIOBPredBG)/2 ) / sens;
-            durationReq = round(60*worstCaseInsulinReq / profile.current_basal * overrideFactor);
+            durationReq = round(60*worstCaseInsulinReq / scale_basal * overrideFactor);
 
             // if insulinReq > 0 but not enough for a microBolus, don't set an SMB zero temp
             if (insulinReq > 0 && microBolus < bolusIncrement) {

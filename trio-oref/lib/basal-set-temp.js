@@ -12,7 +12,17 @@ tempBasalFunctions.getMaxSafeBasal = function getMaxSafeBasal(profile) {
     var max_daily_safety_multiplier = (isNaN(profile.max_daily_safety_multiplier) || profile.max_daily_safety_multiplier === null) ? 3 : profile.max_daily_safety_multiplier;
     var current_basal_safety_multiplier = (isNaN(profile.current_basal_safety_multiplier) || profile.current_basal_safety_multiplier === null) ? 4 : profile.current_basal_safety_multiplier;
 
-    return Math.min(profile.max_basal, max_daily_safety_multiplier * profile.max_daily_basal, current_basal_safety_multiplier * profile.current_basal);
+    // Zero-basal profiles/segments: a multiplier term with a zero basal would
+    // clamp every temp to 0 and disable dosing entirely, so zero-valued scale
+    // terms are treated as absent. max_basal (user-set) always applies.
+    var maxSafeBasal = profile.max_basal;
+    if (profile.max_daily_basal > 0) {
+        maxSafeBasal = Math.min(maxSafeBasal, max_daily_safety_multiplier * profile.max_daily_basal);
+    }
+    if (profile.current_basal > 0) {
+        maxSafeBasal = Math.min(maxSafeBasal, current_basal_safety_multiplier * profile.current_basal);
+    }
+    return maxSafeBasal;
 };
 
 tempBasalFunctions.setTempBasal = function setTempBasal(rate, duration, profile, rT, currenttemp) {
