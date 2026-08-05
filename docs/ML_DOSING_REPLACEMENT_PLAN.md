@@ -1,273 +1,326 @@
-# Plan: Replacing oref with a Learned, Continuously-Adapting Dosing Controller
+# Plan: ML Closed-Loop Dosing Engine for Trio
 
-**Status:** Draft for review with care team
+**Status:** Draft v2 for review with care team
 **Scope:** Personal-use build of Trio. Not for distribution.
-**Objective:** Replace the oref (OpenAPS) decision algorithm with a machine-learning
-controller that ingests glucose, carbs, and insulin-delivery history and chooses
-insulin delivery (temp basal + micro-bolus) to minimize time outside
-**target ± 15 mg/dL**, and that keeps improving as new personal data accumulates.
+
+**Objective:** The ML engine *is* the closed loop. It ingests glucose, carbs, and
+insulin-delivery history; chooses insulin delivery (temp basal + micro-bolus) to
+minimize time outside **target ± 15 mg/dL**; **re-evaluates every 5 minutes** despite
+CGM latency; **evolves hourly**; every component is **individually toggleable**; every
+decision carries a complete **who/what/where/when/why/how audit record**; and
+**hard caps** on IOB, basal rate, SMB size, and insulin-per-hour/day are enforced by a
+layer that no toggle, model update, or adaptation can bypass.
 
 ---
 
 ## 0. Design principles (non-negotiable)
 
-These are what make an "ever-evolving" model survivable in a system that doses insulin.
-
-1. **The policy is learned; the envelope is not.** The ML controller decides *how much*
-   insulin to deliver. A deterministic, unit-tested Swift safety envelope decides *the
-   maximum it is allowed to deliver* and *when it must deliver zero*. The envelope is
-   versioned, hand-written, and never trained. Every model update in the future changes
-   only the policy, never the envelope.
-2. **Asymmetric objective.** Going low is weighted far more heavily than going high at
-   every layer: the training loss, the controller cost function, and the envelope.
-   Rescue meds treat lows after the fact; the controller's job is to make them rare.
-3. **oref stays in the binary as the fallback, permanently.** Replacement means the ML
-   path is primary, not that the proven algorithm is deleted. Any anomaly — stale CGM,
-   missing model, out-of-distribution inputs, watchdog trip — degrades to oref (or to
-   zero-temp) automatically, and a single settings toggle reverts entirely.
-4. **No unvalidated model ever doses.** Retraining is continuous; *promotion* is gated.
-   A new model version doses only after passing an automated backtest + safety
-   regression suite against your own recent data and simulator stress scenarios.
-5. **Dose against uncertainty, not the point estimate.** The model predicts a
-   distribution of future glucose. Insulin is chosen so the *pessimistic-low* bound
-   (e.g. 10th percentile) stays above the hypo threshold, while the median is steered
-   toward target.
+1. **The policy is learned; the caps are not.** The ML controller decides *how much*.
+   A deterministic, unit-tested Swift `SafetyEnvelope` — hand-written, versioned, never
+   trained, and **not toggleable** — decides the maximum it may deliver and when it
+   must deliver zero. Everything above the envelope can evolve hourly; the envelope
+   changes only by explicit code change.
+2. **Asymmetric objective.** Lows are weighted far more heavily than highs in the
+   training loss, the controller cost, and the envelope.
+3. **oref stays in the binary as the automatic fallback, permanently.** Replacement
+   means the ML path is primary. Any anomaly degrades to oref, then to zero-temp +
+   profile basal + alert. One-tap full revert in settings.
+4. **Evolution is tiered by blast radius.** What changes hourly is *bounded parameters*
+   (clamped scalars, residual corrections). What changes model *weights* passes an
+   automated gate suite first, however frequently that pipeline runs. An unvalidated
+   set of weights never doses.
+5. **Dose against uncertainty.** The model predicts glucose quantiles (p10/p50/p90);
+   insulin is chosen so the pessimistic-low bound stays above the hypo threshold while
+   the median steers to target.
+6. **Every decision is reconstructible.** If a dose can't be explained from its stored
+   audit record alone — without the app, without the model — the audit layer is
+   incomplete and the decision path doesn't ship.
 
 ### Honest framing of the ±15 goal
 
-CGM error alone is ~±9–10% MARD and subcutaneous insulin acts with a 15–30 min onset
-and a multi-hour tail. No controller — learned or otherwise — can *guarantee* ±15 mg/dL
-at all times, especially across unannounced meals. The goal is expressed as the
-optimization objective: **maximize time-in-tight-range (target ± 15) subject to a hard
-hypoglycemia constraint**. Realistic success looks like steadily rising tight-range
-percentage across model generations, with lows never increasing. That metric is the
-scoreboard for every model promotion.
+CGM MARD is ~9–10%, interstitial readings lag blood glucose, and subcutaneous insulin
+has 15–30 min onset with a multi-hour tail. No controller can *guarantee* ±15 at all
+times, especially across unannounced meals. The goal is the optimization objective:
+**maximize time in target ± 15, subject to a hard hypoglycemia constraint.** The
+scoreboard for every model generation: tight-range % must rise, time-below-range must
+never rise.
 
 ---
 
-## 1. Current architecture (what gets replaced, what stays)
+## 1. What gets replaced, what stays
 
-Trio runs oref as JavaScript in JavaScriptCore. The loop cycle:
+Trio today runs oref as JavaScript in JavaScriptCore
+(`OpenAPS.determineBasal`, `Trio/Sources/APS/OpenAPS/OpenAPS.swift:380` →
+`trio-oref/lib/determine-basal/determine-basal.js`).
 
-```
-CGM reading → APSManager.loop() (APSManager.swift:232)
-  → OpenAPS.determineBasal() (OpenAPS.swift:380)
-      - assembles: glucose (GlucoseStored), carbs (CarbEntryStored),
-        pump history (PumpEventStored), profile.json, autosens, TDD, reservoir
-      - JS: meal() → iob() → determine_basal() (trio-oref/lib/determine-basal/determine-basal.js)
-  → Determination {rate, duration, smb units, predBGs, reason}
-  → CoreData (OrefDetermination + Forecast) → charts / Nightscout / watch
-  → APSManager.enactDetermination() (APSManager.swift:706) → pump
-```
-
-**Replaced:** the JS `determine_basal` decision logic (and eventually meal/autosens as
-the learned model subsumes them).
-
-**Kept unchanged:** data assembly, the `Determination` output shape (so CoreData,
-charts, Nightscout, Live Activity, and the watch app keep working), and enactment.
-
-**Reimplemented in Swift (currently lives in JS and must not be lost):** max IOB
-clamping, `maxSafeBasal`, SMB caps and interval, low-glucose threshold logic,
-CGM-quality bailouts. Sources: `determine-basal.js` lines ~420–1620 and
-`basal-set-temp.js`.
+* **Replaced:** the oref decision logic (determine-basal, and progressively
+  meal-absorption and autosens as the learned model subsumes them).
+* **Kept:** data assembly from CoreData, the `Determination` output shape (CoreData
+  persistence, charts, Nightscout, Live Activity, and watch all keep working), and
+  pump enactment (`APSManager.enactDetermination`, `APSManager.swift:706`).
+* **Reimplemented in Swift:** the safety math that currently lives in the JS
+  (max IOB, `maxSafeBasal`, SMB caps/interval, low-glucose threshold logic, CGM-quality
+  bailouts — `determine-basal.js` ~420–1620, `basal-set-temp.js`), because removing the
+  JS must not remove the guardrails.
 
 ---
 
 ## 2. Target architecture
 
 ```
-                       ┌────────────────────────────────────────────┐
-                       │                DosingEngine                │
- 5-min feature frame   │                                            │
- (glucose, IOB decomp, │  ┌──────────────┐    ┌──────────────────┐  │
-  COB, time-of-day,    │  │  Dynamics    │    │   Controller     │  │
-  recent doses, ...)──►│  │  Model       │───►│   (MPC search    │  │
-                       │  │ (Core ML,    │    │   over candidate │  │
-                       │  │  quantile    │    │   insulin plans) │  │
-                       │  │  forecasts)  │    └────────┬─────────┘  │
-                       │  └──────────────┘             │            │
-                       │                     proposed rate + SMB    │
-                       │                               ▼            │
-                       │                    ┌──────────────────┐    │
-                       │                    │  SafetyEnvelope  │    │
-                       │                    │  (deterministic, │    │
-                       │                    │   hand-written)  │    │
-                       │                    └────────┬─────────┘    │
-                       └─────────────────────────────┼──────────────┘
-                                                     ▼
-                                          Determination → pump
-                        anomaly / low confidence / stale data
-                                    └──► fallback: oref → zero-temp
+ 5-min tick (timer-guaranteed, not CGM-gated)
+   │
+   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                          DosingEngine                               │
+│                                                                     │
+│  ┌────────────────┐   ┌──────────────┐   ┌──────────────────────┐   │
+│  │ StateEstimator │──►│  Dynamics    │──►│  Controller (MPC     │   │
+│  │ (CGM-lag       │   │  Model       │   │  search over         │   │
+│  │  compensation, │   │ (Core ML,    │   │  candidate insulin   │   │
+│  │  sensor QC)    │   │  quantile    │   │  plans, asymmetric   │   │
+│  └────────────────┘   │  forecasts)  │   │  ±15 cost)           │   │
+│         ▲             └──────▲───────┘   └──────────┬───────────┘   │
+│         │                    │                      │               │
+│  ┌──────┴────────────────────┴───────┐    proposed rate + SMB       │
+│  │ AdaptationStack (hourly-evolving, │              ▼               │
+│  │ bounded params + residual model)  │   ┌──────────────────────┐   │
+│  └───────────────────────────────────┘   │   SafetyEnvelope     │   │
+│                                          │   HARD CAPS — always │   │
+│         every stage writes to            │   on, not toggleable │   │
+│  ┌───────────────────────────────────┐   └──────────┬───────────┘   │
+│  │ DecisionAudit (5W1H record/cycle) │◄─────────────┤               │
+│  └───────────────────────────────────┘              ▼               │
+└─────────────────────────────────────────── Determination → pump ────┘
+        anomaly / low confidence / stale data
+                  └──► fallback: oref → zero-temp + profile basal + alert
 ```
 
-### 2.1 Dynamics model (the learned part)
+### 2.1 Cadence and CGM latency
 
-* **Task:** given the last 6 h of state and a *candidate* insulin plan for the next
-  interval, predict the glucose trajectory for the next 4 h as quantiles
-  (p10 / p50 / p90) at 5-min steps.
-* **Features per 5-min frame:** glucose + deltas (15/30/60 min), IOB decomposed into
-  future activity buckets, COB with absorption-rate estimate, insulin delivered per
-  frame (basal & bolus separately), time-of-day encoding, day-of-week, active
-  override/temp-target, recent TDD stats. This is essentially the tuple Trio already
-  assembles each cycle (`AlgorithmGlucose`, `PumpEventDTO`, `TrioCustomOrefVariables`).
-* **Architecture:** small sequence model — temporal convolutional network or GRU/LSTM,
-  ~10⁵–10⁶ parameters, quantile-regression heads (pinball loss, extra weight on the
-  low quantile). Trained in PyTorch, exported to Core ML. Runs in <50 ms on iPhone.
-* **Also predicts:** a meal/absorption disturbance signal (learned successor to UAM),
-  so unannounced carbs show up as a rising disturbance term the controller reacts to.
+**Requirement:** re-evaluate every 5 minutes even though CGM data reflects blood
+glucose ~10–15 minutes ago.
 
-### 2.2 Controller (MPC — the deciding part)
+* **Guaranteed 5-min tick.** Today the loop is triggered by CGM arrival / pump
+  heartbeat with a 3-min minimum interval (`APSManager.canStartNewLoop`,
+  `Config.loopInterval`). The ML engine adds a timer-driven tick so a cycle runs every
+  5 minutes *regardless* of whether a new reading arrived — a late or missed reading
+  still gets a re-evaluation using the state estimator's projection. (iOS background
+  scheduling jitter is absorbed by also keeping the existing CGM/heartbeat triggers;
+  whichever fires first runs the cycle, minimum spacing 4 min.)
+* **StateEstimator — lag compensation.** A lightweight filter (Kalman-style) fuses the
+  delayed CGM sequence with known insulin activity and carb absorption to estimate
+  *current* blood glucose and rate of change, not 15-minutes-ago glucose. The dynamics
+  model is trained on estimator output, so the whole stack reasons in "now" terms.
+  The estimator also owns sensor QC: dropout bridging (≤15 min), compression-low
+  detection (sudden implausible drop vs. IOB context), calibration-jump detection.
+  Estimated-vs-measured divergence is logged per cycle; beyond a band it triggers
+  fallback (§2.6).
+* **Cycles without fresh data** may only *reduce or hold* insulin delivery (cancel/
+  lower temp basal, never issue an SMB) — new-dose decisions require a reading newer
+  than 10 min. This is an envelope rule, not a model preference.
 
-Every loop cycle:
+### 2.2 Dynamics model (learned)
 
-1. Enumerate candidate insulin plans: temp-basal rates from 0 to envelope max
-   (in pump-supported increments) × SMB sizes from 0 to envelope max.
-2. Roll each candidate through the dynamics model.
-3. Score with an asymmetric cost over the 4-h horizon:
-   * hard reject any plan whose **p10** trajectory crosses the hypo threshold;
-   * heavy quadratic penalty below `target − 15` (on p50);
-   * moderate penalty above `target + 15`, growing with excursion size and duration;
-   * small penalty on insulin aggressiveness / dose-to-dose variability (prevents
-     oscillation and rage-bolus behavior).
-4. Choose the minimum-cost plan; pass it to the SafetyEnvelope.
+* **Task:** given the last 6 h of estimated state and a *candidate* insulin plan,
+  predict glucose trajectories for the next 4 h as p10/p50/p90 quantiles at 5-min
+  steps, plus a meal/absorption disturbance signal (learned successor to UAM) so
+  unannounced carbs surface as a rising disturbance the controller reacts to.
+* **Features per 5-min frame:** estimated BG + deltas (15/30/60 min), IOB decomposed
+  into future-activity buckets, COB with absorption estimate, basal and bolus delivery
+  per frame, time-of-day/day-of-week encodings, active override/temp target, TDD
+  stats. (This is the tuple Trio already assembles: `AlgorithmGlucose`,
+  `PumpEventDTO`, `TrioCustomOrefVariables`.)
+* **Architecture:** small sequence model (temporal conv or GRU), ~10⁵–10⁶ params,
+  quantile-regression heads (pinball loss, extra weight on the low quantile). Trained
+  in PyTorch, exported to Core ML, <50 ms inference on iPhone.
 
-This is the same *shape* as oref (which is MPC over a fixed physiological model) — the
-replacement is the personalized learned model and a search over actions rather than a
-single closed-form insulinReq. It is auditable: every decision logs the candidate set,
-predicted trajectories, and cost breakdown into the `reason` field, so any dose can be
-explained after the fact.
+### 2.3 Controller (MPC)
 
-### 2.3 SafetyEnvelope (deterministic Swift)
+Each cycle: enumerate candidate plans (temp-basal rates 0→cap in pump increments ×
+SMB sizes 0→cap), roll each through the dynamics model, score over the 4-h horizon:
 
-Reimplements, as pure functions with exhaustive unit tests:
+* **hard reject** any plan whose p10 trajectory crosses the hypo threshold;
+* heavy quadratic penalty below `target − 15` (on p50);
+* moderate penalty above `target + 15`, growing with excursion size and duration;
+* small penalty on aggressiveness and dose-to-dose variability (anti-oscillation).
 
-* `maxIOB` clamp (reject any plan pushing IOB past max)
-* `maxSafeBasal = min(max_basal, max_daily_multiplier × max_daily_basal, current_multiplier × current_basal)`
-* SMB cap (`maxSMBBasalMinutes` equivalent) + minimum SMB interval + `maxBolus`
-* **Low-glucose suspend:** current or p10-predicted glucose below threshold ⇒ zero-temp,
-  no SMB, regardless of what the model wants
-* CGM quality gates: stale (>12 min), calibrating, flat-lined, implausible jumps ⇒ no
-  ML dosing (fallback path)
-* Rate-of-change guard: consecutive-cycle dose escalation limiter
-* Pump-state guards (reuse existing `verifyStatus()`, suspension, manual-temp checks)
+Minimum-cost plan goes to the SafetyEnvelope. Same *shape* as oref (MPC over a model);
+the replacement is a personalized learned model and an explicit search — which is what
+makes each decision fully auditable (§2.5).
 
-The envelope's thresholds come from the same user settings oref uses today
-(`Preferences`, `PumpSettings`) — no new knobs to misconfigure.
+### 2.4 SafetyEnvelope — hard caps (always on)
 
-### 2.4 Fallback ladder
+Pure-function Swift module, exhaustive unit + property-based tests ("no possible model
+output produces a dose above cap"). **Not toggleable. Not adaptable. Not writable by
+the evolution pipeline.** Cap values are user settings (reusing `Preferences` /
+`PumpSettings`), changeable only by explicit human action in the settings UI, and every
+cap change is itself written to the audit log.
+
+| Cap | Rule |
+|---|---|
+| **Max IOB** | Reject any plan pushing projected IOB past cap; clamp to the residual headroom |
+| **Max basal rate** | `min(maxBasal, maxDailyMultiplier × maxDailyBasal, currentMultiplier × currentBasal)` |
+| **Max SMB per dose** | Absolute units cap AND `maxSMBBasalMinutes`-equivalent cap; floored to pump increment |
+| **Min SMB interval** | No SMB within N min of any bolus |
+| **Max insulin per rolling hour** | Basal-above-profile + SMBs summed over 60 min ≤ cap |
+| **Max insulin per rolling 24 h** | TDD ceiling as a multiple of recent average TDD |
+| **Low-glucose suspend** | Estimated or p10-predicted BG below threshold ⇒ zero-temp, no SMB, unconditionally |
+| **Escalation limiter** | Consecutive-cycle dose increases rate-limited |
+| **Data-quality gate** | Stale (>10 min for dosing), calibrating, flat-lined, implausible-jump CGM ⇒ reduce/hold only |
+| **Pump-state guards** | Suspended, bolusing, manual temp, reservoir empty ⇒ no ML action (existing `verifyStatus()`) |
+
+Ordering: controller output → per-dose caps → rolling-window caps → LGS override →
+pump quantization. Every clamp that actually fires is recorded in the audit record
+with before/after values.
+
+### 2.5 DecisionAudit — who / what / where / when / why / how
+
+One structured record per cycle (including no-action and fallback cycles), persisted
+to CoreData (`MLDecisionAudit` entity), uploaded to Nightscout (compact form in the
+device-status `reason`, full form as a treatment note), exportable as JSONL, and
+browsable in-app (decision list → detail view).
+
+| Field | Contents |
+|---|---|
+| **Who** | Deciding component + exact versions: engine version, model weights checksum/version, AdaptationStack parameter snapshot (each scalar's current value), SafetyEnvelope code version, active toggle states, cap values in force |
+| **What** | Proposed action (rate, duration, SMB) *and* enacted action, plus the delta if the envelope clamped it; explicit `NO_ACTION` / `HOLD` / `SUSPEND` outcomes |
+| **Where** | Path taken through the pipeline: ML / oref-fallback / zero-temp-fallback; which stage terminated the decision (e.g. "envelope: LGS override") |
+| **When** | Timestamps: cycle trigger (timer vs. CGM vs. heartbeat), newest CGM reading time + its age, estimator output time, decision time, enactment time + pump ack |
+| **Why** | Cost breakdown of the chosen plan vs. runner-up and vs. zero-action: predicted p10/p50/p90 trajectories for each, which constraint(s) were binding, disturbance-signal level, estimator confidence, and a generated one-sentence human summary ("SMB 0.4 U: p50 reaches 172 in 40 min without action; p10 stays >85 with it") |
+| **How** | Candidate-set summary (ranges searched, count), inference latencies, input feature hash (exact reproducibility: same inputs + same versions ⇒ same decision, verified by a replay tool in the training repo) |
+
+The audit record is written *before* enactment and finalized with the pump ack, so a
+crashed cycle still leaves evidence of what was intended.
+
+### 2.6 Toggle matrix
+
+Every component is independently toggleable in a dedicated "ML Engine" settings pane.
+Each toggle has a defined degraded behavior — flipping any toggle can only make the
+system *more* conservative, and every toggle change is audit-logged.
+
+| Component | Off ⇒ behavior |
+|---|---|
+| ML engine (master) | Full oref, exactly as today |
+| ML SMBs | ML sets temp basals only; SMB = 0 |
+| ML temp basals | ML issues SMBs only; basal follows profile |
+| StateEstimator lag compensation | Raw CGM values used; dosing cadence gated on fresh readings |
+| Disturbance/UAM signal | Controller assumes announced carbs only (more conservative dosing on rises) |
+| Hourly adaptation (fast loop) | Adaptation scalars frozen at 1.0 / last-reviewed values |
+| Weight promotion (slow loop) | Champion model pinned; new weights accumulate but never activate |
+| Shadow logging of oref | ML doses without the parallel oref comparison record (keep ON) |
+| **SafetyEnvelope / hard caps** | **No toggle exists. Always on.** |
+| **Fallback ladder** | **No toggle exists. Always on.** |
+
+### 2.7 Fallback ladder (always armed)
 
 ```
-ML healthy ──► ML controller doses
-model missing / OOD input / confidence too wide / watchdog ──► oref doses
-oref also unavailable (JS error, no profile) ──► cancel temp, profile basal, alert
-CGM invalid ──► existing stale-data behavior (no dosing decisions)
+ML healthy ─────────────────────────► ML doses
+model missing / OOD input / p90−p10 too wide /
+  live prediction error > band / watchdog timeout ──► oref doses (logged)
+oref also unavailable ──► cancel temp, profile basal, alert
+CGM invalid beyond bridging window ──► reduce/hold only, then existing stale behavior
 ```
 
-"Confidence too wide" = p90 − p10 spread beyond a set band, or live prediction error
-(last hour's predictions vs. actual) beyond a set RMSE — both checked every cycle.
+"Live prediction error" = rolling comparison of the model's 30-min-ago predictions vs.
+what actually happened; drift beyond a set RMSE band demotes the ML for that cycle and
+counts toward an automatic stage-down (§5).
 
 ---
 
-## 3. Phased build
+## 3. Hourly evolution — the AdaptationStack
 
-### Phase 1 — Data foundation (1–2 weeks of work)
+**Requirement:** the model evolves hourly. Done as three tiers, so speed of change is
+inversely proportional to blast radius. Every tier's current values are in every audit
+record, so "which version of the system decided this" is always answerable.
 
-* **Exporter:** new `MLDataExporter` service reading `GlucoseStored`,
-  `CarbEntryStored`, `PumpEventStored`, `TDDStored`, `OverrideStored`,
-  `OrefDetermination` + `Forecast` from CoreData; emits 5-min-aligned frames as
-  CSV/JSONL via share sheet / Files app. Nightscout is the secondary source for
-  history predating the current phone.
-* **Shared feature schema:** one spec (versioned JSON schema) used by both the Python
-  training code and the Swift inference code, with golden-file tests on both sides so
-  train/serve skew is impossible.
-* **Deliverable gate:** ≥ 60–90 days of clean personal data; audit for gaps, sensor
-  swaps, site changes.
+| Tier | Cadence | What changes | Bounds / gate |
+|---|---|---|---|
+| **T1 — Residual corrector** | Every cycle (5 min) | A bias/slope correction on the model's short-horizon forecast, fitted to the last 3 h of prediction residuals (compensates site aging, sensor drift, day-effects within hours) | Correction magnitude hard-clamped (e.g. ±20 mg/dL at 1 h equivalent); can only shift *predictions*, never touch caps |
+| **T2 — Sensitivity adaptation** | **Hourly** | A small set of named, interpretable scalars: overall sensitivity ratio (autosens successor), meal-absorption speed, basal-need bias; refit from the last 24–48 h | Each scalar hard-clamped (e.g. sensitivity ∈ [0.7, 1.3]); update step per hour limited (≤5%/h) so no single bad hour swings dosing; clamp hits are audit-flagged |
+| **T3 — Weight retraining** | Continuous pipeline; **promotion whenever gates pass** (can be as often as hourly if compute allows, realistically daily) | Full model weights retrained on all data through the last hour | Promotion only after automated gate suite: backtest vs. current champion on newest data, hypo-safety regression (zero would-have-dosed-in-a-low events), simulator stress suite, calibration check on the low quantile. Fail ⇒ champion keeps running. Every promoted version retained for instant rollback |
 
-### Phase 2 — Offline model (2–4 weeks, iterative)
-
-* Python training repo (can live under `ml/` here): dataset builder, model, training
-  loop, and a **backtest harness** that replays history frame-by-frame.
-* **Baseline to beat:** oref's own stored `predBGs` forecasts (already persisted per
-  cycle in `Forecast`/`ForecastValue`). Gate: lower RMSE than oref at 30/60/120 min on
-  held-out weeks, *and* no degradation in the low-glucose region specifically.
-* Simulator stress-testing: run the controller against a virtual-patient simulator
-  (e.g. a simglucose/UVA-Padova-style cohort) for meal, exercise, compression-low,
-  sensor-dropout, and site-failure scenarios. The controller must never produce a
-  simulated severe low that zero-temping would have avoided.
-
-### Phase 3 — Swift integration, shadow mode (2–3 weeks + ≥ 4–6 weeks of runtime)
-
-* New `DosingAlgorithm` protocol; `OrefAlgorithm` (existing path) and `MLAlgorithm`
-  (Core ML dynamics model + MPC + SafetyEnvelope) both conform, both emit
-  `Determination`.
-* Settings toggle: **oref / ML-shadow / ML-active** (default oref).
-* In **shadow mode**, every cycle runs both; oref doses; both determinations are
-  persisted and uploaded to Nightscout for side-by-side review with your care team.
-* **Promotion gates out of shadow:** over ≥ 4 weeks —
-  * zero cycles where ML would have dosed insulin during an actual hypo (< threshold);
-  * ML's live 30/60-min prediction RMSE beats oref's;
-  * dose divergence review with care team (every large disagreement explained).
-
-### Phase 4 — Staged activation (weeks to months, care-team-paced)
-
-* **Stage A:** ML controls temp basals only; SMBs remain oref's; conservative maxIOB.
-* **Stage B:** ML issues SMBs, capped at 50% of envelope max.
-* **Stage C:** full authority within the envelope.
-* Each stage begins with a care-team review of shadow/previous-stage data, runs a
-  minimum of 2 weeks, and has the one-tap revert to oref. Advancement criteria:
-  tight-range % non-inferior to oref, time-below-range not increased, no
-  envelope-clamp events indicating the model *wanted* to overdose.
-
-### Phase 5 — Continuous evolution (steady state)
-
-Two adaptation loops at very different speeds:
-
-* **Fast loop (on-device, bounded, daily):** a single sensitivity scalar — a learned
-  successor to autosens — updated from the last 24–48 h of prediction error, hard-
-  clamped to [0.7, 1.3]. This gives day-to-day adjustment (hormones, illness, site
-  aging) without touching model weights. Safe because it is one bounded number.
-* **Slow loop (off-device, gated, weekly/monthly):** phone exports new data → training
-  pipeline (Mac or private CI) retrains → automated gate suite runs (backtest vs.
-  current champion on the newest weeks, hypo-safety regression, simulator suite) →
-  only a passing model is signed and promoted. The app loads versioned `.mlmodelc`
-  files from Documents with checksum verification; every model version is kept for
-  instant rollback; the app pins the champion version and displays it on the settings
-  screen. A failed gate means the old model simply keeps running — evolution can
-  stall, but it can never regress silently.
+* T1+T2 give genuine hour-scale evolution *on-device* with bounded, interpretable,
+  individually-toggleable parameters — this is what safely satisfies "evolve hourly."
+* T3 runs off-device (Mac or private CI pulling exports/Nightscout). The app loads
+  signed, checksummed `.mlmodelc` versions; the champion version is pinned, displayed
+  in settings, and stamped into every audit record.
+* **Invariant:** no tier can modify the SafetyEnvelope, cap values, or the fallback
+  ladder. Evolution can stall (gates failing); it can never regress silently.
 
 ---
 
-## 4. Testing matrix
+## 4. Phased build
+
+**Phase 1 — Foundations (build now, useful regardless):**
+`MLDataExporter` (5-min frames from `GlucoseStored`, `CarbEntryStored`,
+`PumpEventStored`, `TDDStored`, `OrefDetermination`/`Forecast`; JSONL via
+share sheet; Nightscout as deep-history source) · `SafetyEnvelope` module with the
+oref JS safety cases ported as unit-test fixtures · `DosingAlgorithm` protocol with
+`OrefAlgorithm` wrapping the existing path unchanged · `DecisionAudit`
+entity + logging (wired into the *oref* path first — audit visibility starts before
+any ML doses) · 5-min timer tick · versioned feature schema shared Python↔Swift with
+golden-file parity tests.
+
+**Phase 2 — Offline model:** training repo under `ml/`; dataset builder; StateEstimator
+prototyped offline; dynamics model; backtest harness replaying history frame-by-frame.
+**Gate to proceed:** beats oref's stored `predBGs` at 30/60/120 min on held-out weeks,
+no degradation in the low-glucose region, low-quantile calibration conservative.
+Simulator stress suite (simglucose/UVA-Padova-style cohort): meals, exercise,
+compression lows, dropouts, occlusions.
+
+**Phase 3 — Shadow mode (≥4–6 weeks runtime):** `MLAlgorithm` integrated; toggle
+oref / ML-shadow / ML-active (default oref). Both algorithms run each cycle; oref
+doses; both determinations + full audit records persisted and uploaded for care-team
+review. **Promotion gates:** zero cycles where ML would have dosed during an actual
+low; live 30/60-min RMSE beats oref's; every large dose divergence reviewed and
+explained.
+
+**Phase 4 — Staged activation (care-team-paced, ≥2 weeks/stage):**
+A: temp basals only, conservative caps → B: SMBs at 50% of cap → C: full authority
+within the envelope. Advance criteria: tight-range % non-inferior, time-below-range
+not increased, no envelope-clamp pattern suggesting the model *wanted* to overdose.
+Auto stage-down triggers: any severe low; two consecutive nights below band; clamp or
+fallback frequency above threshold.
+
+**Phase 5 — Steady state:** AdaptationStack live (T1/T2 on-device hourly, T3 pipeline
+gated), audit browser in-app, weekly care-team data review.
+
+---
+
+## 5. Testing matrix
 
 | Layer | Test |
 |---|---|
-| SafetyEnvelope | Exhaustive unit tests incl. property-based tests (random model outputs can never produce dose > envelope); direct port of the oref JS safety cases as fixtures |
-| Feature pipeline | Golden-file parity tests Python ↔ Swift |
-| Dynamics model | Backtest RMSE gates vs. oref predBGs; low-region calibration check (predicted p10 must be conservative) |
-| Controller | Simulator scenario suite (meals, exercise, missed meal announcements, sensor noise/dropout, occlusions); replay of your worst historical days |
-| Integration | Shadow-mode divergence logging; watchdog/fallback fault-injection tests (kill model mid-cycle, corrupt input, stale CGM) |
-| Rollback | One-tap revert to oref verified on-device before every stage advance |
+| SafetyEnvelope | Exhaustive unit + property-based tests (fuzz model outputs: dose > cap unreachable); oref JS safety cases as fixtures; rolling-window cap edge cases (DST, clock changes) |
+| StateEstimator | Replay vs. raw-BG holdout; compression-low and dropout scenario fixtures |
+| Feature pipeline | Golden-file parity Python ↔ Swift |
+| Dynamics model | Backtest RMSE gates vs. oref predBGs; low-region calibration |
+| Controller | Simulator scenario suite; replay of worst historical days; anti-oscillation checks |
+| AdaptationStack | Clamp tests per tier; adversarial residual injection (bad hour of data cannot move T2 scalars past step limit) |
+| Audit | Round-trip: decision replayed from audit record alone reproduces identical output (same versions + feature hash ⇒ same dose) |
+| Integration | Fault injection: kill model mid-cycle, corrupt input, stale CGM, timer starvation — verify fallback ladder and audit completeness |
+| Rollback | One-tap revert to oref and one-version model rollback verified on-device before every stage advance |
 
 ---
 
-## 5. Personal-safety operating rules (with care team)
+## 6. Personal-safety operating rules (with care team)
 
-* Rescue meds staged and in-date; support team knows which stage the system is in and
-  the revert procedure (Settings → Algorithm → oref).
-* Stage advances only after joint review of the data — never solo, never mid-week.
-* Alarm floor: keep CGM urgent-low alarms independent of this system at all times.
-* Any severe low or two consecutive nights below target band ⇒ automatic drop back one
-  stage pending review.
-* Keep Nightscout uploading both suggested and enacted determinations so the team has
-  remote visibility.
+* Rescue meds staged and in-date; support team knows the current stage and the revert
+  procedure (Settings → ML Engine → master toggle off).
+* Stage advances only after joint data review — never solo, never mid-week.
+* CGM urgent-low alarms remain fully independent of this system.
+* Severe low or two consecutive nights below band ⇒ automatic stage-down pending review.
+* Nightscout keeps uploading suggested + enacted + audit summaries for remote
+  visibility.
 
 ---
 
-## 6. Immediate next steps in this repo
+## 7. Immediate next steps in this repo
 
-1. `MLDataExporter` service + export UI entry point (Phase 1).
-2. `SafetyEnvelope` Swift module with the oref JS safety cases ported as unit-test
-   fixtures — it is needed by every later phase and can be built and fully tested now.
-3. `DosingAlgorithm` protocol refactor wrapping the existing oref path unchanged.
-4. `ml/` training scaffold: feature schema, dataset builder, backtest harness reading
-   the exporter's output.
+1. `SafetyEnvelope` module + test fixtures ported from the oref JS (needed by every
+   later phase; fully buildable and testable today).
+2. `DecisionAudit` CoreData entity + logger, wired into the existing oref path first.
+3. `MLDataExporter` + export UI.
+4. `DosingAlgorithm` protocol refactor (oref wrapped unchanged) + 5-min timer tick.
+5. `ml/` training scaffold: feature schema, dataset builder, backtest harness.
