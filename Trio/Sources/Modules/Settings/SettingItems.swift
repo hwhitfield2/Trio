@@ -237,7 +237,10 @@ enum SettingItems {
                 "Fat and Protein Delay",
                 "Spread Interval",
                 "Fat and Protein Percentage",
-                "FPU"
+                "FPU",
+                "Enable AI Meal Photo Analysis",
+                "Meal Photo",
+                "Camera"
             ],
             scrollTargetLabels: [
                 "Max Fat": "Enable Fat and Protein Entries",
@@ -245,7 +248,9 @@ enum SettingItems {
                 "Fat and Protein Delay": "Enable Fat and Protein Entries",
                 "Spread Interval": "Enable Fat and Protein Entries",
                 "Fat and Protein Percentage": "Enable Fat and Protein Entries",
-                "FPU": "Enable Fat and Protein Entries"
+                "FPU": "Enable Fat and Protein Entries",
+                "Meal Photo": "Enable AI Meal Photo Analysis",
+                "Camera": "Enable AI Meal Photo Analysis"
             ],
             path: ["Features", "Meal Settings"]
         ),

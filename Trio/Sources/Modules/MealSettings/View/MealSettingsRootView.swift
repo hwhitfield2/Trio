@@ -356,6 +356,55 @@ extension MealSettings {
                         }
                     )
                 }
+                SettingInputSection(
+                    decimalValue: $decimalPlaceholder,
+                    booleanValue: $state.mealPhotoAnalysisEnabled,
+                    shouldDisplayHint: $shouldDisplayHint,
+                    selectedVerboseHint: Binding(
+                        get: { selectedVerboseHint },
+                        set: {
+                            selectedVerboseHint = $0.map { AnyView($0) }
+                            hintLabel = String(localized: "Enable AI Meal Photo Analysis")
+                        }
+                    ),
+                    units: state.units,
+                    type: .boolean,
+                    label: String(localized: "Enable AI Meal Photo Analysis"),
+                    miniHint: String(localized: "Estimate carbs by photographing your meal with a camera button on the bolus calculator."),
+                    verboseHint: VStack(alignment: .leading, spacing: 10) {
+                        Text("Default: OFF").bold()
+                        Text(
+                            "Adds a camera button to the bolus calculator. Take a photo of your meal with a common object (soda can, credit card, fork) placed next to it as a size reference, and AI will identify the components, judge whether the meal is homemade or from a restaurant, and estimate carbs, fat, protein, and how quickly the carbs will absorb."
+                        )
+                        Text(
+                            "The photo is sent to Anthropic's Claude API for analysis, which requires your own API key and an internet connection."
+                        )
+                        Text(
+                            "AI estimates can be wrong. Always review the suggested values before logging them or bolusing."
+                        ).bold()
+                    },
+                    headerText: String(localized: "AI Meal Photo Analysis")
+                )
+
+                if state.mealPhotoAnalysisEnabled {
+                    Section {
+                        HStack {
+                            Image(systemName: "key")
+                            SecureField("Anthropic API Key", text: $state.mealPhotoApiKey)
+                                .textContentType(.password)
+                                .autocorrectionDisabled(true)
+                                .textInputAutocapitalization(.never)
+                            if !state.mealPhotoApiKey.isEmpty {
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                            }
+                        }
+                    } footer: {
+                        Text(
+                            "Create an API key at console.anthropic.com. The key is stored securely in the iOS keychain and is only used to analyze your meal photos."
+                        )
+                    }
+                    .listRowBackground(Color.chart)
+                }
             }
             .listSectionSpacing(sectionSpacing)
             .sheet(isPresented: $shouldDisplayHint) {

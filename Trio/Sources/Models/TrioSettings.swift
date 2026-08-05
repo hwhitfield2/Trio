@@ -77,6 +77,9 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var timeInRangeType: TimeInRangeType = .timeInTightRange
     var requireAdjustmentsConfirmation: Bool = false
 
+    /// AI-based meal photo analysis on the bolus calculator screen
+    var mealPhotoAnalysisEnabled: Bool = false
+
     /// Selected Garmin watchface (Trio or SwissAlpine)
     var garminWatchface: GarminWatchface = .trio
     var garminDatafield: GarminDatafield = .none
@@ -361,6 +364,10 @@ extension TrioSettings: Decodable {
 
         if let requireAdjustmentsConfirmation = try? container.decode(Bool.self, forKey: .requireAdjustmentsConfirmation) {
             settings.requireAdjustmentsConfirmation = requireAdjustmentsConfirmation
+        }
+
+        if let mealPhotoAnalysisEnabled = try? container.decode(Bool.self, forKey: .mealPhotoAnalysisEnabled) {
+            settings.mealPhotoAnalysisEnabled = mealPhotoAnalysisEnabled
         }
 
         if let garminWatchface = try? container.decode(GarminWatchface.self, forKey: .garminWatchface) {

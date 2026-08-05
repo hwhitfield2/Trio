@@ -1,0 +1,56 @@
+import Foundation
+import UIKit
+
+extension Treatments.StateModel {
+    /// Runs the AI analysis for a captured meal photo.
+    func analyzeMealPhoto(
+        _ image: UIImage,
+        scaleReference: ScaleReferenceObject
+    ) async throws -> MealPhotoAnalysisResult {
+        debug(.bolusState, "Meal photo analysis started (reference: \(scaleReference.rawValue))")
+        let result = try await mealPhotoAnalysisManager.analyzeMealPhoto(image, scaleReference: scaleReference)
+        debug(
+            .bolusState,
+            "Meal photo analysis finished: \(result.mealName), carbs \(result.totalCarbsGrams) g, source \(result.mealSource.rawValue)"
+        )
+        return result
+    }
+
+    /// Applies an accepted analysis to the meal entry fields and recalculates the recommendation.
+    ///
+    /// Values are clamped to the configured per-entry limits; fat and protein are only
+    /// applied when fat/protein entries (FPU conversion) are enabled. Nothing is logged
+    /// until the user taps the regular treatment button.
+    @MainActor func applyMealPhotoAnalysis(_ result: MealPhotoAnalysisResult) {
+        carbs = min(max(result.totalCarbsGrams.rounded(), 0), maxCarbs)
+
+        if useFPUconversion {
+            fat = min(max(result.totalFatGrams.rounded(), 0), maxFat)
+            protein = min(max(result.totalProteinGrams.rounded(), 0), maxProtein)
+        }
+
+        // The note field is capped at 25 characters in the UI.
+        note = String(result.mealName.prefix(25))
+
+        // A slow-absorbing (high fat/protein) meal is the exact case the
+        // Reduced Bolus factor exists for - preselect it when available.
+        if result.slowAbsorptionMeal, fattyMeals {
+            useFattyMealCorrectionFactor = true
+            useSuperBolus = false
+        }
+
+        Task {
+            await updateForecasts()
+            insulinCalculated = await calculateInsulin()
+        }
+    }
+}
+
+private extension Decimal {
+    func rounded() -> Decimal {
+        var value = self
+        var result = Decimal()
+        NSDecimalRound(&result, &value, 0, .plain)
+        return result
+    }
+}

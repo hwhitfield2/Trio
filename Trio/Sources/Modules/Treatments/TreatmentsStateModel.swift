@@ -19,6 +19,7 @@ extension Treatments {
         @ObservationIgnored @Injected() var glucoseStorage: GlucoseStorage!
         @ObservationIgnored @Injected() var determinationStorage: DeterminationStorage!
         @ObservationIgnored @Injected() var bolusCalculationManager: BolusCalculationManager!
+        @ObservationIgnored @Injected() var mealPhotoAnalysisManager: MealPhotoAnalysisManager!
 
         var lowGlucose: Decimal = 70
         var highGlucose: Decimal = 180
@@ -81,6 +82,9 @@ extension Treatments {
         var sweetMealFactor: Decimal = 0
         var useSuperBolus: Bool = false
         var superBolusInsulin: Decimal = 0
+
+        var showMealPhotoSheet: Bool = false
+        var mealPhotoAnalysisEnabled: Bool = false
 
         var meal: [CarbsEntry]?
         var carbs: Decimal = 0
@@ -304,6 +308,7 @@ extension Treatments {
             maxFat = settings.settings.maxFat
             maxProtein = settings.settings.maxProtein
             useFPUconversion = settingsManager.settings.useFPUconversion
+            mealPhotoAnalysisEnabled = settingsManager.settings.mealPhotoAnalysisEnabled
             isSmoothingEnabled = settingsManager.settings.smoothGlucose
             glucoseColorScheme = settingsManager.settings.glucoseColorScheme
         }

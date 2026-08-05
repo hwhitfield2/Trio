@@ -314,6 +314,12 @@
 		65070A332BFDCB83006F213F /* TidepoolStartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65070A322BFDCB83006F213F /* TidepoolStartView.swift */; };
 		6632A0DC746872439A858B44 /* ISFEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79BDA519C9B890FD9A5DFCF3 /* ISFEditorDataFlow.swift */; };
 		69A31254F2451C20361D172F /* TreatmentsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223EC0494F55A91E3EA69EF4 /* TreatmentsStateModel.swift */; };
+		FB26D41AA6A513C3B53C37BE /* MealPhotoAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFAF2BC1652DE45CA66A981F /* MealPhotoAnalysis.swift */; };
+		2FD21835EB64033D1E3C0127 /* MealPhotoAnalysisManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */; };
+		8D0CDF28DD3756FD256D61CE /* TreatmentsStateModel+MealPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D204FD4664DD7DDCF72DA1 /* TreatmentsStateModel+MealPhoto.swift */; };
+		8E44E55651599902EC9ABC94 /* MealPhotoCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD3623233297369856004FE /* MealPhotoCaptureView.swift */; };
+		7566BB1F4E66A9C1B5A17A76 /* MealPhotoAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */; };
+		43FB1684AFB1922993CBB1FC /* MealPhotoResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */; };
 		69B9A368029F7EB39F525422 /* CarbRatioEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AA5E04A2761F6EEA6568E1 /* CarbRatioEditorStateModel.swift */; };
 		6B1A8D192B14D91600E76752 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B1A8D182B14D91600E76752 /* WidgetKit.framework */; };
 		6B1A8D1B2B14D91600E76752 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B1A8D1A2B14D91600E76752 /* SwiftUI.framework */; };
@@ -922,6 +928,12 @@
 		19F95FF929F1102A00314DDC /* StatRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatRootView.swift; sourceTree = "<group>"; };
 		1CAE81192B118804DCD23034 /* SnoozeProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnoozeProvider.swift; sourceTree = "<group>"; };
 		223EC0494F55A91E3EA69EF4 /* TreatmentsStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TreatmentsStateModel.swift; sourceTree = "<group>"; };
+		DFAF2BC1652DE45CA66A981F /* MealPhotoAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoAnalysis.swift"; sourceTree = "<group>"; };
+		BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoAnalysisManager.swift"; sourceTree = "<group>"; };
+		26D204FD4664DD7DDCF72DA1 /* TreatmentsStateModel+MealPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TreatmentsStateModel+MealPhoto.swift"; sourceTree = "<group>"; };
+		1AD3623233297369856004FE /* MealPhotoCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoCaptureView.swift"; sourceTree = "<group>"; };
+		0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoAnalysisView.swift"; sourceTree = "<group>"; };
+		B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoResultView.swift"; sourceTree = "<group>"; };
 		22963BD06A9C83959D4914E4 /* GlucoseNotificationSettingsRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlucoseNotificationSettingsRootView.swift; sourceTree = "<group>"; };
 		2AD22C985B79A2F0D2EA3D9D /* PumpConfigRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpConfigRootView.swift; sourceTree = "<group>"; };
 		2F2A13DF0EDEEEDC4106AA2A /* NightscoutConfigDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NightscoutConfigDataFlow.swift; sourceTree = "<group>"; };
@@ -2126,6 +2138,7 @@
 				F90692A8274B7A980037068D /* HealthKit */,
 				3BF85FE22E427312000D7351 /* IOB */,
 				6B1A8D2C2B156EC100E76752 /* LiveActivity */,
+				2866AB6DDAF61A853CA0813D /* MealPhotoAI */,
 				3811DE9425C9D88200A708ED /* Network */,
 				38B4F3C425E5016800E76A18 /* Notifications */,
 				BD47FD112D88AA630043966B /* OnboardingManager */,
@@ -2543,6 +2556,7 @@
 				DD9ECB692CA99F6C00AA7C45 /* CommandPayload.swift */,
 				DDD6D4D22CDE90720029439A /* EstimatedA1cDisplayUnit.swift */,
 				C2BA6B982F758E7600348E6A /* NotificationIdentifiers.swift */,
+				DFAF2BC1652DE45CA66A981F /* MealPhotoAnalysis.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -2978,6 +2992,7 @@
 				58237D9D2BCF0A6B00A47A79 /* PopupView.swift */,
 				BDB899872C564509006F3298 /* ForecastChart.swift */,
 				DD07CA5A2CE950B9002D45A9 /* MealPreset */,
+				CBF7129EA80DC9F25A7B630E /* MealPhoto */,
 			);
 			path = View;
 			sourceTree = "<group>";
@@ -3241,12 +3256,31 @@
 			path = SettingsExport;
 			sourceTree = "<group>";
 		};
+		2866AB6DDAF61A853CA0813D /* MealPhotoAI */ = {
+			isa = PBXGroup;
+			children = (
+				BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */,
+			);
+			path = MealPhotoAI;
+			sourceTree = "<group>";
+		};
+		CBF7129EA80DC9F25A7B630E /* MealPhoto */ = {
+			isa = PBXGroup;
+			children = (
+				1AD3623233297369856004FE /* MealPhotoCaptureView.swift */,
+				0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */,
+				B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */,
+			);
+			path = MealPhoto;
+			sourceTree = "<group>";
+		};
 		C2C98283C436DB934D7E7994 /* Treatments */ = {
 			isa = PBXGroup;
 			children = (
 				C8D1A7CA8C10C4403D4BBFA7 /* TreatmentsDataFlow.swift */,
 				C19984D62EFC0035A9E9644D /* TreatmentsProvider.swift */,
 				223EC0494F55A91E3EA69EF4 /* TreatmentsStateModel.swift */,
+				26D204FD4664DD7DDCF72DA1 /* TreatmentsStateModel+MealPhoto.swift */,
 				B9488883C59C31550E0B4CEC /* View */,
 			);
 			path = Treatments;
@@ -4804,6 +4838,12 @@
 				DD9ECB682CA99F4500AA7C45 /* TrioRemoteControl.swift in Sources */,
 				38569353270B5E350002C50D /* CGMRootView.swift in Sources */,
 				69A31254F2451C20361D172F /* TreatmentsStateModel.swift in Sources */,
+				FB26D41AA6A513C3B53C37BE /* MealPhotoAnalysis.swift in Sources */,
+				2FD21835EB64033D1E3C0127 /* MealPhotoAnalysisManager.swift in Sources */,
+				8D0CDF28DD3756FD256D61CE /* TreatmentsStateModel+MealPhoto.swift in Sources */,
+				8E44E55651599902EC9ABC94 /* MealPhotoCaptureView.swift in Sources */,
+				7566BB1F4E66A9C1B5A17A76 /* MealPhotoAnalysisView.swift in Sources */,
+				43FB1684AFB1922993CBB1FC /* MealPhotoResultView.swift in Sources */,
 				DDF6905C2DA0AFC5008BF16C /* WelcomeStepView.swift in Sources */,
 				1967DFC029D053AC00759F30 /* IconSelection.swift in Sources */,
 				19D4E4EB29FC6A9F00351451 /* Charts.swift in Sources */,
