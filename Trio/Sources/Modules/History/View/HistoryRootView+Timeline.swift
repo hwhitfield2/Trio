@@ -488,7 +488,7 @@ extension History.RootView {
                 Text(String(localized: "Manual"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else if state.settingsManager.settings.smoothGlucose,
+            } else if state.settingsManager?.settings.smoothGlucose == true,
                       let smoothedGlucose = glucose.smoothedGlucose, smoothedGlucose != 0
             {
                 let smoothedGlucoseForDisplay = state.units == .mgdL ? smoothedGlucose
@@ -577,8 +577,8 @@ extension History.RootView {
                     state.showCarbEntryEditor = true
                 }
             )
-            .tint(!state.settingsManager.settings.useFPUconversion && meal.isFPU ? Color(.systemGray4) : Color.blue)
-            .disabled(!state.settingsManager.settings.useFPUconversion && meal.isFPU)
+            .tint(!(state.settingsManager?.settings.useFPUconversion ?? false) && meal.isFPU ? Color(.systemGray4) : Color.blue)
+            .disabled(!(state.settingsManager?.settings.useFPUconversion ?? false) && meal.isFPU)
         }
         .swipeActions {
             Button(
@@ -597,8 +597,8 @@ extension History.RootView {
                     state.showCarbEntryEditor = true
                 }
             )
-            .tint(!state.settingsManager.settings.useFPUconversion && meal.isFPU ? Color(.systemGray4) : Color.blue)
-            .disabled(!state.settingsManager.settings.useFPUconversion && meal.isFPU)
+            .tint(!(state.settingsManager?.settings.useFPUconversion ?? false) && meal.isFPU ? Color(.systemGray4) : Color.blue)
+            .disabled(!(state.settingsManager?.settings.useFPUconversion ?? false) && meal.isFPU)
         }
     }
 
