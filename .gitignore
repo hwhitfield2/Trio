@@ -79,4 +79,5 @@ fastlane/screenshots
 fastlane/test_output
 fastlane/FastlaneRunner
 
-ConfigOverride.xcconfig__pycache__/
+ConfigOverride.xcconfig
+__pycache__/

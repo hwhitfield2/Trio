@@ -58,6 +58,7 @@
 		1D845DF2E3324130E1D95E67 /* HistoryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60744C3E9BB3652895C908CC /* HistoryProvider.swift */; };
 		23888883D4EA091C88480FF2 /* TreatmentsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19984D62EFC0035A9E9644D /* TreatmentsProvider.swift */; };
 		29BE4E7DA24C46F76F9CFF31 /* HomeStatusTilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 860CF0712CE47FC3A401C914 /* HomeStatusTilesView.swift */; };
+		2FD21835EB64033D1E3C0127 /* MealPhotoAnalysisManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */; };
 		3171D2818C7C72CD1584BB5E /* GlucoseNotificationSettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC2C6489D29ECCCAD78E0721 /* GlucoseNotificationSettingsStateModel.swift */; };
 		320D030F724170A637F06D50 /* BuildFile in Sources */ = {isa = PBXBuildFile; };
 		3811DE0B25C9D32F00A708ED /* BaseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE0725C9D32E00A708ED /* BaseView.swift */; };
@@ -96,18 +97,6 @@
 		3811DEEB25CA063400A708ED /* PersistedProperty.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DEE725CA063400A708ED /* PersistedProperty.swift */; };
 		3811DF0225CA9FEA00A708ED /* Credentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0125CA9FEA00A708ED /* Credentials.swift */; };
 		3811DF1025CAAAE200A708ED /* APSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0F25CAAAE200A708ED /* APSManager.swift */; };
-		FAB1E5000000000000000012 /* SafetyEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000002 /* SafetyEnvelope.swift */; };
-		FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000003 /* DecisionAudit.swift */; };
-		FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000004 /* DosingAlgorithm.swift */; };
-		FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000005 /* MLDataExporter.swift */; };
-		FAB1E5000000000000000017 /* CGMSilenceWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */; };
-		FAB1E5000000000000000053 /* DeliveryCapSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */; };
-		FAB1E5000000000000000054 /* DeliveryCapEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */; };
-		FAB1E5000000000000000055 /* DeliveryCapEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */; };
-		FAB1E5000000000000000056 /* DeliveryCapEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */; };
-		FAB1E5000000000000000057 /* DeliveryCapsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000047 /* DeliveryCapsTests.swift */; };
-		FAB1E5000000000000000058 /* AuditRecordViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000048 /* AuditRecordViews.swift */; };
-		FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */; };
 		38192E04261B82FA0094D973 /* ReachabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E03261B82FA0094D973 /* ReachabilityManager.swift */; };
 		38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */; };
 		38192E0D261BAF980094D973 /* ConvenienceExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E0C261BAF980094D973 /* ConvenienceExtensions.swift */; };
@@ -272,6 +261,7 @@
 		3E54EF2D2E476DA40006F54D /* MedtrumKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3E54EF2B2E476DA40006F54D /* MedtrumKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		3E62C7822F54CC1B00433237 /* BolusDisplayThreshold.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E62C7812F54CC1600433237 /* BolusDisplayThreshold.swift */; };
 		41740E936552456AAC0EDAC3 /* SettingsSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3919BBB515547118D684CA2 /* SettingsSearchTests.swift */; };
+		43FB1684AFB1922993CBB1FC /* MealPhotoResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */; };
 		45252C95D220E796FDB3B022 /* ConfigEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F8A87AA037BD079BA3528BA /* ConfigEditorDataFlow.swift */; };
 		45717281F743594AA9D87191 /* ConfigEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 920DDB21E5D0EB813197500D /* ConfigEditorRootView.swift */; };
 		49090A8D2E9FE8D200D0F5DB /* GarminWatchSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49090A8C2E9FE8D200D0F5DB /* GarminWatchSettings.swift */; };
@@ -328,28 +318,6 @@
 		6597A118249A6D9D43C3ED87 /* HomeQuickActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B577AC963BE2C1AC81829BEE /* HomeQuickActionsView.swift */; };
 		6632A0DC746872439A858B44 /* ISFEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79BDA519C9B890FD9A5DFCF3 /* ISFEditorDataFlow.swift */; };
 		69A31254F2451C20361D172F /* TreatmentsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223EC0494F55A91E3EA69EF4 /* TreatmentsStateModel.swift */; };
-		FB26D41AA6A513C3B53C37BE /* MealPhotoAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFAF2BC1652DE45CA66A981F /* MealPhotoAnalysis.swift */; };
-		2FD21835EB64033D1E3C0127 /* MealPhotoAnalysisManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */; };
-		8D0CDF28DD3756FD256D61CE /* TreatmentsStateModel+MealPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D204FD4664DD7DDCF72DA1 /* TreatmentsStateModel+MealPhoto.swift */; };
-		8E44E55651599902EC9ABC94 /* MealPhotoCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD3623233297369856004FE /* MealPhotoCaptureView.swift */; };
-		7566BB1F4E66A9C1B5A17A76 /* MealPhotoAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */; };
-		43FB1684AFB1922993CBB1FC /* MealPhotoResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */; };
-		AEC49BE7B933E7171AFFF218 /* CaregiverMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */; };
-		DA1B9A5FB663DDB1B8E3DCE9 /* CaregiverMessagingSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */; };
-		FE3C26AB30FDB5E166C4CBB7 /* CaregiverMessagingSettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */; };
-		EF5058CA95D89021A9BECB32 /* CaregiverMessagingSettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */; };
-		FD4BBD33D54FB26184731B55 /* CaregiverMessagingSettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */; };
-		E24CA2E781678C74A2552B26 /* MessageComposeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */; };
-		EB5DCD4A59CED904FAC81529 /* CaregiverQuickMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */; };
-		EAD9A79C03D063035BFB8081 /* CaregiverMessageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */; };
-		B3A991EE84DF9BD0905EBEDA /* CaregiverMessagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */; };
-		DC836AB695F3D419B82966C4 /* TwilioAlertPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */; };
-		FDBF789C701D97FC51FD680B /* TwilioMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */; };
-		C045E227077C7A7FA5040C55 /* TwilioConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */; };
-		CF4F73992729D5E7EE4C25EC /* TwilioConfigProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */; };
-		DE6F3785F6B91B0C74644B72 /* TwilioConfigStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */; };
-		C4122BF6420D6E157CB6D673 /* TwilioConfigRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */; };
-		BBE9CD41EFF3DFF711182D23 /* TwilioMessagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */; };
 		69B9A368029F7EB39F525422 /* CarbRatioEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AA5E04A2761F6EEA6568E1 /* CarbRatioEditorStateModel.swift */; };
 		6B1A8D192B14D91600E76752 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B1A8D182B14D91600E76752 /* WidgetKit.framework */; };
 		6B1A8D1B2B14D91600E76752 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B1A8D1A2B14D91600E76752 /* SwiftUI.framework */; };
@@ -367,6 +335,7 @@
 		715120D22D3C2BB4005D9FB6 /* GlucoseNotificationsOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715120D12D3C2B84005D9FB6 /* GlucoseNotificationsOption.swift */; };
 		71D44AAB2CA5F5EA0036EE9E /* AlertPermissionsChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71D44AAA2CA5F5EA0036EE9E /* AlertPermissionsChecker.swift */; };
 		72F1BD388F42FCA6C52E4500 /* ConfigEditorProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44080E4709E3AE4B73054563 /* ConfigEditorProvider.swift */; };
+		7566BB1F4E66A9C1B5A17A76 /* MealPhotoAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */; };
 		7BCFACB97C821041BA43A114 /* ManualTempBasalRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C377490C77661D75E8C50649 /* ManualTempBasalRootView.swift */; };
 		7F7B756BE8543965D9FDF1A2 /* HistoryDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A401509D21F7F35D4E109EDA /* HistoryDataFlow.swift */; };
 		8194B80890CDD6A3C13B0FEE /* SnoozeStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26904AACA8D9C15D229D675 /* SnoozeStateModel.swift */; };
@@ -376,20 +345,26 @@
 		8A91342A2D63D9A1007F8874 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 8A9134292D63D9A1007F8874 /* Localizable.xcstrings */; };
 		8A91342C2D63D9A2007F8874 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 8A91342B2D63D9A2007F8874 /* InfoPlist.xcstrings */; };
 		8B759CFCF47B392BB365C251 /* BasalProfileEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F94DD2853CF42BA4E30616 /* BasalProfileEditorDataFlow.swift */; };
+		8D0CDF28DD3756FD256D61CE /* TreatmentsStateModel+MealPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D204FD4664DD7DDCF72DA1 /* TreatmentsStateModel+MealPhoto.swift */; };
+		8E44E55651599902EC9ABC94 /* MealPhotoCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD3623233297369856004FE /* MealPhotoCaptureView.swift */; };
 		9702FF92A09C53942F20D7EA /* TargetsEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DD795BA46B193644D48138C /* TargetsEditorRootView.swift */; };
 		9825E5E923F0B8FA80C8C7C7 /* NightscoutConfigStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A48AE3AC813A49A517846A /* NightscoutConfigStateModel.swift */; };
 		98641AF4F92123DA668AB931 /* CarbRatioEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BDC6993C1087310EDFC428 /* CarbRatioEditorRootView.swift */; };
 		A33352ED40476125EBAC6EE0 /* CarbRatioEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E22146D3DF4853786C78132 /* CarbRatioEditorDataFlow.swift */; };
+		A664B9E921BE53F94969C1EF /* HomeEntryDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42DD8EBD7DECD0B4F21F9CC1 /* HomeEntryDrawerView.swift */; };
 		AC19EF2C94084B5BA0175D1D /* SettingsSearchHighlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B83503461B4F8D97B30115 /* SettingsSearchHighlight.swift */; };
 		AD3D2CD42CD01B9EB8F26522 /* PumpConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF65DA88F972B56090AD6AC3 /* PumpConfigDataFlow.swift */; };
+		AEC49BE7B933E7171AFFF218 /* CaregiverMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */; };
 		B015AFE32E500000000D7351 /* BolusSafetyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFE12E500000000D7351 /* BolusSafetyValidator.swift */; };
 		B015AFE52E500000000D7351 /* BolusSafetyValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFE42E500000000D7351 /* BolusSafetyValidatorTests.swift */; };
+		B3A991EE84DF9BD0905EBEDA /* CaregiverMessagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */; };
 		B6E925132EB3932A0076D719 /* OmnipodKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B6E925122EB3932A0076D719 /* OmnipodKit.framework */; };
 		B6E925142EB3932A0076D719 /* OmnipodKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B6E925122EB3932A0076D719 /* OmnipodKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B7C465E9472624D8A2BE2A6A /* BuildFile in Sources */ = {isa = PBXBuildFile; };
 		B958F1B72BA0711600484851 /* MKRingProgressView in Frameworks */ = {isa = PBXBuildFile; productRef = B958F1B62BA0711600484851 /* MKRingProgressView */; };
 		BA00D96F7B2FF169A06FB530 /* CGMSettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C018D1680307A31C9ED7120 /* CGMSettingsStateModel.swift */; };
 		BB5227A51D9D4377A1A70BA6 /* TempTargetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8F3B0E159844FD8746DFC0 /* TempTargetData.swift */; };
+		BBE9CD41EFF3DFF711182D23 /* TwilioMessagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */; };
 		BD04ECCE2D29952A008C5FEB /* BolusProgressOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD04ECCD2D299522008C5FEB /* BolusProgressOverlay.swift */; };
 		BD0B2EF32C5998E600B3298F /* MealPresetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0B2EF22C5998E600B3298F /* MealPresetView.swift */; };
 		BD10516D2DA986E1007C6D89 /* PulsingLogoAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD10516C2DA986DC007C6D89 /* PulsingLogoAnimation.swift */; };
@@ -509,6 +484,7 @@
 		BDFF7A892D25F97D0016C40C /* TrioWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDFF7A852D25F97D0016C40C /* TrioWatchApp.swift */; };
 		BDFF7A8B2D25F97D0016C40C /* Unit Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDFF7A8A2D25F97D0016C40C /* Unit Tests.swift */; };
 		BF1667ADE69E4B5B111CECAE /* ManualTempBasalProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 680C4420C9A345D46D90D06C /* ManualTempBasalProvider.swift */; };
+		C045E227077C7A7FA5040C55 /* TwilioConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */; };
 		C21FE1E72DA59C6B007D550B /* GlucoseDailyDistributionChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21FE1E62DA59C6B007D550B /* GlucoseDailyDistributionChart.swift */; };
 		C263D59F2E4267F400CBF08C /* NightscoutUploadGlucoseStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C263D59E2E4267F400CBF08C /* NightscoutUploadGlucoseStepView.swift */; };
 		C28DD7262DBA9A9E00EC02DD /* GlucosePercentileDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28DD7252DBA9A9E00EC02DD /* GlucosePercentileDetailView.swift */; };
@@ -523,6 +499,7 @@
 		C2BA6B972F758E7500348E6A /* WatchNotificationHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2BA6B962F758E7500348E6A /* WatchNotificationHandler.swift */; };
 		C2BA6B992F758E7600348E6A /* NotificationIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2BA6B982F758E7600348E6A /* NotificationIdentifiers.swift */; };
 		C2BA6B9A2F7593C300348E6A /* NotificationIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2BA6B982F758E7600348E6A /* NotificationIdentifiers.swift */; };
+		C4122BF6420D6E157CB6D673 /* TwilioConfigRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */; };
 		C967DACD3B1E638F8B43BE06 /* ManualTempBasalStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFCFE0781F9074C2917890E8 /* ManualTempBasalStateModel.swift */; };
 		CA02000000000000000010C2 /* DeliveryLimitsSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */; };
 		CA370FC152BC98B3D1832968 /* BasalProfileEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF8BCB0C37DEB5EC377B9612 /* BasalProfileEditorRootView.swift */; };
@@ -579,10 +556,13 @@
 		CEE9A65C2BBB41C800EB5194 /* CalibrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEE9A65B2BBB41C800EB5194 /* CalibrationService.swift */; };
 		CEE9A65E2BBC9F6500EB5194 /* CalibrationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEE9A65D2BBC9F6500EB5194 /* CalibrationsTests.swift */; };
 		CEF1ED6B2D58FB5800FAF41E /* CGMOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF1ED6A2D58FB4600FAF41E /* CGMOptions.swift */; };
+		CF4F73992729D5E7EE4C25EC /* TwilioConfigProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */; };
 		D6D02515BBFBE64FEBE89856 /* HistoryRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 881E04BA5E0A003DE8E0A9C6 /* HistoryRootView.swift */; };
 		D6DEC113821A7F1056C4AA1E /* NightscoutConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F2A13DF0EDEEEDC4106AA2A /* NightscoutConfigDataFlow.swift */; };
+		DA1B9A5FB663DDB1B8E3DCE9 /* CaregiverMessagingSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */; };
 		DABB8C4B56F5928155A54DCB /* HomeAdjustmentsDockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 379FF177B5B90C8CACBD7F5A /* HomeAdjustmentsDockView.swift */; };
 		DBA5254DBB2586C98F61220C /* ISFEditorProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F9F137F126D9F8DEB799F26 /* ISFEditorProvider.swift */; };
+		DC836AB695F3D419B82966C4 /* TwilioAlertPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */; };
 		DD09D47B2C5986D1003FEA5D /* CalendarEventSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD09D47A2C5986D1003FEA5D /* CalendarEventSettingsDataFlow.swift */; };
 		DD09D47D2C5986DA003FEA5D /* CalendarEventSettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD09D47C2C5986DA003FEA5D /* CalendarEventSettingsProvider.swift */; };
 		DD09D47F2C5986E5003FEA5D /* CalendarEventSettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD09D47E2C5986E5003FEA5D /* CalendarEventSettingsStateModel.swift */; };
@@ -763,9 +743,6 @@
 		DDF691032DA2CA1E008BF16C /* AppDiagnosticsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691022DA2CA14008BF16C /* AppDiagnosticsProvider.swift */; };
 		DDF691052DA2CA23008BF16C /* AppDiagnosticsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691042DA2CA20008BF16C /* AppDiagnosticsStateModel.swift */; };
 		DDF691072DA2CA2D008BF16C /* AppDiagnosticsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691062DA2CA28008BF16C /* AppDiagnosticsRootView.swift */; };
-		FAB1E5000000000000000033 /* MLEngineDataDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */; };
-		FAB1E5000000000000000034 /* MLEngineDataStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */; };
-		FAB1E5000000000000000035 /* MLEngineDataRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000025 /* MLEngineDataRootView.swift */; };
 		DDF691372DA30332008BF16C /* StartupGuideStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691362DA30332008BF16C /* StartupGuideStepView.swift */; };
 		DDF847DD2C5C28720049BB3B /* LiveActivitySettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847DC2C5C28720049BB3B /* LiveActivitySettingsDataFlow.swift */; };
 		DDF847DF2C5C28780049BB3B /* LiveActivitySettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847DE2C5C28780049BB3B /* LiveActivitySettingsProvider.swift */; };
@@ -779,6 +756,7 @@
 		DDFF204A2DB29EF500AB8A96 /* WatchLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDFF20492DB29EF500AB8A96 /* WatchLogger.swift */; };
 		DDFF204E2DB2C00B00AB8A96 /* WatchStateSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDFF204D2DB2C00B00AB8A96 /* WatchStateSnapshot.swift */; };
 		DDFF20502DB2C11900AB8A96 /* WatchStateSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDFF204F2DB2C11900AB8A96 /* WatchStateSnapshot.swift */; };
+		DE6F3785F6B91B0C74644B72 /* TwilioConfigStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */; };
 		E00EEC0327368630002FF094 /* ServiceAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00EEBFD27368630002FF094 /* ServiceAssembly.swift */; };
 		E00EEC0427368630002FF094 /* SecurityAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00EEBFE27368630002FF094 /* SecurityAssembly.swift */; };
 		E00EEC0527368630002FF094 /* StorageAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00EEBFF27368630002FF094 /* StorageAssembly.swift */; };
@@ -790,6 +768,7 @@
 		E0CC2C5C275B9F0F00A7BC71 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E0CC2C5B275B9DAE00A7BC71 /* HealthKit.framework */; };
 		E0D4F80527513ECF00BDF1FE /* HealthKitSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0D4F80427513ECF00BDF1FE /* HealthKitSample.swift */; };
 		E13B7DAB2A435F57066AF02E /* TargetsEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F58DDD71F0E795464FA3F0 /* TargetsEditorStateModel.swift */; };
+		E24CA2E781678C74A2552B26 /* MessageComposeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */; };
 		E39E418C56A5A46B61D960EE /* ConfigEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D5B4F8B4194BB7E260EF251 /* ConfigEditorStateModel.swift */; };
 		E3A08AAE59538BC8A8ABE477 /* GlucoseNotificationSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3260468377DA9DB4DEE9AF6D /* GlucoseNotificationSettingsDataFlow.swift */; };
 		E592A3702CEEC01E009A472C /* ContactTrickEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = E592A36F2CEEC01E009A472C /* ContactTrickEntry.swift */; };
@@ -798,6 +777,9 @@
 		E592A3792CEEC038009A472C /* ContactImageRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E592A3712CEEC038009A472C /* ContactImageRootView.swift */; };
 		E592A37A2CEEC038009A472C /* ContactImageProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E592A3742CEEC038009A472C /* ContactImageProvider.swift */; };
 		E974172296125A5AE99E634C /* PumpConfigRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD22C985B79A2F0D2EA3D9D /* PumpConfigRootView.swift */; };
+		EAD9A79C03D063035BFB8081 /* CaregiverMessageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */; };
+		EB5DCD4A59CED904FAC81529 /* CaregiverQuickMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */; };
+		EF5058CA95D89021A9BECB32 /* CaregiverMessagingSettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */; };
 		F5CA3DB1F9DC8B05792BBFAA /* CGMSettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B5C0607505A38F256BF99A /* CGMSettingsDataFlow.swift */; };
 		F5F7E6C1B7F098F59EB67EC5 /* TargetsEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA49538D56989D8DA6FCF538 /* TargetsEditorDataFlow.swift */; };
 		F816825E28DB441200054060 /* HeartBeatManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F816825D28DB441200054060 /* HeartBeatManager.swift */; };
@@ -808,6 +790,25 @@
 		F90692D3274B9A130037068D /* AppleHealthKitRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90692D2274B9A130037068D /* AppleHealthKitRootView.swift */; };
 		F90692D6274B9A450037068D /* HealthKitStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90692D5274B9A450037068D /* HealthKitStateModel.swift */; };
 		FA630397F76B582C8D8681A7 /* BasalProfileEditorProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42369F66CF91F30624C0B3A6 /* BasalProfileEditorProvider.swift */; };
+		FAB1E5000000000000000012 /* SafetyEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000002 /* SafetyEnvelope.swift */; };
+		FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000003 /* DecisionAudit.swift */; };
+		FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000004 /* DosingAlgorithm.swift */; };
+		FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000005 /* MLDataExporter.swift */; };
+		FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */; };
+		FAB1E5000000000000000017 /* CGMSilenceWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */; };
+		FAB1E5000000000000000033 /* MLEngineDataDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */; };
+		FAB1E5000000000000000034 /* MLEngineDataStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */; };
+		FAB1E5000000000000000035 /* MLEngineDataRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000025 /* MLEngineDataRootView.swift */; };
+		FAB1E5000000000000000053 /* DeliveryCapSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */; };
+		FAB1E5000000000000000054 /* DeliveryCapEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */; };
+		FAB1E5000000000000000055 /* DeliveryCapEditorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */; };
+		FAB1E5000000000000000056 /* DeliveryCapEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */; };
+		FAB1E5000000000000000057 /* DeliveryCapsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000047 /* DeliveryCapsTests.swift */; };
+		FAB1E5000000000000000058 /* AuditRecordViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000048 /* AuditRecordViews.swift */; };
+		FB26D41AA6A513C3B53C37BE /* MealPhotoAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFAF2BC1652DE45CA66A981F /* MealPhotoAnalysis.swift */; };
+		FD4BBD33D54FB26184731B55 /* CaregiverMessagingSettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */; };
+		FDBF789C701D97FC51FD680B /* TwilioMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */; };
+		FE3C26AB30FDB5E166C4CBB7 /* CaregiverMessagingSettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */; };
 		FE41E4D629463EE20047FD55 /* NightscoutPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE41E4D529463EE20047FD55 /* NightscoutPreferences.swift */; };
 		FE66D16B291F74F8005D6F77 /* Bundle+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE66D16A291F74F8005D6F77 /* Bundle+Extensions.swift */; };
 		FEFFA7A22929FE49007B8193 /* UIDevice+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFFA7A12929FE49007B8193 /* UIDevice+Extensions.swift */; };
@@ -922,6 +923,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPhotoAnalysisView.swift; sourceTree = "<group>"; };
 		110AEDE02C5193D100615CC9 /* BolusIntent.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BolusIntent.swift; sourceTree = "<group>"; };
 		110AEDE12C5193D100615CC9 /* BolusIntentRequest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BolusIntentRequest.swift; sourceTree = "<group>"; };
 		110AEDE52C51A0AE00615CC9 /* ShortcutsConfigView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShortcutsConfigView.swift; sourceTree = "<group>"; };
@@ -964,31 +966,11 @@
 		19F95FF429F10FCF00314DDC /* StatProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatProvider.swift; sourceTree = "<group>"; };
 		19F95FF629F10FEE00314DDC /* StatStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatStateModel.swift; sourceTree = "<group>"; };
 		19F95FF929F1102A00314DDC /* StatRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatRootView.swift; sourceTree = "<group>"; };
+		1AD3623233297369856004FE /* MealPhotoCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPhotoCaptureView.swift; sourceTree = "<group>"; };
 		1CAE81192B118804DCD23034 /* SnoozeProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnoozeProvider.swift; sourceTree = "<group>"; };
 		223EC0494F55A91E3EA69EF4 /* TreatmentsStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TreatmentsStateModel.swift; sourceTree = "<group>"; };
-		DFAF2BC1652DE45CA66A981F /* MealPhotoAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoAnalysis.swift"; sourceTree = "<group>"; };
-		BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoAnalysisManager.swift"; sourceTree = "<group>"; };
-		26D204FD4664DD7DDCF72DA1 /* TreatmentsStateModel+MealPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TreatmentsStateModel+MealPhoto.swift"; sourceTree = "<group>"; };
-		1AD3623233297369856004FE /* MealPhotoCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoCaptureView.swift"; sourceTree = "<group>"; };
-		0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoAnalysisView.swift"; sourceTree = "<group>"; };
-		B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MealPhotoResultView.swift"; sourceTree = "<group>"; };
-		C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingManager.swift; sourceTree = "<group>"; };
-		EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsDataFlow.swift; sourceTree = "<group>"; };
-		E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsProvider.swift; sourceTree = "<group>"; };
-		A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsStateModel.swift; sourceTree = "<group>"; };
-		B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsRootView.swift; sourceTree = "<group>"; };
-		F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageComposeView.swift; sourceTree = "<group>"; };
-		E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverQuickMessageView.swift; sourceTree = "<group>"; };
-		C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessageIntent.swift; sourceTree = "<group>"; };
-		EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingTests.swift; sourceTree = "<group>"; };
-		BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioAlertPolicy.swift; sourceTree = "<group>"; };
-		EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioMessagingManager.swift; sourceTree = "<group>"; };
-		B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigDataFlow.swift; sourceTree = "<group>"; };
-		BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigProvider.swift; sourceTree = "<group>"; };
-		C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigStateModel.swift; sourceTree = "<group>"; };
-		DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigRootView.swift; sourceTree = "<group>"; };
-		D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioMessagingTests.swift; sourceTree = "<group>"; };
 		22963BD06A9C83959D4914E4 /* GlucoseNotificationSettingsRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlucoseNotificationSettingsRootView.swift; sourceTree = "<group>"; };
+		26D204FD4664DD7DDCF72DA1 /* TreatmentsStateModel+MealPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TreatmentsStateModel+MealPhoto.swift"; sourceTree = "<group>"; };
 		2AD22C985B79A2F0D2EA3D9D /* PumpConfigRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpConfigRootView.swift; sourceTree = "<group>"; };
 		2F2A13DF0EDEEEDC4106AA2A /* NightscoutConfigDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NightscoutConfigDataFlow.swift; sourceTree = "<group>"; };
 		3260468377DA9DB4DEE9AF6D /* GlucoseNotificationSettingsDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlucoseNotificationSettingsDataFlow.swift; sourceTree = "<group>"; };
@@ -1031,18 +1013,6 @@
 		3811DEE725CA063400A708ED /* PersistedProperty.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PersistedProperty.swift; sourceTree = "<group>"; };
 		3811DF0125CA9FEA00A708ED /* Credentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Credentials.swift; sourceTree = "<group>"; };
 		3811DF0F25CAAAE200A708ED /* APSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APSManager.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000002 /* SafetyEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelope.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000003 /* DecisionAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionAudit.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000004 /* DosingAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DosingAlgorithm.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000005 /* MLDataExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLDataExporter.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMSilenceWatchdog.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapSchedule.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorDataFlow.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorStateModel.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorRootView.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000047 /* DeliveryCapsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapsTests.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000048 /* AuditRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditRecordViews.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelopeTests.swift; sourceTree = "<group>"; };
 		3818AA45274C229000843DB3 /* LibreTransmitter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LibreTransmitter; path = Dependencies/LibreTransmitter; sourceTree = "<group>"; };
 		3818AA49274C267000843DB3 /* CGMBLEKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = CGMBLEKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		3818AA4C274C26A300843DB3 /* LoopKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = LoopKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1202,6 +1172,7 @@
 		3F60E97100041040446F44E7 /* PumpConfigStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpConfigStateModel.swift; sourceTree = "<group>"; };
 		3F8A87AA037BD079BA3528BA /* ConfigEditorDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConfigEditorDataFlow.swift; sourceTree = "<group>"; };
 		42369F66CF91F30624C0B3A6 /* BasalProfileEditorProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BasalProfileEditorProvider.swift; sourceTree = "<group>"; };
+		42DD8EBD7DECD0B4F21F9CC1 /* HomeEntryDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeEntryDrawerView.swift; sourceTree = "<group>"; };
 		44080E4709E3AE4B73054563 /* ConfigEditorProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConfigEditorProvider.swift; sourceTree = "<group>"; };
 		48B83503461B4F8D97B30115 /* SettingsSearchHighlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSearchHighlight.swift; sourceTree = "<group>"; };
 		49090A8C2E9FE8D200D0F5DB /* GarminWatchSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarminWatchSettings.swift; sourceTree = "<group>"; };
@@ -1286,18 +1257,23 @@
 		9C8D5F457B5AFF763F8CF3DF /* CarbRatioEditorProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarbRatioEditorProvider.swift; sourceTree = "<group>"; };
 		9F9F137F126D9F8DEB799F26 /* ISFEditorProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ISFEditorProvider.swift; sourceTree = "<group>"; };
 		A0A48AE3AC813A49A517846A /* NightscoutConfigStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NightscoutConfigStateModel.swift; sourceTree = "<group>"; };
+		A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsStateModel.swift; sourceTree = "<group>"; };
 		A401509D21F7F35D4E109EDA /* HistoryDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryDataFlow.swift; sourceTree = "<group>"; };
 		A8630D58BDAD6D9C650B9B39 /* PumpConfigProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpConfigProvider.swift; sourceTree = "<group>"; };
 		AAFF91130F2FCCC7EBBA11AD /* BasalProfileEditorStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BasalProfileEditorStateModel.swift; sourceTree = "<group>"; };
 		AF65DA88F972B56090AD6AC3 /* PumpConfigDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PumpConfigDataFlow.swift; sourceTree = "<group>"; };
 		B015AFE12E500000000D7351 /* BolusSafetyValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BolusSafetyValidator.swift; sourceTree = "<group>"; };
 		B015AFE42E500000000D7351 /* BolusSafetyValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BolusSafetyValidatorTests.swift; sourceTree = "<group>"; };
+		B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsRootView.swift; sourceTree = "<group>"; };
+		B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigDataFlow.swift; sourceTree = "<group>"; };
 		B3919BBB515547118D684CA2 /* SettingsSearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsSearchTests.swift; sourceTree = "<group>"; };
 		B577AC963BE2C1AC81829BEE /* HomeQuickActionsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeQuickActionsView.swift; sourceTree = "<group>"; };
+		B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPhotoResultView.swift; sourceTree = "<group>"; };
 		B5822B15939E719628E9FF7C /* SnoozeRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnoozeRootView.swift; sourceTree = "<group>"; };
 		B6E925122EB3932A0076D719 /* OmnipodKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = OmnipodKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		B9B5C0607505A38F256BF99A /* CGMSettingsDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CGMSettingsDataFlow.swift; sourceTree = "<group>"; };
 		BA49538D56989D8DA6FCF538 /* TargetsEditorDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TargetsEditorDataFlow.swift; sourceTree = "<group>"; };
+		BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigProvider.swift; sourceTree = "<group>"; };
 		BD04ECCD2D299522008C5FEB /* BolusProgressOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BolusProgressOverlay.swift; sourceTree = "<group>"; };
 		BD0B2EF22C5998E600B3298F /* MealPresetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPresetView.swift; sourceTree = "<group>"; };
 		BD10516C2DA986DC007C6D89 /* PulsingLogoAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulsingLogoAnimation.swift; sourceTree = "<group>"; };
@@ -1331,6 +1307,7 @@
 		BD249D9E2D42FD0200412DEB /* StackedChartSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StackedChartSetup.swift; sourceTree = "<group>"; };
 		BD249DA02D42FD1000412DEB /* TDDSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TDDSetup.swift; sourceTree = "<group>"; };
 		BD249DA62D42FE3800412DEB /* Calendar+GlucoseStatsChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Calendar+GlucoseStatsChart.swift"; sourceTree = "<group>"; };
+		BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPhotoAnalysisManager.swift; sourceTree = "<group>"; };
 		BD2FF19F2AE29D43005D1C5D /* ToggleStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToggleStyles.swift; sourceTree = "<group>"; };
 		BD3CC0712B0B89D50013189E /* MainChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainChartView.swift; sourceTree = "<group>"; };
 		BD4064D02C4ED26900582F43 /* CoreDataObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataObserver.swift; sourceTree = "<group>"; };
@@ -1415,6 +1392,7 @@
 		BDFF7A902D25F97D0016C40C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BDFF7A912D25F97D0016C40C /* TrioWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrioWatchApp.swift; sourceTree = "<group>"; };
 		BDFF7A922D25F97D0016C40C /* TrioWatchAppExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrioWatchAppExtension.swift; sourceTree = "<group>"; };
+		BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioAlertPolicy.swift; sourceTree = "<group>"; };
 		BF8BCB0C37DEB5EC377B9612 /* BasalProfileEditorRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BasalProfileEditorRootView.swift; sourceTree = "<group>"; };
 		C19984D62EFC0035A9E9644D /* TreatmentsProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TreatmentsProvider.swift; sourceTree = "<group>"; };
 		C21FE1E62DA59C6B007D550B /* GlucoseDailyDistributionChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseDailyDistributionChart.swift; sourceTree = "<group>"; };
@@ -1431,7 +1409,10 @@
 		C2BA6B962F758E7500348E6A /* WatchNotificationHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNotificationHandler.swift; sourceTree = "<group>"; };
 		C2BA6B982F758E7600348E6A /* NotificationIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationIdentifiers.swift; sourceTree = "<group>"; };
 		C377490C77661D75E8C50649 /* ManualTempBasalRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ManualTempBasalRootView.swift; sourceTree = "<group>"; };
+		C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessageIntent.swift; sourceTree = "<group>"; };
 		C8D1A7CA8C10C4403D4BBFA7 /* TreatmentsDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TreatmentsDataFlow.swift; sourceTree = "<group>"; };
+		C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigStateModel.swift; sourceTree = "<group>"; };
+		C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingManager.swift; sourceTree = "<group>"; };
 		CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryLimitsSyncTests.swift; sourceTree = "<group>"; };
 		CC6C406D2ACDD69E009B8058 /* RawFetchedProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawFetchedProfile.swift; sourceTree = "<group>"; };
 		CC76E9502BD4812E008BEB61 /* Forecast+helper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Forecast+helper.swift"; sourceTree = "<group>"; };
@@ -1488,7 +1469,9 @@
 		CEE9A65D2BBC9F6500EB5194 /* CalibrationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationsTests.swift; sourceTree = "<group>"; };
 		CEF1ED6A2D58FB4600FAF41E /* CGMOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMOptions.swift; sourceTree = "<group>"; };
 		CFCFE0781F9074C2917890E8 /* ManualTempBasalStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ManualTempBasalStateModel.swift; sourceTree = "<group>"; };
+		D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioMessagingTests.swift; sourceTree = "<group>"; };
 		D0BDC6993C1087310EDFC428 /* CarbRatioEditorRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarbRatioEditorRootView.swift; sourceTree = "<group>"; };
+		DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigRootView.swift; sourceTree = "<group>"; };
 		DC2C6489D29ECCCAD78E0721 /* GlucoseNotificationSettingsStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlucoseNotificationSettingsStateModel.swift; sourceTree = "<group>"; };
 		DD09D47A2C5986D1003FEA5D /* CalendarEventSettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventSettingsDataFlow.swift; sourceTree = "<group>"; };
 		DD09D47C2C5986DA003FEA5D /* CalendarEventSettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventSettingsProvider.swift; sourceTree = "<group>"; };
@@ -1671,9 +1654,6 @@
 		DDF691022DA2CA14008BF16C /* AppDiagnosticsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiagnosticsProvider.swift; sourceTree = "<group>"; };
 		DDF691042DA2CA20008BF16C /* AppDiagnosticsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiagnosticsStateModel.swift; sourceTree = "<group>"; };
 		DDF691062DA2CA28008BF16C /* AppDiagnosticsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiagnosticsRootView.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataDataFlow.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataStateModel.swift; sourceTree = "<group>"; };
-		FAB1E5000000000000000025 /* MLEngineDataRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataRootView.swift; sourceTree = "<group>"; };
 		DDF691362DA30332008BF16C /* StartupGuideStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupGuideStepView.swift; sourceTree = "<group>"; };
 		DDF847DC2C5C28720049BB3B /* LiveActivitySettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitySettingsDataFlow.swift; sourceTree = "<group>"; };
 		DDF847DE2C5C28780049BB3B /* LiveActivitySettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitySettingsProvider.swift; sourceTree = "<group>"; };
@@ -1687,6 +1667,7 @@
 		DDFF20492DB29EF500AB8A96 /* WatchLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLogger.swift; sourceTree = "<group>"; };
 		DDFF204D2DB2C00B00AB8A96 /* WatchStateSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStateSnapshot.swift; sourceTree = "<group>"; };
 		DDFF204F2DB2C11900AB8A96 /* WatchStateSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStateSnapshot.swift; sourceTree = "<group>"; };
+		DFAF2BC1652DE45CA66A981F /* MealPhotoAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPhotoAnalysis.swift; sourceTree = "<group>"; };
 		E00EEBFD27368630002FF094 /* ServiceAssembly.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServiceAssembly.swift; sourceTree = "<group>"; };
 		E00EEBFE27368630002FF094 /* SecurityAssembly.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SecurityAssembly.swift; sourceTree = "<group>"; };
 		E00EEBFF27368630002FF094 /* StorageAssembly.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StorageAssembly.swift; sourceTree = "<group>"; };
@@ -1704,13 +1685,34 @@
 		E592A3742CEEC038009A472C /* ContactImageProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactImageProvider.swift; sourceTree = "<group>"; };
 		E592A3752CEEC038009A472C /* ContactImageStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactImageStateModel.swift; sourceTree = "<group>"; };
 		E625985B47742D498CB1681A /* GlucoseNotificationSettingsProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlucoseNotificationSettingsProvider.swift; sourceTree = "<group>"; };
+		E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsProvider.swift; sourceTree = "<group>"; };
+		E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverQuickMessageView.swift; sourceTree = "<group>"; };
+		EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioMessagingManager.swift; sourceTree = "<group>"; };
+		EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingTests.swift; sourceTree = "<group>"; };
+		EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingSettingsDataFlow.swift; sourceTree = "<group>"; };
 		F816825D28DB441200054060 /* HeartBeatManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HeartBeatManager.swift; sourceTree = "<group>"; };
 		F816825F28DB441800054060 /* BluetoothTransmitter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BluetoothTransmitter.swift; sourceTree = "<group>"; };
+		F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageComposeView.swift; sourceTree = "<group>"; };
 		F90692A9274B7AAE0037068D /* HealthKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitManager.swift; sourceTree = "<group>"; };
 		F90692CE274B999A0037068D /* HealthKitDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitDataFlow.swift; sourceTree = "<group>"; };
 		F90692D0274B99B60037068D /* HealthKitProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitProvider.swift; sourceTree = "<group>"; };
 		F90692D2274B9A130037068D /* AppleHealthKitRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleHealthKitRootView.swift; sourceTree = "<group>"; };
 		F90692D5274B9A450037068D /* HealthKitStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitStateModel.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000002 /* SafetyEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelope.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000003 /* DecisionAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionAudit.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000004 /* DosingAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DosingAlgorithm.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000005 /* MLDataExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLDataExporter.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelopeTests.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMSilenceWatchdog.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataDataFlow.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataStateModel.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000025 /* MLEngineDataRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLEngineDataRootView.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapSchedule.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorDataFlow.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorStateModel.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapEditorRootView.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000047 /* DeliveryCapsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryCapsTests.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000048 /* AuditRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditRecordViews.swift; sourceTree = "<group>"; };
 		FBB3BAE7494CB771ABAC7B8B /* ISFEditorRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ISFEditorRootView.swift; sourceTree = "<group>"; };
 		FE41E4D529463EE20047FD55 /* NightscoutPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightscoutPreferences.swift; sourceTree = "<group>"; };
 		FE66D16A291F74F8005D6F77 /* Bundle+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bundle+Extensions.swift"; sourceTree = "<group>"; };
@@ -2046,6 +2048,14 @@
 			path = View;
 			sourceTree = "<group>";
 		};
+		2866AB6DDAF61A853CA0813D /* MealPhotoAI */ = {
+			isa = PBXGroup;
+			children = (
+				BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */,
+			);
+			path = MealPhotoAI;
+			sourceTree = "<group>";
+		};
 		29B478DF61BF8D270F7D8954 /* Snooze */ = {
 			isa = PBXGroup;
 			children = (
@@ -2201,6 +2211,7 @@
 				860CF0712CE47FC3A401C914 /* HomeStatusTilesView.swift */,
 				379FF177B5B90C8CACBD7F5A /* HomeAdjustmentsDockView.swift */,
 				B577AC963BE2C1AC81829BEE /* HomeQuickActionsView.swift */,
+				42DD8EBD7DECD0B4F21F9CC1 /* HomeEntryDrawerView.swift */,
 			);
 			path = View;
 			sourceTree = "<group>";
@@ -2351,19 +2362,6 @@
 				3811DEE725CA063400A708ED /* PersistedProperty.swift */,
 			);
 			path = PropertyWrappers;
-			sourceTree = "<group>";
-		};
-		FAB1E5000000000000000001 /* MLEngine */ = {
-			isa = PBXGroup;
-			children = (
-				FAB1E5000000000000000002 /* SafetyEnvelope.swift */,
-				FAB1E5000000000000000003 /* DecisionAudit.swift */,
-				FAB1E5000000000000000004 /* DosingAlgorithm.swift */,
-				FAB1E5000000000000000005 /* MLDataExporter.swift */,
-				FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */,
-				FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */,
-			);
-			path = MLEngine;
 			sourceTree = "<group>";
 		};
 		3811DF0A25CAAAA500A708ED /* APS */ = {
@@ -3048,6 +3046,17 @@
 			path = History;
 			sourceTree = "<group>";
 		};
+		A1A73E9B7F014A77D5CCE8EB /* CaregiverMessagingSettings */ = {
+			isa = PBXGroup;
+			children = (
+				A98278746E297F67CA16CBD5 /* View */,
+				EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */,
+				E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */,
+				A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */,
+			);
+			path = CaregiverMessagingSettings;
+			sourceTree = "<group>";
+		};
 		A42F1FEDFFD0DDE00AAD54D3 /* BasalProfileEditor */ = {
 			isa = PBXGroup;
 			children = (
@@ -3057,6 +3066,27 @@
 				18B49BC9587A59E3A347C1CD /* View */,
 			);
 			path = BasalProfileEditor;
+			sourceTree = "<group>";
+		};
+		A54374AD60DB8549EDFCF036 /* TwilioConfig */ = {
+			isa = PBXGroup;
+			children = (
+				FB4518300D62EF0611491AEE /* View */,
+				B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */,
+				BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */,
+				C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */,
+			);
+			path = TwilioConfig;
+			sourceTree = "<group>";
+		};
+		A98278746E297F67CA16CBD5 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */,
+				F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */,
+				E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */,
+			);
+			path = View;
 			sourceTree = "<group>";
 		};
 		B015AFE22E500000000D7351 /* BolusSafety */ = {
@@ -3349,24 +3379,6 @@
 			path = SettingsExport;
 			sourceTree = "<group>";
 		};
-		2866AB6DDAF61A853CA0813D /* MealPhotoAI */ = {
-			isa = PBXGroup;
-			children = (
-				BD28C180E4EE2C4443F0FB3C /* MealPhotoAnalysisManager.swift */,
-			);
-			path = MealPhotoAI;
-			sourceTree = "<group>";
-		};
-		CBF7129EA80DC9F25A7B630E /* MealPhoto */ = {
-			isa = PBXGroup;
-			children = (
-				1AD3623233297369856004FE /* MealPhotoCaptureView.swift */,
-				0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */,
-				B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */,
-			);
-			path = MealPhoto;
-			sourceTree = "<group>";
-		};
 		C2C98283C436DB934D7E7994 /* Treatments */ = {
 			isa = PBXGroup;
 			children = (
@@ -3377,6 +3389,16 @@
 				B9488883C59C31550E0B4CEC /* View */,
 			);
 			path = Treatments;
+			sourceTree = "<group>";
+		};
+		CBF7129EA80DC9F25A7B630E /* MealPhoto */ = {
+			isa = PBXGroup;
+			children = (
+				1AD3623233297369856004FE /* MealPhotoCaptureView.swift */,
+				0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */,
+				B57FB3989DA9D0BBA92BF1A7 /* MealPhotoResultView.swift */,
+			);
+			path = MealPhoto;
 			sourceTree = "<group>";
 		};
 		CE1856F32ADC4835007E39C7 /* Carbs */ = {
@@ -3529,71 +3551,6 @@
 			isa = PBXGroup;
 			children = (
 				DD09D4812C5986F6003FEA5D /* CalendarEventSettingsRootView.swift */,
-			);
-			path = View;
-			sourceTree = "<group>";
-		};
-		E3F01B1922BB2746098E3926 /* CaregiverMessaging */ = {
-			isa = PBXGroup;
-			children = (
-				C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */,
-			);
-			path = CaregiverMessaging;
-			sourceTree = "<group>";
-		};
-		A1A73E9B7F014A77D5CCE8EB /* CaregiverMessagingSettings */ = {
-			isa = PBXGroup;
-			children = (
-				A98278746E297F67CA16CBD5 /* View */,
-				EFC7B55D0AB7DE135D7D8B38 /* CaregiverMessagingSettingsDataFlow.swift */,
-				E6D91F6C38B356683D7B9999 /* CaregiverMessagingSettingsProvider.swift */,
-				A3892E73CCFBCF111954E29A /* CaregiverMessagingSettingsStateModel.swift */,
-			);
-			path = CaregiverMessagingSettings;
-			sourceTree = "<group>";
-		};
-		A98278746E297F67CA16CBD5 /* View */ = {
-			isa = PBXGroup;
-			children = (
-				B0314E63F0F31E8D41BB1475 /* CaregiverMessagingSettingsRootView.swift */,
-				F8B486F1A4B5016800E9E50B /* MessageComposeView.swift */,
-				E7AC6D9F4CC01854DEDAF81F /* CaregiverQuickMessageView.swift */,
-			);
-			path = View;
-			sourceTree = "<group>";
-		};
-		E5947347F1C0F161D6288724 /* CaregiverMessage */ = {
-			isa = PBXGroup;
-			children = (
-				C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */,
-			);
-			path = CaregiverMessage;
-			sourceTree = "<group>";
-		};
-		F3D0EB00624E17072E61BCF7 /* Twilio */ = {
-			isa = PBXGroup;
-			children = (
-				BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */,
-				EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */,
-			);
-			path = Twilio;
-			sourceTree = "<group>";
-		};
-		A54374AD60DB8549EDFCF036 /* TwilioConfig */ = {
-			isa = PBXGroup;
-			children = (
-				FB4518300D62EF0611491AEE /* View */,
-				B1E3E35F28578B93F2A828F6 /* TwilioConfigDataFlow.swift */,
-				BBD01C8D37A5489F91A8EE2F /* TwilioConfigProvider.swift */,
-				C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */,
-			);
-			path = TwilioConfig;
-			sourceTree = "<group>";
-		};
-		FB4518300D62EF0611491AEE /* View */ = {
-			isa = PBXGroup;
-			children = (
-				DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */,
 			);
 			path = View;
 			sourceTree = "<group>";
@@ -4009,43 +3966,6 @@
 			path = "Classes+Properties";
 			sourceTree = "<group>";
 		};
-		FAB1E5000000000000000041 /* DeliveryCapEditor */ = {
-			isa = PBXGroup;
-			children = (
-				FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */,
-				FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */,
-				FAB1E5000000000000000042 /* View */,
-			);
-			path = DeliveryCapEditor;
-			sourceTree = "<group>";
-		};
-		FAB1E5000000000000000042 /* View */ = {
-			isa = PBXGroup;
-			children = (
-				FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */,
-			);
-			path = View;
-			sourceTree = "<group>";
-		};
-		FAB1E5000000000000000021 /* MLEngineData */ = {
-			isa = PBXGroup;
-			children = (
-				FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */,
-				FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */,
-				FAB1E5000000000000000022 /* View */,
-			);
-			path = MLEngineData;
-			sourceTree = "<group>";
-		};
-		FAB1E5000000000000000022 /* View */ = {
-			isa = PBXGroup;
-			children = (
-				FAB1E5000000000000000025 /* MLEngineDataRootView.swift */,
-				FAB1E5000000000000000048 /* AuditRecordViews.swift */,
-			);
-			path = View;
-			sourceTree = "<group>";
-		};
 		DDF690FE2DA2C9EE008BF16C /* AppDiagnostics */ = {
 			isa = PBXGroup;
 			children = (
@@ -4098,6 +4018,14 @@
 			path = Assemblies;
 			sourceTree = "<group>";
 		};
+		E3F01B1922BB2746098E3926 /* CaregiverMessaging */ = {
+			isa = PBXGroup;
+			children = (
+				C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */,
+			);
+			path = CaregiverMessaging;
+			sourceTree = "<group>";
+		};
 		E42231DBF0DBE2B4B92D1B15 /* CarbRatioEditor */ = {
 			isa = PBXGroup;
 			children = (
@@ -4141,12 +4069,29 @@
 			path = ContactImage;
 			sourceTree = "<group>";
 		};
+		E5947347F1C0F161D6288724 /* CaregiverMessage */ = {
+			isa = PBXGroup;
+			children = (
+				C3AA10AFD161EF86585F3806 /* CaregiverMessageIntent.swift */,
+			);
+			path = CaregiverMessage;
+			sourceTree = "<group>";
+		};
 		EEC747824D6593B5CD87E195 /* View */ = {
 			isa = PBXGroup;
 			children = (
 				FBB3BAE7494CB771ABAC7B8B /* ISFEditorRootView.swift */,
 			);
 			path = View;
+			sourceTree = "<group>";
+		};
+		F3D0EB00624E17072E61BCF7 /* Twilio */ = {
+			isa = PBXGroup;
+			children = (
+				BF302C141EA7D94FB3BB5D5C /* TwilioAlertPolicy.swift */,
+				EA87D1C3CA2197F250850219 /* TwilioMessagingManager.swift */,
+			);
+			path = Twilio;
 			sourceTree = "<group>";
 		};
 		F5DE2E6D7B2133BBD3353DC7 /* View */ = {
@@ -4202,6 +4147,64 @@
 			isa = PBXGroup;
 			children = (
 				F90692D2274B9A130037068D /* AppleHealthKitRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000001 /* MLEngine */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000002 /* SafetyEnvelope.swift */,
+				FAB1E5000000000000000003 /* DecisionAudit.swift */,
+				FAB1E5000000000000000004 /* DosingAlgorithm.swift */,
+				FAB1E5000000000000000005 /* MLDataExporter.swift */,
+				FAB1E5000000000000000007 /* CGMSilenceWatchdog.swift */,
+				FAB1E5000000000000000043 /* DeliveryCapSchedule.swift */,
+			);
+			path = MLEngine;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000021 /* MLEngineData */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000023 /* MLEngineDataDataFlow.swift */,
+				FAB1E5000000000000000024 /* MLEngineDataStateModel.swift */,
+				FAB1E5000000000000000022 /* View */,
+			);
+			path = MLEngineData;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000022 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000025 /* MLEngineDataRootView.swift */,
+				FAB1E5000000000000000048 /* AuditRecordViews.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000041 /* DeliveryCapEditor */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000044 /* DeliveryCapEditorDataFlow.swift */,
+				FAB1E5000000000000000045 /* DeliveryCapEditorStateModel.swift */,
+				FAB1E5000000000000000042 /* View */,
+			);
+			path = DeliveryCapEditor;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000042 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000046 /* DeliveryCapEditorRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		FB4518300D62EF0611491AEE /* View */ = {
+			isa = PBXGroup;
+			children = (
+				DB60CC58E7564F1F5150DEEA /* TwilioConfigRootView.swift */,
 			);
 			path = View;
 			sourceTree = "<group>";
@@ -5223,6 +5226,7 @@
 				DABB8C4B56F5928155A54DCB /* HomeAdjustmentsDockView.swift in Sources */,
 				6597A118249A6D9D43C3ED87 /* HomeQuickActionsView.swift in Sources */,
 				8589D95020F216CA26C5E7A5 /* HistoryRootView+Timeline.swift in Sources */,
+				A664B9E921BE53F94969C1EF /* HomeEntryDrawerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

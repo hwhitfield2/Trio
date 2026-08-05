@@ -50,6 +50,24 @@ extension Treatments {
 
         var addButtonPressed: Bool = false
 
+        /// True when the most recent pump bolus attempt failed (BolusFailureObserver);
+        /// reset at the start of each treatments task. Lets non-router presenters
+        /// (the Home quick-entry drawer) distinguish failure from success when
+        /// isAwaitingDeterminationResult clears.
+        var lastBolusFailed: Bool = false
+
+        /// The Treatments screen is normally presented through the Router's modal
+        /// (MainRootView sheet), which hideModal() dismisses. Non-router presenters
+        /// (the Home quick-entry drawer) set this false so completing a treatment
+        /// cannot dismiss an unrelated router modal.
+        var isPresentedAsRouterModal = true
+
+        /// hideModal() gated on the presentation mode — see isPresentedAsRouterModal.
+        func endRouterPresentation() {
+            guard isPresentedAsRouterModal else { return }
+            hideModal()
+        }
+
         var target: Decimal = 0
         var cob: Int16 = 0
         var iob: Decimal = 0
@@ -436,6 +454,7 @@ extension Treatments {
                 debug(.bolusState, "invokeTreatmentsTask fired")
                 await MainActor.run {
                     self.addButtonPressed = true
+                    self.lastBolusFailed = false
                 }
                 let isInsulinGiven = amount > 0
                 let isCarbsPresent = carbs > 0
@@ -449,7 +468,7 @@ extension Treatments {
                 if isInsulinGiven {
                     await handleInsulin(isExternal: externalInsulin)
                 } else {
-                    hideModal()
+                    endRouterPresentation()
                     return
                 }
 
@@ -465,7 +484,7 @@ extension Treatments {
                         showDeterminationFailureAlert = true
                         determinationFailureMessage = "Glucose data is stale"
                     }
-                    return hideModal()
+                    return endRouterPresentation()
                 }
             }
         }
@@ -721,7 +740,7 @@ extension Treatments.StateModel: DeterminationObserver, BolusFailureObserver {
             debug(.bolusState, "determinationDidUpdate fired")
             self.isAwaitingDeterminationResult = false
             if self.addButtonPressed {
-                self.hideModal()
+                self.endRouterPresentation()
             }
         }
     }
@@ -729,9 +748,10 @@ extension Treatments.StateModel: DeterminationObserver, BolusFailureObserver {
     func bolusDidFail() {
         DispatchQueue.main.async {
             debug(.bolusState, "bolusDidFail fired")
+            self.lastBolusFailed = true
             self.isAwaitingDeterminationResult = false
             if self.addButtonPressed {
-                self.hideModal()
+                self.endRouterPresentation()
             }
         }
     }

@@ -56,6 +56,8 @@ extension Home {
         @State var adjustmentsState = Adjustments.StateModel()
         @State var activeTileDetail: HomeTileDetail?
         @State var showQuickActions = false
+        @State var activeEntryKind: HomeEntryKind?
+        @State var showDockSheet = false
         @State var plusButtonPressed = false
         @State var dockToastText: String?
         @State var pendingChipActivation: DockChipActivation?
@@ -516,7 +518,7 @@ extension Home {
             return HomeTileDetail.Action(
                 name: String(localized: "Manual Temp Basal"),
                 icon: "slider.horizontal.3"
-            ) { state.showModal(for: .manualTempBasal) }
+            ) { activeEntryKind = .basal }
         }
 
         private var metricTiles: [(icon: String, label: String, value: String, color: Color, detail: HomeTileDetail)] {
@@ -531,7 +533,7 @@ extension Home {
             }
             var iobActions: [HomeTileDetail.Action] = [
                 HomeTileDetail.Action(name: String(localized: "Bolus"), icon: "syringe.fill") {
-                    state.showModal(for: .treatmentView)
+                    activeEntryKind = .bolus
                 }
             ]
             if let manualTempBasalAction { iobActions.append(manualTempBasalAction) }
@@ -542,7 +544,7 @@ extension Home {
                 body: String(localized: "\(cobValue) g of carbs still absorbing."),
                 actions: [
                     HomeTileDetail.Action(name: String(localized: "Add Carbs"), icon: "fork.knife") {
-                        state.showModal(for: .treatmentView)
+                        activeEntryKind = .carbs
                     }
                 ]
             )
@@ -1014,10 +1016,9 @@ extension Home {
         var adjustmentsDock: some View {
             HomeAdjustmentsDock(
                 chips: dockChips,
-                // Opening the dock goes to the Adjustments tab: same management UI,
-                // without spinning up (and re-subscribing) another Adjustments
-                // state model per sheet presentation.
-                onOpen: { selectedTab = 2 }
+                // The dock's compact preset sheet reuses the live fetch results and
+                // the chip enact/cancel paths — no extra state model per open.
+                onOpen: { showDockSheet = true }
             ) {
                 dockStatusRow
             }
@@ -1099,10 +1100,10 @@ extension Home {
         private var quickActions: [HomeQuickAction] {
             var items: [HomeQuickAction] = [
                 HomeQuickAction(name: String(localized: "Carbs"), icon: "fork.knife", color: .loopYellow) {
-                    state.showModal(for: .treatmentView)
+                    activeEntryKind = .carbs
                 },
                 HomeQuickAction(name: String(localized: "Bolus"), icon: "syringe.fill", color: .insulin) {
-                    state.showModal(for: .treatmentView)
+                    activeEntryKind = .bolus
                 },
                 HomeQuickAction(
                     name: String(localized: "Meal Presets"),
@@ -1113,25 +1114,29 @@ extension Home {
                     state.showModal(for: .treatmentView)
                 },
                 HomeQuickAction(name: String(localized: "Manual Glucose"), icon: "drop.fill", color: .loopGreen) {
-                    selectedTab = 1
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        Foundation.NotificationCenter.default.post(name: .presentManualGlucoseEntry, object: nil)
-                    }
+                    activeEntryKind = .glucose
                 }
             ]
             if state.allowManualTemp {
                 items.append(
                     HomeQuickAction(name: String(localized: "Manual Temp Basal"), icon: "slider.horizontal.3", color: .tabBar) {
-                        state.showModal(for: .manualTempBasal)
+                        activeEntryKind = .basal
                     }
                 )
             }
             items.append(
                 HomeQuickAction(name: String(localized: "Adjustments"), icon: "clock.arrow.2.circlepath", color: .purple) {
-                    selectedTab = 2
+                    showDockSheet = true
                 }
             )
             return items
+        }
+
+        /// Scheduled profile basal rate for the drawer's temp-basal note.
+        private var profileBasalRateString: String? {
+            guard let rate = scheduledBasalDeliveryRate(at: Date()) else { return nil }
+            return (Formatter.decimalFormatterWithThreeFractionDigits.string(from: rate) ?? "0")
+                + String(localized: " U/hr", comment: "Unit per hour with space")
         }
 
         @ViewBuilder func alertSafetyNotificationsView(geo: GeometryProxy) -> some View {
@@ -1407,7 +1412,7 @@ extension Home {
             .contentShape(Circle())
             .accessibilityLabel(String(localized: "Add treatment"))
             .onTapGesture {
-                state.showModal(for: .treatmentView)
+                activeEntryKind = .carbs
             }
             .onLongPressGesture(minimumDuration: 0.42) {
                 let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
@@ -1465,6 +1470,43 @@ extension Home {
                 if state.waitForSuggestion {
                     CustomProgressView(text: String(localized: "Updating IOB...", comment: "Progress text when updating IOB"))
                 }
+            }
+            .sheet(item: $activeEntryKind) { kind in
+                HomeEntryDrawer(
+                    kind: kind,
+                    resolver: resolver,
+                    homeState: state,
+                    profileBasalRateString: profileBasalRateString,
+                    onCommitted: { text in
+                        if !text.isEmpty { showDockToast(text) }
+                    }
+                )
+                .presentationDetents([.height(430)])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showDockSheet) {
+                HomeAdjustmentsSheetView(
+                    overridePresets: Array(overridePresetChips),
+                    tempTargetPresets: Array(tempTargetPresetChips),
+                    units: state.units,
+                    requireConfirmation: state.settingsManager.settings.requireAdjustmentsConfirmation,
+                    activate: { activation in activateChip(activation) },
+                    cancelOverride: {
+                        Task {
+                            guard let objectID = latestOverride.first?.objectID else { return }
+                            await state.cancelOverride(withID: objectID)
+                        }
+                    },
+                    cancelTempTarget: {
+                        Task {
+                            guard let objectID = latestTempTarget.first?.objectID else { return }
+                            await state.cancelTempTarget(withID: objectID)
+                        }
+                    },
+                    onManage: { selectedTab = 2 }
+                )
+                .presentationDetents([.fraction(0.6), .large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
