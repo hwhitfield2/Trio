@@ -14,6 +14,9 @@ extension Adjustments.RootView {
         } else {
             defaultText
         }
+        customAdjustmentCreationRow(String(localized: "Custom temp target…")) {
+            showTempTargetCreationSheet = true
+        }
     }
 
     private var scheduledTempTargets: some View {
@@ -24,9 +27,11 @@ extension Adjustments.RootView {
                         actionButtonsForTempTargets(for: tempTarget)
                     }
             }
-            .listRowBackground(Color.chart)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets())
         } header: {
-            Text("Scheduled Temp Targets")
+            Text("Scheduled Temp Targets").glassCaption()
         }
     }
 
@@ -53,9 +58,11 @@ extension Adjustments.RootView {
             } message: {
                 deleteConfirmationMessage
             }
-            .listRowBackground(Color.chart)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets())
         } header: {
-            Text("Temporary Target Presets")
+            Text("Temporary Target Presets").glassCaption()
         } footer: {
             HStack {
                 Image(systemName: "hand.draw.fill").foregroundStyle(.primary)
@@ -147,14 +154,15 @@ extension Adjustments.RootView {
                 showCancelTempTargetConfirmDialog = true
             }, label: {
                 Text("Stop Temp Target")
+                    .fontWeight(.semibold)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(10)
             })
                 .frame(width: UIScreen.main.bounds.width * 0.9, height: 40, alignment: .center)
                 .disabled(!state.isTempTargetEnabled)
-                .background(!state.isTempTargetEnabled ? Color(.systemGray4) : Color(.systemRed))
+                .background(!state.isTempTargetEnabled ? Color(.systemGray4) : Color.loopRed)
                 .tint(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(5)
         }
     }
@@ -167,6 +175,7 @@ extension Adjustments.RootView {
         let target = tempTarget.target ?? 100
         let tempTargetValue = Decimal(target as! Double.RawValue)
         let isSelected = tempTarget.id?.uuidString == selectedTempTargetPresetID
+        let isActive = state.isTempTargetEnabled && tempTarget == state.currentActiveTempTarget
         let tempTargetHalfBasal = Decimal(
             tempTarget.halfBasalTarget as? Double
                 .RawValue ?? Double(state.settingHalfBasalTarget)
@@ -180,54 +189,67 @@ extension Adjustments.RootView {
         )
         let remainingTime = tempTarget.date?.timeIntervalSinceNow ?? 0
 
-        return ZStack(alignment: .trailing) {
-            HStack {
-                VStack(alignment: .leading) {
+        return HStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "target")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Color.loopGreen)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         Text(tempTarget.name ?? "")
+                            .font(.system(size: 16, weight: .semibold))
+                            .lineLimit(1)
                         Spacer()
                         if remainingTime > 0 {
                             Text("Starts in \(formattedTimeRemaining(remainingTime))")
+                                .font(.footnote)
                                 .foregroundColor(colorScheme == .dark ? .orange : .accentColor)
                         }
                     }
                     HStack(spacing: 2) {
                         Text(formattedGlucose(glucose: target as Decimal))
-                            .foregroundColor(.secondary)
-                            .font(.caption)
                         Text("for")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
                         Text("\(Formatter.integerFormatter.string(from: (tempTarget.duration ?? 0) as NSNumber)!)")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
                         Text("min")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
                         if state.isAdjustSensEnabled(usingTarget: tempTargetValue) {
                             Text(", \(percentage)%")
-                                .foregroundColor(.secondary)
-                                .font(.caption)
                         }
                         Spacer()
                     }
-                    .padding(.top, 2)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onTap?()
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onTap?()
+            }
+
+            // show checkmark to indicate if the preset was actually pressed
             if showCheckmark && isSelected {
                 Image(systemName: "checkmark.circle.fill")
                     .imageScale(.large)
                     .fontWeight(.bold)
                     .foregroundStyle(Color.green)
             } else if onTap != nil {
-                Image(systemName: "line.3.horizontal")
-                    .imageScale(.medium)
-                    .foregroundStyle(.secondary)
+                presetActionCapsule(isRunning: isActive, onStart: {
+                    onTap?()
+                }, onEnd: {
+                    showCancelTempTargetConfirmDialog = true
+                })
             }
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .glassCard()
+        .overlay {
+            if isActive {
+                RoundedRectangle(cornerRadius: GlassDesign.cardRadius)
+                    .stroke(Color.loopGreen.opacity(0.6), lineWidth: 1)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

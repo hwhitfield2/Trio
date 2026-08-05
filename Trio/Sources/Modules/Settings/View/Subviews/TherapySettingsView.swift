@@ -19,20 +19,29 @@ struct TherapySettingsView: BaseView {
     var body: some View {
         Form {
             Section(
-                header: Text("Basic Settings"),
+                header: Text("Basic Settings").glassCaption(),
                 content: {
-                    Text("Units and Limits").navigationLink(to: .unitsAndLimits, from: self)
+                    SettingsIconRow(symbol: "ruler", tint: Color.tabBar, label: Text("Units and Limits"))
+                        .navigationLink(to: .unitsAndLimits, from: self)
                 }
             )
             .listRowBackground(Color.chart)
 
             Section(
-                header: Text("Basic Insulin Rates & Targets"),
+                header: Text("Basic Insulin Rates & Targets").glassCaption(),
                 content: {
-                    Text("Glucose Targets").navigationLink(to: .targetsEditor, from: self)
-                    Text("Basal Rates").navigationLink(to: .basalProfileEditor, from: self)
-                    Text("Carb Ratios").navigationLink(to: .crEditor, from: self)
-                    Text("Insulin Sensitivities").navigationLink(to: .isfEditor, from: self)
+                    SettingsIconRow(symbol: "target", tint: .loopGreen, label: Text("Glucose Targets"))
+                        .navigationLink(to: .targetsEditor, from: self)
+                    SettingsIconRow(symbol: "drop.fill", tint: .insulin, label: Text("Basal Rates"))
+                        .navigationLink(to: .basalProfileEditor, from: self)
+                    SettingsIconRow(symbol: "fork.knife", tint: .loopYellow, label: Text("Carb Ratios"))
+                        .navigationLink(to: .crEditor, from: self)
+                    SettingsIconRow(
+                        symbol: "chart.line.downtrend.xyaxis",
+                        tint: .zt,
+                        label: Text("Insulin Sensitivities")
+                    )
+                    .navigationLink(to: .isfEditor, from: self)
                 }
             )
             .listRowBackground(Color.chart)

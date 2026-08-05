@@ -19,11 +19,18 @@ struct DevicesView: BaseView {
     var body: some View {
         Form {
             Section(
-                header: Text("Setup & Configuraton"),
+                header: Text("Setup & Configuraton").glassCaption(),
                 content: {
-                    Text("Insulin Pump").navigationLink(to: .pumpConfig, from: self)
-                    Text("Continuous Glucose Monitor").navigationLink(to: .cgm, from: self)
-                    Text("Smart Watch").navigationLink(to: .watch, from: self)
+                    SettingsIconRow(symbol: "syringe.fill", tint: .insulin, label: Text("Insulin Pump"))
+                        .navigationLink(to: .pumpConfig, from: self)
+                    SettingsIconRow(
+                        symbol: "sensor.tag.radiowaves.forward.fill",
+                        tint: .loopGreen,
+                        label: Text("Continuous Glucose Monitor")
+                    )
+                    .navigationLink(to: .cgm, from: self)
+                    SettingsIconRow(symbol: "applewatch", tint: Color.tabBar, label: Text("Smart Watch"))
+                        .navigationLink(to: .watch, from: self)
                 }
             )
             .listRowBackground(Color.chart)

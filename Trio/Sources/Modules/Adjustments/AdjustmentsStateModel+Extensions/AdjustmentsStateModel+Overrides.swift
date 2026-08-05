@@ -10,8 +10,15 @@ extension Adjustments.StateModel {
     @MainActor func enactOverridePreset(withID id: NSManagedObjectID) async {
         do {
             guard let overrideToEnact = try viewContext.existingObject(with: id) as? OverrideStored else { return }
-            /// Wait for currently active override to be disabled before storing the new one
-            await disableAllActiveOverrides(createOverrideRunEntry: currentActiveOverride != nil)
+            /// Wait for currently active override to be disabled before storing the new one.
+            /// Whether a run-history entry is due is derived from the database, not from
+            /// `currentActiveOverride`: a freshly subscribed instance (e.g. the Home dock)
+            /// may not have populated its cached state yet, and skipping the entry here
+            /// would silently drop the override's History/Nightscout record.
+            let activeOverridesRequest = OverrideStored.fetchRequest()
+            activeOverridesRequest.predicate = NSPredicate(format: "enabled == %@", true as NSNumber)
+            let hasActiveOverride = ((try? viewContext.count(for: activeOverridesRequest)) ?? 0) > 0
+            await disableAllActiveOverrides(createOverrideRunEntry: hasActiveOverride)
             await resetStateVariables()
 
             overrideToEnact.enabled = true

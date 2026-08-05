@@ -19,29 +19,40 @@ struct FeatureSettingsView: BaseView {
     var body: some View {
         Form {
             Section(
-                header: Text("Trio Features"),
+                header: Text("Trio Features").glassCaption(),
                 content: {
-                    Text("Bolus Calculator").navigationLink(to: .bolusCalculatorConfig, from: self)
-                    Text("Meal Settings").navigationLink(to: .mealSettings, from: self)
-                    Text("Shortcuts").navigationLink(to: .shortcutsConfig, from: self)
-                    Text("Remote Control").navigationLink(to: .remoteControlConfig, from: self)
+                    SettingsIconRow(symbol: "plus.forwardslash.minus", tint: .insulin, label: Text("Bolus Calculator"))
+                        .navigationLink(to: .bolusCalculatorConfig, from: self)
+                    SettingsIconRow(symbol: "fork.knife", tint: .loopYellow, label: Text("Meal Settings"))
+                        .navigationLink(to: .mealSettings, from: self)
+                    SettingsIconRow(symbol: "square.2.layers.3d.fill", tint: Color.glassCyan, label: Text("Shortcuts"))
+                        .navigationLink(to: .shortcutsConfig, from: self)
+                    SettingsIconRow(
+                        symbol: "antenna.radiowaves.left.and.right",
+                        tint: Color.tabBar,
+                        label: Text("Remote Control")
+                    )
+                    .navigationLink(to: .remoteControlConfig, from: self)
                 }
             )
             .listRowBackground(Color.chart)
 
             Section(
-                header: Text("Trio Personalization"),
+                header: Text("Trio Personalization").glassCaption(),
                 content: {
-                    Text("User Interface").navigationLink(to: .userInterfaceSettings, from: self)
-                    Text("App Icons").navigationLink(to: .iconConfig, from: self)
+                    SettingsIconRow(symbol: "paintbrush.fill", tint: .uam, label: Text("User Interface"))
+                        .navigationLink(to: .userInterfaceSettings, from: self)
+                    SettingsIconRow(symbol: "square.grid.2x2.fill", tint: .zt, label: Text("App Icons"))
+                        .navigationLink(to: .iconConfig, from: self)
                 }
             )
             .listRowBackground(Color.chart)
 
             Section(
-                header: Text("Anonymized Data Sharing"),
+                header: Text("Anonymized Data Sharing").glassCaption(),
                 content: {
-                    Text("App Diagnostics").navigationLink(to: .appDiagnostics, from: self)
+                    SettingsIconRow(symbol: "waveform.path.ecg", tint: .loopGreen, label: Text("App Diagnostics"))
+                        .navigationLink(to: .appDiagnostics, from: self)
                 }
             )
             .listRowBackground(Color.chart)

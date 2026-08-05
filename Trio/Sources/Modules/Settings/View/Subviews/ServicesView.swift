@@ -20,13 +20,17 @@ struct ServicesView: BaseView {
     var body: some View {
         Form {
             Section(
-                header: Text("Connected Services"),
+                header: Text("Connected Services").glassCaption(),
                 content: {
-                    Text("Nightscout").navigationLink(to: .nighscoutConfig, from: self)
-                    Text("Tidepool").navigationLink(to: .tidepoolConfig, from: self)
-                    Text("Twilio SMS").navigationLink(to: .twilioConfig, from: self)
+                    SettingsIconRow(symbol: "cloud.fill", tint: Color.glassCyan, label: Text("Nightscout"))
+                        .navigationLink(to: .nighscoutConfig, from: self)
+                    SettingsIconRow(symbol: "water.waves", tint: .insulin, label: Text("Tidepool"))
+                        .navigationLink(to: .tidepoolConfig, from: self)
+                    SettingsIconRow(symbol: "message.fill", tint: .loopGreen, label: Text("Twilio SMS"))
+                        .navigationLink(to: .twilioConfig, from: self)
                     if HKHealthStore.isHealthDataAvailable() {
-                        Text("Apple Health").navigationLink(to: .healthkit, from: self)
+                        SettingsIconRow(symbol: "heart.fill", tint: .loopRed, label: Text("Apple Health"))
+                            .navigationLink(to: .healthkit, from: self)
                     }
                 }
             )

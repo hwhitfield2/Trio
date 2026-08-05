@@ -10,6 +10,15 @@ struct TimePicker: Identifiable {
     var id: String { hours.description }
 }
 
+/// A pending preset activation from a dock chip, awaiting the
+/// "Require Adjustments Confirmation" dialog.
+struct DockChipActivation: Identifiable {
+    let id = UUID()
+    let name: String
+    let isOverride: Bool
+    let objectID: NSManagedObjectID
+}
+
 extension Home {
     struct RootView: BaseView {
         let resolver: Resolver
@@ -42,6 +51,15 @@ extension Home {
             TimePicker(active: false, hours: 24)
         ]
 
+        /// Adjustments state powering the dock's preset chip enacting; wired
+        /// lazily on first chip use (same DI path Adjustments.RootView uses).
+        @State var adjustmentsState = Adjustments.StateModel()
+        @State var activeTileDetail: HomeTileDetail?
+        @State var showQuickActions = false
+        @State var plusButtonPressed = false
+        @State var dockToastText: String?
+        @State var pendingChipActivation: DockChipActivation?
+
         @FetchRequest(fetchRequest: OverrideStored.fetch(
             NSPredicate.lastActiveOverride,
             ascending: false,
@@ -53,6 +71,22 @@ extension Home {
             ascending: false,
             fetchLimit: 1
         )) var latestTempTarget: FetchedResults<TempTargetStored>
+
+        // Live preset lists for the dock chips (same predicate/order as the
+        // Adjustments screen); enact/cancel still routes through adjustmentsState.
+        @FetchRequest(fetchRequest: {
+            let request = OverrideStored.fetchRequest()
+            request.predicate = NSPredicate.allOverridePresets
+            request.sortDescriptors = [NSSortDescriptor(key: "orderPosition", ascending: true)]
+            return request
+        }()) var overridePresetChips: FetchedResults<OverrideStored>
+
+        @FetchRequest(fetchRequest: {
+            let request = TempTargetStored.fetchRequest()
+            request.predicate = NSPredicate.allTempTargetPresets
+            request.sortDescriptors = [NSSortDescriptor(key: "orderPosition", ascending: true)]
+            return request
+        }()) var tempTargetPresetChips: FetchedResults<TempTargetStored>
 
         var bolusProgressFormatter: NumberFormatter {
             let fractionDigits: Int = switch state.settingsManager.preferences.bolusIncrement {
@@ -123,50 +157,25 @@ extension Home {
             }
         }
 
-        var glucoseView: some View {
-            CurrentGlucoseView(
-                timerDate: state.timerDate,
-                units: state.units,
-                alarm: state.alarm,
-                lowGlucose: state.lowGlucose,
-                highGlucose: state.highGlucose,
-                cgmAvailable: state.cgmAvailable,
-                currentGlucoseTarget: state.currentGlucoseTarget,
-                glucoseColorScheme: state.glucoseColorScheme,
-                glucose: state.latestTwoGlucoseValues
-            ).scaleEffect(0.9)
-                .onTapGesture {
-                    if !state.cgmAvailable {
-                        showCGMSelection.toggle()
-                    } else {
-                        state.shouldDisplayCGMSetupSheet.toggle()
-                    }
-                }
-                .onLongPressGesture {
-                    let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
-                    impactHeavy.impactOccurred()
-                    state.showModal(for: .snooze)
-                }
+        /// Tap behavior shared by the hero glucose value and the CGM tile:
+        /// CGM selection dialog when none is set up, else CGM settings.
+        func handleCGMTap() {
+            if !state.cgmAvailable {
+                showCGMSelection.toggle()
+            } else {
+                state.shouldDisplayCGMSetupSheet.toggle()
+            }
         }
 
-        var pumpView: some View {
-            PumpView(
-                reservoir: state.reservoir,
-                name: state.pumpName,
-                expiresAtDate: state.pumpExpiresAtDate,
-                activatedAtDate: state.pumpActivatedAtDate,
-                timerDate: state.timerDate,
-                pumpStatusHighlightMessage: state.pumpStatusHighlightMessage,
-                battery: state.batteryFromPersistence
-            )
-            .onTapGesture {
-                if state.pumpDisplayState == nil {
-                    // shows user confirmation dialog with pump model choices, then proceeds to setup
-                    showPumpSelection.toggle()
-                } else {
-                    // sends user to pump settings
-                    state.shouldDisplayPumpSetupSheet.toggle()
-                }
+        /// Tap behavior shared by the pump tiles: pump-model dialog when no pump
+        /// is set up, else pump settings.
+        func handlePumpTap() {
+            if state.pumpDisplayState == nil {
+                // shows user confirmation dialog with pump model choices, then proceeds to setup
+                showPumpSelection.toggle()
+            } else {
+                // sends user to pump settings
+                state.shouldDisplayPumpSetupSheet.toggle()
             }
         }
 
@@ -347,40 +356,31 @@ extension Home {
         }
 
         var timeIntervalButtons: some View {
-            let buttonColor = (colorScheme == .dark ? Color.white : Color.black).opacity(0.8)
-
-            return HStack(alignment: .center) {
+            HStack(spacing: 0) {
                 ForEach(timeButtons) { button in
                     Button(action: {
                         state.hours = button.hours
                     }) {
-                        Group {
-                            if button.active {
-                                Text(
-                                    button.hours.description + "\u{00A0}" +
-                                        String(localized: "h", comment: "h")
-                                )
-                            } else {
-                                Text(button.hours.description)
-                            }
-                        }
+                        Text(
+                            button.hours.description + "\u{00A0}" +
+                                String(localized: "h", comment: "h")
+                        )
                         .font(.footnote)
                         .fontWeight(button.active ? .semibold : .regular)
-                        .padding(.vertical, 5)
-                        .padding(.horizontal, 10)
+                        .frame(width: 52, height: 28)
                         .foregroundColor(
-                            button
-                                .active ? (colorScheme == .dark ? Color.bgDarkerDarkBlue : Color.white) : buttonColor
+                            button.active
+                                ? (colorScheme == .dark ? Color.bgDarkerDarkBlue : Color.white)
+                                : Color.primary.opacity(0.8)
                         )
-                        .background(button.active ? buttonColor.opacity(colorScheme == .dark ? 1 : 0.8) : Color.clear)
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(button.active ? buttonColor.opacity(0.4) : Color.clear, lineWidth: 2)
-                        )
+                        .background(button.active ? Color.tabBar : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
             }
+            .padding(2)
+            .background(Color.primary.opacity(colorScheme == .dark ? 0.13 : 0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
 
         var statsIconString: String {
@@ -391,28 +391,23 @@ extension Home {
             }
         }
 
-        @ViewBuilder private func tappableButton(
-            buttonColor: Color,
-            label: String,
+        /// Compact 34pt square glass icon button used in the chart header row.
+        @ViewBuilder private func glassIconButton(
             iconString: String,
+            accessibilityLabel: String,
             action: @escaping () -> Void
         ) -> some View {
             Button(action: {
                 action()
             }) {
-                HStack {
-                    Image(systemName: iconString)
-                    Text(label)
-                }
-                .font(.footnote)
-                .padding(.vertical, 5)
-                .padding(.horizontal, 10)
-                .foregroundStyle(buttonColor)
-                .overlay(
-                    Capsule()
-                        .stroke(buttonColor.opacity(0.4), lineWidth: 2)
-                )
+                Image(systemName: iconString)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.primary.opacity(0.85))
+                    .frame(width: 34, height: 34)
+                    .glassCard(radius: 10, opacity: 0.7)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
         }
 
         @ViewBuilder func mainChart(geo: GeometryProxy) -> some View {
@@ -442,10 +437,32 @@ extension Home {
             }
         }
 
-        @ViewBuilder func rightHeaderPanel(_: GeometryProxy) -> some View {
-            VStack(alignment: .leading, spacing: 20) {
-                /// Loop view at bottomLeading
-                LoopView(
+        // MARK: - Hero header (glucose + loop pill)
+
+        var heroHeader: some View {
+            HStack(alignment: .top, spacing: 12) {
+                HomeHeroGlucoseView(
+                    timerDate: state.timerDate,
+                    units: state.units,
+                    lowGlucose: state.lowGlucose,
+                    highGlucose: state.highGlucose,
+                    cgmAvailable: state.cgmAvailable,
+                    currentGlucoseTarget: state.currentGlucoseTarget,
+                    glucoseColorScheme: state.glucoseColorScheme,
+                    glucose: state.latestTwoGlucoseValues
+                )
+                .onTapGesture {
+                    handleCGMTap()
+                }
+                .onLongPressGesture {
+                    let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
+                    impactHeavy.impactOccurred()
+                    state.showModal(for: .snooze)
+                }
+
+                Spacer()
+
+                HomeLoopPillView(
                     closedLoop: state.closedLoop,
                     timerDate: state.timerDate,
                     isLooping: state.isLooping,
@@ -461,323 +478,428 @@ extension Home {
                     impactHeavy.impactOccurred()
                     state.runLoop()
                 }
-                /// eventualBG string at bottomTrailing
+            }
+        }
 
-                if let eventualBG = state.enactedAndNonEnactedDeterminations.first?.eventualBG {
-                    let eventualGlucose = eventualBG as Decimal
-                    HStack {
-                        Image(systemName: "arrow.right.circle")
-                            .font(.callout)
-                            .fontWeight(.bold)
+        // MARK: - Metric tiles (IOB / COB / Basal / Eventual)
 
-                        Text(state.units == .mgdL ? eventualGlucose.description : eventualGlucose.formattedAsMmolL)
-                            .font(.callout)
-                            .fontWeight(.bold)
-                            .fontDesign(.rounded)
+        private var eventualBGString: String {
+            guard let eventualBG = state.enactedAndNonEnactedDeterminations.first?.eventualBG else {
+                return "--"
+            }
+            let eventualGlucose = eventualBG as Decimal
+            return state.units == .mgdL ? eventualGlucose.description : eventualGlucose.formattedAsMmolL
+        }
+
+        /// Compact current basal rate for the metric tile; detail popover carries the
+        /// full string. "--" while the pump is suspended or unavailable (matches the
+        /// old meal panel, which hid the rate in those states).
+        private var basalTileValue: String {
+            guard let apsManager = state.apsManager,
+                  apsManager.isScheduledBasal != nil,
+                  !apsManager.isSuspended
+            else { return "--" }
+
+            var rate: NSNumber?
+            if apsManager.isScheduledBasal == true {
+                rate = scheduledBasalDeliveryRate(at: Date())
+            } else if let tempRate = state.tempBasals.last?.tempBasal?.rate {
+                rate = tempRate
+            }
+            guard let rate else { return "--" }
+            let rateString = Formatter.decimalFormatterWithThreeFractionDigits.string(from: rate) ?? "--"
+            return apsManager.isManualTempBasal ? rateString + " ⚠️" : rateString
+        }
+
+        private var manualTempBasalAction: HomeTileDetail.Action? {
+            guard state.allowManualTemp else { return nil }
+            return HomeTileDetail.Action(
+                name: String(localized: "Manual Temp Basal"),
+                icon: "slider.horizontal.3"
+            ) { state.showModal(for: .manualTempBasal) }
+        }
+
+        private var metricTiles: [(icon: String, label: String, value: String, color: Color, detail: HomeTileDetail)] {
+            let determination = state.enactedAndNonEnactedDeterminations.first
+
+            let iobValue = Formatter.decimalFormatterWithTwoFractionDigits
+                .string(from: state.currentIOB as NSNumber) ?? "--"
+            let maxIOBZero = state.maxIOB == 0.0
+            var iobBody = String(localized: "\(iobValue) U of insulin on board.")
+            if maxIOBZero {
+                iobBody += " " + String(localized: "Warning: Max IOB is 0 U, so Trio cannot deliver automatic boluses.")
+            }
+            var iobActions: [HomeTileDetail.Action] = [
+                HomeTileDetail.Action(name: String(localized: "Bolus"), icon: "syringe.fill") {
+                    state.showModal(for: .treatmentView)
+                }
+            ]
+            if let manualTempBasalAction { iobActions.append(manualTempBasalAction) }
+
+            let cobValue = determination.map { "\($0.cob)" } ?? "--"
+            let cobDetail = HomeTileDetail(
+                title: String(localized: "Carbs on Board"),
+                body: String(localized: "\(cobValue) g of carbs still absorbing."),
+                actions: [
+                    HomeTileDetail.Action(name: String(localized: "Add Carbs"), icon: "fork.knife") {
+                        state.showModal(for: .treatmentView)
                     }
-                    // aligns the evBG icon exactly with the first pixel of loop status icon
-                    .padding(.leading, 12)
+                ]
+            )
+
+            var basalActions: [HomeTileDetail.Action] = [
+                HomeTileDetail.Action(name: String(localized: "Pump Settings"), icon: "gearshape.fill") {
+                    handlePumpTap()
+                }
+            ]
+            if let manualTempBasalAction { basalActions.append(manualTempBasalAction) }
+
+            return [
+                (
+                    icon: maxIOBZero ? "exclamationmark.circle.fill" : "syringe.fill",
+                    label: String(localized: "IOB"),
+                    value: iobValue,
+                    color: maxIOBZero ? .loopRed : .insulin,
+                    detail: HomeTileDetail(
+                        title: String(localized: "Insulin on Board"),
+                        body: iobBody,
+                        actions: iobActions
+                    )
+                ),
+                (
+                    icon: "fork.knife",
+                    label: String(localized: "COB"),
+                    value: cobValue + " g",
+                    color: .loopYellow,
+                    detail: cobDetail
+                ),
+                (
+                    icon: "drop.fill",
+                    label: String(localized: "Basal"),
+                    value: basalTileValue,
+                    color: .insulinTintColor,
+                    detail: HomeTileDetail(
+                        title: String(localized: "Current Basal"),
+                        body: basalString.map { String(localized: "Delivering \($0).") } ??
+                            String(localized: "No basal delivery data. The pump may be suspended or not reachable."),
+                        actions: basalActions
+                    )
+                ),
+                (
+                    icon: "arrow.right.circle",
+                    label: String(localized: "Eventual"),
+                    value: eventualBGString,
+                    color: .tabBar,
+                    detail: HomeTileDetail(
+                        title: String(localized: "Eventual Glucose"),
+                        body: String(
+                            localized: "\(eventualBGString) \(state.units.rawValue) predicted once active insulin and carbs are absorbed."
+                        ),
+                        actions: [
+                            HomeTileDetail.Action(name: String(localized: "Loop Status"), icon: "circle") {
+                                state.isLoopStatusPresented = true
+                            }
+                        ]
+                    )
+                )
+            ]
+        }
+
+        var metricsRow: some View {
+            HomeMetricsRow(
+                tiles: metricTiles,
+                highlightedTitle: activeTileDetail?.title
+            ) { detail in
+                withAnimation(.easeOut(duration: 0.16)) { activeTileDetail = detail }
+            }
+        }
+
+        // MARK: - Device tiles (Reservoir / Pod / Battery / CGM)
+
+        private var reservoirValueString: String {
+            guard let reservoir = state.reservoir else { return "--" }
+            if reservoir == 0xDEAD_BEEF {
+                return String(localized: "50+ U", comment: "Reservoir sentinel for 'more than 50 units'")
+            }
+            return (Formatter.integerFormatter.string(from: reservoir as NSNumber) ?? "--")
+                + " " + String(localized: "U", comment: "Insulin unit")
+        }
+
+        private var reservoirColor: Color {
+            guard let reservoir = state.reservoir else { return .gray }
+            if reservoir == 0xDEAD_BEEF { return .insulin }
+            if reservoir <= 10 { return .loopRed }
+            if reservoir <= 30 { return .orange }
+            return .insulin
+        }
+
+        private func podRemainingString(expiresAt: Date) -> String {
+            let remaining = expiresAt.timeIntervalSince(state.timerDate)
+            guard remaining > 0 else { return String(localized: "Replace") }
+            let days = Int(remaining / 86400)
+            let hours = Int(remaining.truncatingRemainder(dividingBy: 86400) / 3600)
+            let minutes = Int(remaining.truncatingRemainder(dividingBy: 3600) / 60)
+            if days >= 1 { return "\(days)d \(hours)h" }
+            if hours >= 1 { return hours < 12 ? "\(hours)h \(minutes)m" : "\(hours)h" }
+            return "\(minutes)m"
+        }
+
+        private var podColor: Color {
+            if let activatedAt = state.pumpActivatedAtDate {
+                // Patch pumps report age: warn once past the normal 80h patch life.
+                let ageHours = state.timerDate.timeIntervalSince(activatedAt) / 3600
+                return ageHours > 80 ? .yellow : .loopGreen
+            }
+            guard let expiresAt = state.pumpExpiresAtDate else { return .gray }
+            let remaining = expiresAt.timeIntervalSince(state.timerDate)
+            if remaining <= 8 * 3600 { return .loopRed }
+            if remaining <= 24 * 3600 { return .orange }
+            return .loopGreen
+        }
+
+        private var pumpBatteryPercent: Double? {
+            guard let battery = state.batteryFromPersistence.first, battery.display else { return nil }
+            return battery.percent
+        }
+
+        private var pumpBatteryColor: Color {
+            guard let percent = pumpBatteryPercent else { return .gray }
+            if percent <= 10 { return .loopRed }
+            if percent <= 20 { return .orange }
+            return .loopGreen
+        }
+
+        @ViewBuilder private func deviceTile(
+            icon: String,
+            label: String,
+            value: String,
+            color: Color,
+            detail: HomeTileDetail,
+            tapAction: @escaping () -> Void
+        ) -> some View {
+            HomeDeviceTile(
+                icon: icon,
+                label: label,
+                value: value,
+                color: color,
+                isHighlighted: activeTileDetail?.title == detail.title
+            )
+            .onTapGesture { tapAction() }
+            .onLongPressGesture {
+                let impact = UIImpactFeedbackGenerator(style: .medium)
+                impact.impactOccurred()
+                withAnimation(.easeOut(duration: 0.16)) { activeTileDetail = detail }
+            }
+        }
+
+        @ViewBuilder var deviceRow: some View {
+            HStack(spacing: 8) {
+                if let statusMessage = state.pumpStatusHighlightMessage {
+                    // A pump status highlight replaces the pump tiles entirely (same as PumpView).
+                    Button {
+                        handlePumpTap()
+                    } label: {
+                        Text(statusMessage)
+                            .font(.footnote).bold()
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .glassCard(radius: GlassDesign.tileRadius, opacity: 0.5)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: GlassDesign.tileRadius)
+                                    .stroke(Color.loopRed.opacity(0.55), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                } else if state.pumpDisplayState == nil {
+                    deviceTile(
+                        icon: "keyboard.onehanded.left",
+                        label: String(localized: "Pump"),
+                        value: String(localized: "Add"),
+                        color: .secondary,
+                        detail: HomeTileDetail(
+                            title: String(localized: "Add Pump"),
+                            body: String(localized: "No insulin pump is set up yet. Tap the tile to choose a pump model."),
+                            actions: []
+                        ),
+                        tapAction: { handlePumpTap() }
+                    )
                 } else {
-                    HStack {
-                        Image(systemName: "arrow.right.circle")
-                            .font(.callout).fontWeight(.bold)
-                        Text("--")
-                            .font(.callout).fontWeight(.bold).fontDesign(.rounded)
+                    deviceTile(
+                        icon: "cross.vial.fill",
+                        label: String(localized: "Reservoir"),
+                        value: reservoirValueString,
+                        color: reservoirColor,
+                        detail: HomeTileDetail(
+                            title: String(localized: "Reservoir"),
+                            body: String(localized: "\(reservoirValueString) of insulin remaining."),
+                            actions: []
+                        ),
+                        tapAction: { handlePumpTap() }
+                    )
+
+                    if let expiresAt = state.pumpExpiresAtDate {
+                        deviceTile(
+                            icon: state.pumpActivatedAtDate != nil ? "hourglass.badge.plus" : "hourglass.bottomhalf.filled",
+                            label: String(localized: "Pod"),
+                            value: podRemainingString(expiresAt: expiresAt),
+                            color: podColor,
+                            detail: HomeTileDetail(
+                                title: String(localized: "Pod Expiry"),
+                                body: String(
+                                    localized: "Expires \(expiresAt.formatted(date: .abbreviated, time: .shortened))."
+                                ),
+                                actions: []
+                            ),
+                            tapAction: { handlePumpTap() }
+                        )
                     }
+
+                    if let percent = pumpBatteryPercent {
+                        deviceTile(
+                            icon: "battery.100",
+                            label: String(localized: "Battery"),
+                            value: "\(Int(percent)) %",
+                            color: pumpBatteryColor,
+                            detail: HomeTileDetail(
+                                title: String(localized: "Pump Battery"),
+                                body: String(localized: "\(Int(percent)) % pump battery remaining."),
+                                actions: []
+                            ),
+                            tapAction: { handlePumpTap() }
+                        )
+                    }
+                }
+
+                deviceTile(
+                    icon: "sensor.tag.radiowaves.forward.fill",
+                    label: String(localized: "CGM"),
+                    value: state.cgmAvailable ? state.cgmCurrent.displayName : String(localized: "Add"),
+                    color: state.cgmAvailable ? .loopGreen : .secondary,
+                    detail: HomeTileDetail(
+                        title: String(localized: "CGM"),
+                        body: state.cgmAvailable
+                            ? String(localized: "\(state.cgmCurrent.displayName) is the active glucose source.")
+                            : String(localized: "No CGM is set up yet. Tap the tile to choose a glucose source."),
+                        actions: []
+                    ),
+                    tapAction: { handleCGMTap() }
+                )
+            }
+        }
+
+        // MARK: - Chart header row
+
+        var chartHeaderRow: some View {
+            HStack(spacing: 6) {
+                Text("Basal").glassCaption()
+                Spacer()
+                glassIconButton(
+                    iconString: statsIconString,
+                    accessibilityLabel: String(localized: "Stats", comment: "Stats icon in main view")
+                ) {
+                    state.showModal(for: .statistics)
+                }
+                glassIconButton(
+                    iconString: "info",
+                    accessibilityLabel: String(localized: "Info", comment: "Info icon in main view")
+                ) {
+                    state.isLegendPresented.toggle()
                 }
             }
         }
 
-        @ViewBuilder func mealPanel(_: GeometryProxy) -> some View {
-            HStack {
-                HStack {
-                    Image(systemName: "syringe.fill")
-                        .font(.callout)
-                        .foregroundColor(Color.insulin)
-                    Text(
-                        (
-                            Formatter.decimalFormatterWithTwoFractionDigits
-                                .string(from: state.currentIOB as NSNumber) ?? "0"
-                        ) +
-                            String(localized: " U", comment: "Insulin unit")
-                    )
-                    .font(.callout).fontWeight(.bold).fontDesign(.rounded)
+        // MARK: - Adjustments dock
+
+        private var hasActiveAdjustment: Bool {
+            overrideString != nil || tempTargetString != nil
+        }
+
+        private var dockChips: [HomeDockChip] {
+            var chips: [HomeDockChip] = overridePresetChips.map { preset in
+                let name = preset.name ?? String(localized: "Custom Override")
+                let isActive = preset.enabled
+                let objectID = preset.objectID
+                return HomeDockChip(
+                    id: "override-" + objectID.uriRepresentation().absoluteString,
+                    name: name,
+                    icon: "clock.arrow.2.circlepath",
+                    color: .purple,
+                    isActive: isActive
+                ) {
+                    handleChipTap(name: name, isOverride: true, objectID: objectID, isActive: isActive)
                 }
-
-                Spacer()
-
-                HStack {
-                    Image(systemName: "fork.knife")
-                        .font(.callout)
-                        .foregroundColor(.loopYellow)
-                    Text(
-                        (
-                            Formatter.decimalFormatterWithTwoFractionDigits.string(
-                                from: NSNumber(value: state.enactedAndNonEnactedDeterminations.first?.cob ?? 0)
-                            ) ?? "0"
-                        ) +
-                            String(localized: " g", comment: "gram of carbs")
-                    )
-                    .font(.callout).fontWeight(.bold).fontDesign(.rounded)
+            }
+            chips += tempTargetPresetChips.map { preset in
+                let name = preset.name ?? String(localized: "Temp Target")
+                let isActive = preset.enabled
+                let objectID = preset.objectID
+                return HomeDockChip(
+                    id: "temptarget-" + objectID.uriRepresentation().absoluteString,
+                    name: name,
+                    icon: "target",
+                    color: .loopGreen,
+                    isActive: isActive
+                ) {
+                    handleChipTap(name: name, isOverride: false, objectID: objectID, isActive: isActive)
                 }
+            }
+            return chips
+        }
 
-                Spacer()
-
-                if state.maxIOB == 0.0 {
-                    HStack {
-                        Image(systemName: "exclamationmark.circle.fill")
-                        Text("MaxIOB: 0 U")
-                    }.bold()
-                        .foregroundStyle(Color.red)
-                        .font(.callout)
+        func handleChipTap(name: String, isOverride: Bool, objectID: NSManagedObjectID, isActive: Bool) {
+            if isActive {
+                // Cancelling goes through the same confirmation dialogs as the dock Cancel button.
+                if isOverride {
+                    isConfirmStopOverridePresented = true
                 } else {
-                    HStack {
-                        /// Only display the insulin delivery rate info if the pump is not
-                        /// suspended and is available (e.g., pod is paired & not faulted).
-                        let pumpAvailable = state.apsManager.isScheduledBasal != nil
-                        if !state.apsManager.isSuspended && pumpAvailable {
-                            Image(systemName: "drop.circle")
-                                .font(.callout)
-                                .foregroundColor(.insulinTintColor)
-                            if let basalString = self.basalString {
-                                /// Adjust opacity when displaying a scheduled basal rate
-                                let opacity = state.apsManager?.isScheduledBasal == true ? 0.6 : 1.0
-                                if basalString.count > 5 {
-                                    Text(basalString)
-                                        .font(.callout).fontWeight(.bold).fontDesign(.rounded)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.85)
-                                        .truncationMode(.tail)
-                                        .allowsTightening(true)
-                                        .opacity(opacity)
-                                } else {
-                                    // Short strings can just display normally
-                                    Text(basalString)
-                                        .font(.callout).fontWeight(.bold).fontDesign(.rounded)
-                                        .opacity(opacity)
-                                }
-                            } else {
-                                Text("No Data")
-                                    .font(.callout).fontWeight(.bold).fontDesign(.rounded)
-                            }
-                        }
-                    }
+                    isConfirmStopTempTargetShown = true
                 }
-            }.padding(.horizontal)
-        }
-
-        @ViewBuilder func adjustmentsOverrideView(_ overrideString: String) -> some View {
-            Group {
-                Image(systemName: "clock.arrow.2.circlepath")
-                    .font(.title2)
-                    .foregroundStyle(Color.primary, Color.purple)
-                VStack(alignment: .leading) {
-                    Text(latestOverride.first?.name ?? String(localized: "Custom Override"))
-                        .font(.subheadline)
-                        .frame(alignment: .leading)
-
-                    Text(overrideString)
-                        .font(.caption)
-                }
-            }
-            .onTapGesture {
-                selectedTab = 2
+            } else if state.settingsManager.settings.requireAdjustmentsConfirmation {
+                pendingChipActivation = DockChipActivation(
+                    name: name,
+                    isOverride: isOverride,
+                    objectID: objectID
+                )
+            } else {
+                activateChip(DockChipActivation(name: name, isOverride: isOverride, objectID: objectID))
             }
         }
 
-        @ViewBuilder func adjustmentsTempTargetView(_ tempTargetString: String) -> some View {
-            Group {
-                Image(systemName: "target")
-                    .font(.title2)
-                    .foregroundStyle(Color.loopGreen)
-                VStack(alignment: .leading) {
-                    Text(latestTempTarget.first?.name ?? String(localized: "Temp Target"))
-                        .font(.subheadline)
-                    Text(tempTargetString)
-                        .font(.caption)
-                }
+        func activateChip(_ activation: DockChipActivation) {
+            // Wire the Adjustments state lazily: enacting is the only thing that
+            // needs it, and wiring subscribes the model (which triggers a
+            // determine-basal pass) — don't pay that on every Home appear.
+            if adjustmentsState.resolver == nil {
+                adjustmentsState.resolver = resolver
             }
-            .onTapGesture {
-                selectedTab = 2
-            }
-        }
-
-        @ViewBuilder func adjustmentsCancelView(_ cancelAction: @escaping () -> Void) -> some View {
-            Image(systemName: "xmark.app")
-                .font(.title)
-                .onTapGesture {
-                    cancelAction()
+            Task {
+                if activation.isOverride {
+                    await adjustmentsState.enactOverridePreset(withID: activation.objectID)
+                    // Resync other module instances (e.g. the Adjustments tab) —
+                    // same notification the Home-screen cancel path posts.
+                    Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
+                } else {
+                    await adjustmentsState.enactTempTargetPreset(withID: activation.objectID)
+                    Foundation.NotificationCenter.default.post(name: .didUpdateTempTargetConfiguration, object: nil)
                 }
-        }
-
-        @ViewBuilder func adjustmentsCancelTempTargetView() -> some View {
-            Image(systemName: "xmark.app")
-                .font(.title)
-                .confirmationDialog(
-                    "Stop the Temp Target \"\(latestTempTarget.first?.name ?? "")\"?",
-                    isPresented: $isConfirmStopTempTargetShown,
-                    titleVisibility: .visible
-                ) {
-                    Button("Stop", role: .destructive) {
-                        Task {
-                            guard let objectID = latestTempTarget.first?.objectID else { return }
-                            await state.cancelTempTarget(withID: objectID)
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
-                .padding(.trailing, 8)
-                .onTapGesture {
-                    if !latestTempTarget.isEmpty {
-                        isConfirmStopTempTargetShown = true
-                    }
-                }
-        }
-
-        @ViewBuilder func adjustmentsCancelOverrideView() -> some View {
-            Image(systemName: "xmark.app")
-                .font(.title)
-                .confirmationDialog(
-                    "Stop the Override \"\(latestOverride.first?.name ?? "")\"?",
-                    isPresented: $isConfirmStopOverridePresented,
-                    titleVisibility: .visible
-                ) {
-                    Button("Stop", role: .destructive) {
-                        Task {
-                            guard let objectID = latestOverride.first?.objectID else { return }
-                            await state.cancelOverride(withID: objectID)
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
-                .padding(.trailing, 8)
-                .onTapGesture {
-                    if !latestOverride.isEmpty {
-                        isConfirmStopOverridePresented = true
-                    }
-                }
-        }
-
-        @ViewBuilder func noActiveAdjustmentsView() -> some View {
-            Group {
-                VStack {
-                    Text("No Active Adjustment")
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Profile at 100 %")
-                        .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }.padding(.leading, 10)
-
-                Spacer()
-
-                /// to ensure the same position....
-                Image(systemName: "xmark.app")
-                    .font(.title)
-                    // clear color for the icon
-                    .foregroundStyle(Color.clear)
-            }.onTapGesture {
-                selectedTab = 2
+                showDockToast(String(localized: "\(activation.name) started"))
             }
         }
 
-        @ViewBuilder func adjustmentView(geo: GeometryProxy) -> some View {
-//            let background = colorScheme == .dark ? Material.ultraThinMaterial.opacity(0.5) : Color.black.opacity(0.2)
+        @State private var dockToastGeneration = 0
 
-            ZStack {
-                /// rectangle as background
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        (overrideString != nil || tempTargetString != nil) ?
-                            (
-                                colorScheme == .dark ?
-                                    Color(red: 0.03921568627, green: 0.133333333, blue: 0.2156862745) :
-                                    Color.insulin.opacity(0.1)
-                            ) : Color.clear // Use clear and add the Material in the background
-                    )
-                    .background(colorScheme == .dark ? Color.chart.opacity(0.25) : Color.black.opacity(0.075))
-                    .clipShape(RoundedRectangle(cornerRadius: 15))
-                    .frame(height: geo.size.height * 0.08)
-                    .shadow(
-                        color: (overrideString != nil || tempTargetString != nil) ?
-                            (
-                                colorScheme == .dark ? Color(red: 0.02745098039, green: 0.1098039216, blue: 0.1411764706) :
-                                    Color.black.opacity(0.33)
-                            ) : Color.clear,
-                        radius: 3
-                    )
-                HStack {
-                    if let overrideString = overrideString, let tempTargetString = tempTargetString {
-                        HStack {
-                            adjustmentsOverrideView(overrideString)
-
-                            Spacer()
-
-                            Divider()
-                                .frame(height: geo.size.height * 0.05)
-                                .padding(.horizontal, 2)
-
-                            adjustmentsTempTargetView(tempTargetString)
-
-                            Spacer()
-
-                            adjustmentsCancelView({
-                                if !latestTempTarget.isEmpty, !latestOverride.isEmpty {
-                                    showCancelConfirmDialog = true
-                                } else if !latestOverride.isEmpty {
-                                    showCancelAlert = true
-                                } else if !latestTempTarget.isEmpty {
-                                    showCancelAlert = true
-                                }
-                            })
-                        }
-                    } else if let overrideString = overrideString {
-                        adjustmentsOverrideView(overrideString)
-                        Spacer()
-                        adjustmentsCancelOverrideView()
-
-                    } else if let tempTargetString = tempTargetString {
-                        HStack {
-                            adjustmentsTempTargetView(tempTargetString)
-                            Spacer()
-                            adjustmentsCancelTempTargetView()
-                        }
-                    } else {
-                        noActiveAdjustmentsView()
-                    }
-                }.padding(.horizontal, 10)
-                    .confirmationDialog("Adjustment to Stop", isPresented: $showCancelConfirmDialog) {
-                        Button("Stop Override", role: .destructive) {
-                            Task {
-                                guard let objectID = latestOverride.first?.objectID else { return }
-                                await state.cancelOverride(withID: objectID)
-                            }
-                        }
-                        Button("Stop Temp Target", role: .destructive) {
-                            Task {
-                                guard let objectID = latestTempTarget.first?.objectID else { return }
-                                await state.cancelTempTarget(withID: objectID)
-                            }
-                        }
-                        Button("Stop All Adjustments", role: .destructive) {
-                            Task {
-                                guard let overrideObjectID = latestOverride.first?.objectID else { return }
-                                await state.cancelOverride(withID: overrideObjectID)
-
-                                guard let tempTargetObjectID = latestTempTarget.first?.objectID else { return }
-                                await state.cancelTempTarget(withID: tempTargetObjectID)
-                            }
-                        }
-                    } message: {
-                        Text("Select Adjustment")
-                    }
-            }.padding(.horizontal, 10).padding(.bottom, UIDevice.adjustPadding(min: nil, max: 10))
+        func showDockToast(_ text: String) {
+            dockToastGeneration += 1
+            let generation = dockToastGeneration
+            withAnimation(.easeOut(duration: 0.18)) { dockToastText = text }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                guard generation == dockToastGeneration else { return }
+                withAnimation(.easeIn(duration: 0.2)) { dockToastText = nil }
+            }
         }
 
-        @ViewBuilder func bolusView(geo: GeometryProxy, _ progress: Decimal) -> some View {
+        @ViewBuilder private func dockBolusRow(_ progress: Decimal) -> some View {
             /// ensure that state.lastPumpBolus has a value, i.e. there is a last bolus done by the pump and not an external bolus
-            /// - TRUE:  show the pump bolus
-            /// - FALSE:  do not show a progress bar at all
             if let bolusTotal = state.lastPumpBolus?.bolus?.amount {
                 let bolusFraction = progress * (bolusTotal as Decimal)
                 let bolusString =
@@ -786,58 +908,230 @@ extension Home {
                         (Formatter.decimalFormatterWithThreeFractionDigits.string(from: bolusTotal as NSNumber) ?? "0")
                         + String(localized: " U", comment: "Insulin unit")
 
-                ZStack {
-                    /// rectangle as background
-                    RoundedRectangle(cornerRadius: 15)
-                        .fill(
-                            colorScheme == .dark ? Color(red: 0.03921568627, green: 0.133333333, blue: 0.2156862745) : Color
-                                .insulin
-                                .opacity(0.2)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 15))
-                        .frame(height: geo.size.height * 0.08)
-                        .shadow(
-                            color: colorScheme == .dark ? Color(red: 0.02745098039, green: 0.1098039216, blue: 0.1411764706) :
-                                Color.black.opacity(0.33),
-                            radius: 3
-                        )
-
-                    /// actual bolus view
-                    HStack {
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         Image(systemName: "cross.vial.fill")
-                            .font(.system(size: 25))
-
-                        Spacer()
-
-                        VStack {
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.insulin)
+                        VStack(alignment: .leading, spacing: 1) {
                             Text("Bolusing")
-                                .font(.subheadline)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .font(.subheadline).fontWeight(.semibold)
                             Text(bolusString)
                                 .font(.caption)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }.padding(.leading, 5)
-
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer()
-
                         Button {
                             state.showProgressView()
                             state.cancelBolus()
                         } label: {
                             Image(systemName: "xmark.app")
-                                .font(.system(size: 25))
+                                .font(.system(size: 24))
                         }
-                    }.padding(.horizontal, 10)
-                        .padding(.trailing, 8)
-                }
-                .padding(.horizontal, 10)
-                .padding(.bottom, UIDevice.adjustPadding(min: nil, max: 10))
-                .overlay(alignment: .bottom) {
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Cancel bolus")
+                    }
                     BolusProgressBar(progress: progress)
-                        .padding(.horizontal, 18)
-                        .padding(.bottom, 9)
-                }.clipShape(RoundedRectangle(cornerRadius: 15))
+                }
             }
+        }
+
+        @ViewBuilder private var dockStatusRow: some View {
+            if let progress = state.bolusProgress {
+                dockBolusRow(progress)
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 17))
+                        .foregroundStyle(hasActiveAdjustment ? Color.purple : Color.secondary)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        if let overrideString = overrideString {
+                            HStack(spacing: 4) {
+                                Text(latestOverride.first?.name ?? String(localized: "Custom Override"))
+                                    .font(.subheadline).fontWeight(.semibold)
+                                    .lineLimit(1)
+                                Text("· " + overrideString)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        if let tempTargetString = tempTargetString {
+                            HStack(spacing: 4) {
+                                Text(latestTempTarget.first?.name ?? String(localized: "Temp Target"))
+                                    .font(.subheadline).fontWeight(.semibold)
+                                    .lineLimit(1)
+                                Text("· " + tempTargetString)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        if !hasActiveAdjustment {
+                            (
+                                Text("No Active Adjustment — ").foregroundStyle(Color.secondary)
+                                    + Text("Profile at 100 %").fontWeight(.semibold)
+                            )
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if hasActiveAdjustment {
+                        Button {
+                            if !latestTempTarget.isEmpty, !latestOverride.isEmpty {
+                                showCancelConfirmDialog = true
+                            } else if !latestOverride.isEmpty {
+                                isConfirmStopOverridePresented = true
+                            } else if !latestTempTarget.isEmpty {
+                                isConfirmStopTempTargetShown = true
+                            }
+                        } label: {
+                            Text("Cancel")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.loopRed)
+                                .padding(.horizontal, 12)
+                                .frame(height: 30)
+                                .background(Color.loopRed.opacity(0.16))
+                                .clipShape(RoundedRectangle(cornerRadius: 9))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 9)
+                                        .stroke(Color.loopRed.opacity(0.5), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        var adjustmentsDock: some View {
+            HomeAdjustmentsDock(
+                chips: dockChips,
+                // Opening the dock goes to the Adjustments tab: same management UI,
+                // without spinning up (and re-subscribing) another Adjustments
+                // state model per sheet presentation.
+                onOpen: { selectedTab = 2 }
+            ) {
+                dockStatusRow
+            }
+            .confirmationDialog(
+                "Stop the Override \"\(latestOverride.first?.name ?? "")\"?",
+                isPresented: $isConfirmStopOverridePresented,
+                titleVisibility: .visible
+            ) {
+                Button("Stop", role: .destructive) {
+                    Task {
+                        guard let objectID = latestOverride.first?.objectID else { return }
+                        await state.cancelOverride(withID: objectID)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .confirmationDialog(
+                "Stop the Temp Target \"\(latestTempTarget.first?.name ?? "")\"?",
+                isPresented: $isConfirmStopTempTargetShown,
+                titleVisibility: .visible
+            ) {
+                Button("Stop", role: .destructive) {
+                    Task {
+                        guard let objectID = latestTempTarget.first?.objectID else { return }
+                        await state.cancelTempTarget(withID: objectID)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .confirmationDialog("Adjustment to Stop", isPresented: $showCancelConfirmDialog) {
+                Button("Stop Override", role: .destructive) {
+                    Task {
+                        guard let objectID = latestOverride.first?.objectID else { return }
+                        await state.cancelOverride(withID: objectID)
+                    }
+                }
+                Button("Stop Temp Target", role: .destructive) {
+                    Task {
+                        guard let objectID = latestTempTarget.first?.objectID else { return }
+                        await state.cancelTempTarget(withID: objectID)
+                    }
+                }
+                Button("Stop All Adjustments", role: .destructive) {
+                    Task {
+                        guard let overrideObjectID = latestOverride.first?.objectID else { return }
+                        await state.cancelOverride(withID: overrideObjectID)
+
+                        guard let tempTargetObjectID = latestTempTarget.first?.objectID else { return }
+                        await state.cancelTempTarget(withID: tempTargetObjectID)
+                    }
+                }
+            } message: {
+                Text("Select Adjustment")
+            }
+            .confirmationDialog(
+                pendingChipActivation.map {
+                    $0.isOverride
+                        ? String(localized: "Start the Override \"\($0.name)\"?")
+                        : String(localized: "Start the Temp Target \"\($0.name)\"?")
+                } ?? "",
+                isPresented: Binding(
+                    get: { pendingChipActivation != nil },
+                    set: { if !$0 { pendingChipActivation = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: pendingChipActivation
+            ) { activation in
+                // `presenting:` hands the captured value into the action, so the
+                // dismissal binding clearing pendingChipActivation cannot race it.
+                Button("Start") {
+                    activateChip(activation)
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+        }
+
+        // MARK: - Quick actions (long-press on the + tab button)
+
+        private var quickActions: [HomeQuickAction] {
+            var items: [HomeQuickAction] = [
+                HomeQuickAction(name: String(localized: "Carbs"), icon: "fork.knife", color: .loopYellow) {
+                    state.showModal(for: .treatmentView)
+                },
+                HomeQuickAction(name: String(localized: "Bolus"), icon: "syringe.fill", color: .insulin) {
+                    state.showModal(for: .treatmentView)
+                },
+                HomeQuickAction(
+                    name: String(localized: "Meal Presets"),
+                    icon: "bookmark.fill",
+                    color: .loopYellow,
+                    hint: String(localized: "Treatments")
+                ) {
+                    state.showModal(for: .treatmentView)
+                },
+                HomeQuickAction(name: String(localized: "Manual Glucose"), icon: "drop.fill", color: .loopGreen) {
+                    selectedTab = 1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        Foundation.NotificationCenter.default.post(name: .presentManualGlucoseEntry, object: nil)
+                    }
+                }
+            ]
+            if state.allowManualTemp {
+                items.append(
+                    HomeQuickAction(name: String(localized: "Manual Temp Basal"), icon: "slider.horizontal.3", color: .tabBar) {
+                        state.showModal(for: .manualTempBasal)
+                    }
+                )
+            }
+            items.append(
+                HomeQuickAction(name: String(localized: "Adjustments"), icon: "clock.arrow.2.circlepath", color: .purple) {
+                    selectedTab = 2
+                }
+            )
+            return items
         }
 
         @ViewBuilder func alertSafetyNotificationsView(geo: GeometryProxy) -> some View {
@@ -888,29 +1182,17 @@ extension Home {
 
         @ViewBuilder func mainViewElements(_ geo: GeometryProxy) -> some View {
             VStack(spacing: 0) {
-                ZStack {
+                Group {
                     if let apsManager = state.apsManager, let bluetoothManager = apsManager.bluetoothManager,
                        bluetoothManager.bluetoothAuthorization != .authorized
                     {
                         BluetoothRequiredView()
                     } else {
-                        /// right panel with loop status and evBG
-                        HStack {
-                            Spacer()
-                            rightHeaderPanel(geo)
-                        }.padding(.trailing, 20)
-
-                        /// glucose bobble
-                        glucoseView
-
-                        /// left panel with pump related info
-                        HStack {
-                            pumpView
-                            Spacer()
-                        }.padding(.leading, 20)
+                        heroHeader
                     }
                 }
-                .padding(.top, 10)
+                .padding(.horizontal, 16)
+                .padding(.top, 2)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if notificationsDisabled {
                         alertSafetyNotificationsView(geo: geo)
@@ -921,40 +1203,29 @@ extension Home {
                     }
                 }
 
-                mealPanel(geo).padding(.top, UIDevice.adjustPadding(min: nil, max: 30))
-                    .padding(.bottom, UIDevice.adjustPadding(min: nil, max: 20))
+                metricsRow
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+
+                deviceRow
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+
+                chartHeaderRow
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 2)
 
                 mainChart(geo: geo)
 
                 HStack {
-                    tappableButton(
-                        buttonColor: (colorScheme == .dark ? Color.white : Color.black).opacity(0.8),
-                        label: String(localized: "Stats", comment: "Stats icon in main view"),
-                        iconString: statsIconString,
-                        action: { state.showModal(for: .statistics) }
-                    )
-
                     Spacer()
-
-                    timeIntervalButtons.padding(.top, UIDevice.adjustPadding(min: 0, max: 10))
-                        .padding(.bottom, UIDevice.adjustPadding(min: 0, max: 10))
-
+                    timeIntervalButtons
                     Spacer()
-
-                    tappableButton(
-                        buttonColor: (colorScheme == .dark ? Color.white : Color.black).opacity(0.8),
-                        label: String(localized: "Info", comment: "Info icon in main view"),
-                        iconString: "info",
-                        action: { state.isLegendPresented.toggle() }
-                    )
-                }.padding([.horizontal, .bottom])
-
-                if let progress = state.bolusProgress {
-                    bolusView(geo: geo, progress)
-                        .padding(.bottom, UIDevice.adjustPadding(min: nil, max: 40))
-                } else {
-                    adjustmentView(geo: geo).padding(.bottom, UIDevice.adjustPadding(min: nil, max: 40))
                 }
+                .padding(.vertical, 6)
+
+                adjustmentsDock
             }
             .background(appState.trioBackgroundColor(for: colorScheme))
             .onReceive(
@@ -1105,17 +1376,7 @@ extension Home {
                 }
                 .tint(Color.tabBar)
 
-                Button(
-                    action: {
-                        state.showModal(for: .treatmentView) },
-                    label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 40))
-                            .foregroundStyle(Color.tabBar)
-                            .padding(.vertical, 2)
-                            .padding(.horizontal, 24)
-                    }
-                )
+                plusButton
             }.ignoresSafeArea(.keyboard, edges: .bottom).blur(radius: state.waitForSuggestion ? 8 : 0)
                 .onChange(of: selectedTab) {
                     if !settingsPath.isEmpty {
@@ -1124,9 +1385,82 @@ extension Home {
                 }
         }
 
+        /// Center + button: tap opens the treatments entry, long-press pops the
+        /// quick actions menu (with press scale/glow feedback).
+        var plusButton: some View {
+            ZStack {
+                Circle()
+                    .fill(Color.tabBar)
+                    .frame(width: 52, height: 52)
+                    .shadow(
+                        color: Color.tabBar.opacity(plusButtonPressed ? 0.6 : 0.4),
+                        radius: plusButtonPressed ? 14 : 8,
+                        y: 4
+                    )
+                Image(systemName: "plus")
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundStyle(colorScheme == .dark ? Color.bgDarkerDarkBlue : Color.white)
+            }
+            .scaleEffect(plusButtonPressed ? 1.1 : 1)
+            .padding(.vertical, 2)
+            .padding(.horizontal, 24)
+            .contentShape(Circle())
+            .accessibilityLabel(String(localized: "Add treatment"))
+            .onTapGesture {
+                state.showModal(for: .treatmentView)
+            }
+            .onLongPressGesture(minimumDuration: 0.42) {
+                let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
+                impactHeavy.impactOccurred()
+                withAnimation(.easeOut(duration: 0.18)) { showQuickActions = true }
+            } onPressingChanged: { pressing in
+                withAnimation(.easeOut(duration: 0.12)) { plusButtonPressed = pressing }
+            }
+        }
+
         var body: some View {
             ZStack(alignment: .center) {
                 tabBar()
+
+                // Scrim + floating overlays for tile details and quick actions.
+                if showQuickActions || activeTileDetail != nil {
+                    Color.black.opacity(0.45)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.easeIn(duration: 0.14)) {
+                                showQuickActions = false
+                                activeTileDetail = nil
+                            }
+                        }
+                }
+
+                if let activeTileDetail {
+                    VStack {
+                        Spacer().frame(height: 120)
+                        HomeTileDetailCard(detail: activeTileDetail) {
+                            withAnimation(.easeIn(duration: 0.14)) { self.activeTileDetail = nil }
+                        }
+                        Spacer()
+                    }
+                }
+
+                if showQuickActions {
+                    VStack {
+                        Spacer()
+                        HomeQuickActionsCard(actions: quickActions) {
+                            withAnimation(.easeIn(duration: 0.14)) { showQuickActions = false }
+                        }
+                        .padding(.bottom, 96)
+                    }
+                }
+
+                if let dockToastText {
+                    VStack {
+                        HomeToastView(text: dockToastText)
+                            .padding(.top, 8)
+                        Spacer()
+                    }
+                }
 
                 if state.waitForSuggestion {
                     CustomProgressView(text: String(localized: "Updating IOB...", comment: "Progress text when updating IOB"))

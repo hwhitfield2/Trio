@@ -33,7 +33,7 @@ struct NotificationsView: BaseView {
     var body: some View {
         List {
             Section(
-                header: Text("Manage iOS Preferences"),
+                header: Text("Manage iOS Preferences").glassCaption(),
                 content: {
                     manageNotifications
                 }
@@ -74,18 +74,25 @@ struct NotificationsView: BaseView {
             }.listRowBackground(Color.chart)
 
             Section(
-                header: Text("Notification Center"),
+                header: Text("Notification Center").glassCaption(),
                 content: {
-                    Text("Trio Notifications")
+                    SettingsIconRow(symbol: "bell.badge.fill", tint: .loopYellow, label: Text("Trio Notifications"))
                         .navigationLink(to: .glucoseNotificationSettings, from: self)
 
                     if #available(iOS 16.2, *) {
-                        Text("Live Activity").navigationLink(to: .liveActivitySettings, from: self)
+                        SettingsIconRow(
+                            symbol: "platter.filled.bottom.iphone",
+                            tint: Color.glassCyan,
+                            label: Text("Live Activity")
+                        )
+                        .navigationLink(to: .liveActivitySettings, from: self)
                     }
 
-                    Text("Calendar Events").navigationLink(to: .calendarEventSettings, from: self)
+                    SettingsIconRow(symbol: "calendar", tint: .loopGreen, label: Text("Calendar Events"))
+                        .navigationLink(to: .calendarEventSettings, from: self)
 
-                    Text("Caregiver Messaging").navigationLink(to: .caregiverMessagingSettings, from: self)
+                    SettingsIconRow(symbol: "person.2.fill", tint: .tabBar, label: Text("Caregiver Messaging"))
+                        .navigationLink(to: .caregiverMessagingSettings, from: self)
                 }
             ).listRowBackground(Color.chart)
         }
@@ -146,7 +153,14 @@ extension NotificationsView {
     private var manageNotifications: some View {
         Button(action: { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }) {
             HStack {
-                Text(String(localized: "Open iOS Settings", comment: "Manage Permissions in Settings button text"))
+                SettingsIconRow(
+                    symbol: "gear",
+                    tint: .secondary,
+                    label: Text(String(
+                        localized: "Open iOS Settings",
+                        comment: "Manage Permissions in Settings button text"
+                    ))
+                )
                 Spacer()
                 Image(systemName: "chevron.right").foregroundColor(.gray).font(.footnote)
             }
