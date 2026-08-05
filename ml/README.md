@@ -35,6 +35,26 @@ personal health data. Both are ignored via `ml/.gitignore`.
   linear trend extrapolation. A model is only interesting if it beats
   persistence.
 
+## Shadow mode
+
+```sh
+python3 ml/shadow.py /path/to/trio-training-export.jsonl --outdir ml/output
+```
+
+Replays the export walk-forward by day — each day is scored by models
+trained only on strictly earlier days — and compares, on identical
+timestamps: persistence, oref's `eventualBG` forecast, and the ML models.
+`shadow_report.json` breaks MAE down by situation (BG band, post-meal vs
+not) and logs every timestamp where ML and oref disagreed by ≥40 mg/dL
+along with what actually happened.
+
+Important caveat: the export contains only oref's `eventualBG` (where BG
+lands after all insulin/carb activity), which answers a longer-horizon
+question than the ML's +30/+60 min forecasts, so oref's MAE here is
+expected to look worse than it is. Exporting the determination `predBGs`
+arrays would make the comparison exact. Shadow mode observes and reports
+only — it changes nothing about dosing.
+
 ## Known limitations
 
 - Delivered basal outside temp segments is assumed to be 0 U/hr. That is
