@@ -345,7 +345,11 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                 // Set units
                 watchState.units = self.units
 
+                // Set pump suspension state
+                watchState.isPumpSuspended = self.apsManager.isSuspended
+
                 // Add limits and pump specific dosing increment settings values
+                watchState.maxBasal = self.settingsManager.pumpSettings.maxBasal
                 watchState.maxBolus = self.settingsManager.pumpSettings.maxBolus
                 watchState.maxCarbs = self.settingsManager.settings.maxCarbs
                 watchState.maxFat = self.settingsManager.settings.maxFat
@@ -463,6 +467,8 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                     "isEnabled": preset.isEnabled
                 ]
             },
+            WatchMessageKeys.isPumpSuspended: state.isPumpSuspended,
+            WatchMessageKeys.maxBasal: state.maxBasal,
             WatchMessageKeys.maxBolus: state.maxBolus,
             WatchMessageKeys.maxCarbs: state.maxCarbs,
             WatchMessageKeys.maxFat: state.maxFat,
@@ -602,6 +608,20 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                     "📱 Received meal bolus combo request from watch: \(bolusAmount)U, \(carbsAmount)g at \(date)"
                 )
                 self.handleCombinedRequest(bolusAmount: Decimal(bolusAmount), carbsAmount: Decimal(carbsAmount), date: date)
+            } else if message[WatchMessageKeys.suspendPump] as? Bool == true {
+                debug(.watchManager, "📱 Received suspend pump request from watch")
+                self.handleSuspendPumpRequest()
+            } else if message[WatchMessageKeys.resumePump] as? Bool == true {
+                debug(.watchManager, "📱 Received resume pump request from watch")
+                self.handleResumePumpRequest()
+            } else if let tempBasalRate = message[WatchMessageKeys.setTempBasal] as? Double,
+                      let tempBasalDuration = message[WatchMessageKeys.tempBasalDuration] as? Int
+            {
+                debug(
+                    .watchManager,
+                    "📱 Received temp basal request from watch: \(tempBasalRate) U/hr for \(tempBasalDuration) min"
+                )
+                self.handleTempBasalRequest(rate: tempBasalRate, durationMinutes: tempBasalDuration)
             } else {
                 debug(.watchManager, "📱 Invalid or incomplete data received from watch. Received:  \(message)")
                 // Acknowledge failure
@@ -737,6 +757,88 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                 )
             }
             debug(.watchManager, "📱 Enacted bolus via APS Manager: \(amount)U")
+        }
+    }
+
+    /// Suspends insulin delivery on request of the Watch
+    private func handleSuspendPumpRequest() {
+        Task {
+            await apsManager.suspendPump { success, message in
+                self.sendAcknowledgment(
+                    toWatch: success,
+                    message: message,
+                    ackCode: success == true ? .pumpSuspended : .genericFailure
+                )
+                self.pushWatchStateAfterPumpStateChange()
+            }
+            debug(.watchManager, "📱 Processed suspend pump request via APS Manager")
+        }
+    }
+
+    /// Resumes insulin delivery on request of the Watch
+    private func handleResumePumpRequest() {
+        Task {
+            await apsManager.resumePump { success, message in
+                self.sendAcknowledgment(
+                    toWatch: success,
+                    message: message,
+                    ackCode: success == true ? .pumpResumed : .genericFailure
+                )
+                self.pushWatchStateAfterPumpStateChange()
+            }
+            debug(.watchManager, "📱 Processed resume pump request via APS Manager")
+        }
+    }
+
+    /// Enacts a temporary basal rate on request of the Watch
+    /// - Parameters:
+    ///   - rate: The requested basal rate in U/hr; clamped to the pump's max basal setting
+    ///   - durationMinutes: The requested duration in minutes
+    private func handleTempBasalRequest(rate: Double, durationMinutes: Int) {
+        // Never trust the watch input alone - clamp to the max basal safety limit and a sane duration
+        let maxBasal = Double(truncating: settingsManager.pumpSettings.maxBasal as NSNumber)
+
+        guard maxBasal > 0 else {
+            sendAcknowledgment(
+                toWatch: false,
+                message: String(localized: "Error! No max basal rate configured."),
+                ackCode: .genericFailure
+            )
+            return
+        }
+
+        let clampedRate = min(max(rate, 0), maxBasal)
+        let clampedDuration = min(max(durationMinutes, 0), 720)
+
+        guard clampedDuration > 0 else {
+            sendAcknowledgment(
+                toWatch: false,
+                message: String(localized: "Error! Invalid temp basal duration."),
+                ackCode: .genericFailure
+            )
+            return
+        }
+
+        Task {
+            await apsManager.enactTempBasal(rate: clampedRate, duration: TimeInterval(clampedDuration * 60)) { success, message in
+                self.sendAcknowledgment(
+                    toWatch: success,
+                    message: message,
+                    ackCode: success == true ? .tempBasalSet : .genericFailure
+                )
+            }
+            debug(.watchManager, "📱 Enacted temp basal via APS Manager: \(clampedRate) U/hr for \(clampedDuration) min")
+        }
+    }
+
+    /// Pushes a fresh WatchState shortly after a suspend/resume so the watch UI
+    /// reflects the new pump state. The short delay gives the pump status
+    /// publisher time to update `apsManager.isSuspended`.
+    private func pushWatchStateAfterPumpStateChange() {
+        Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let state = await self.setupWatchState()
+            await self.sendDataToWatch(state)
         }
     }
 
@@ -1277,6 +1379,9 @@ extension BaseWatchManager {
         case overrideStopped = "override_stopped"
         case tempTargetStarted = "temp_target_started"
         case tempTargetStopped = "temp_target_stopped"
+        case pumpSuspended = "pump_suspended"
+        case pumpResumed = "pump_resumed"
+        case tempBasalSet = "temp_basal_set"
         case genericSuccess = "success"
         case genericFailure = "failure"
     }

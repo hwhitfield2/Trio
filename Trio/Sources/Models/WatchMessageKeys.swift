@@ -30,6 +30,12 @@ enum WatchMessageKeys {
     static let cancelTempTarget = "cancelTempTarget"
     static let activateTempTarget = "activateTempTarget"
 
+    // Pump Action Keys
+    static let suspendPump = "suspendPump"
+    static let resumePump = "resumePump"
+    static let setTempBasal = "setTempBasal"
+    static let tempBasalDuration = "tempBasalDuration"
+
     // Watch State Data Keys
     static let currentGlucose = "currentGlucose"
     static let currentGlucoseColorString = "currentGlucoseColorString"
@@ -44,7 +50,11 @@ enum WatchMessageKeys {
     static let overridePresets = "overridePresets"
     static let tempTargetPresets = "tempTargetPresets"
 
+    // Pump State Keys
+    static let isPumpSuspended = "isPumpSuspended"
+
     // Limits and Settings Keys
+    static let maxBasal = "maxBasal"
     static let maxBolus = "maxBolus"
     static let maxCarbs = "maxCarbs"
     static let maxFat = "maxFat"

@@ -23,6 +23,9 @@ protocol APSManager {
     var isScheduledBasal: Bool? { get }
     var isSuspended: Bool { get }
     func enactTempBasal(rate: Double, duration: TimeInterval) async
+    func enactTempBasal(rate: Double, duration: TimeInterval, callback: ((Bool, String) -> Void)?) async
+    func suspendPump(callback: ((Bool, String) -> Void)?) async
+    func resumePump(callback: ((Bool, String) -> Void)?) async
     func determineBasal() async throws
     func determineBasalSync() async throws
     func simulateDetermineBasal(
@@ -682,16 +685,26 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     func enactTempBasal(rate: Double, duration: TimeInterval) async {
+        await enactTempBasal(rate: rate, duration: duration, callback: nil)
+    }
+
+    func enactTempBasal(rate: Double, duration: TimeInterval, callback: ((Bool, String) -> Void)?) async {
         if let error = verifyStatus() {
             processError(error)
+            callback?(false, error.localizedDescription)
             return
         }
 
-        guard let pump = pumpManager else { return }
+        guard let pump = pumpManager else {
+            callback?(false, String(localized: "No pump configured."))
+            return
+        }
 
         // unable to do temp basal during manual temp basal 😁
         if isManualTempBasal {
-            processError(APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp"))
+            let error = APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp")
+            processError(error)
+            callback?(false, error.localizedDescription)
             return
         }
 
@@ -702,9 +715,67 @@ final class BaseAPSManager: APSManager, Injectable {
         do {
             try await pump.enactTempBasal(unitsPerHour: roundedAmout, for: duration)
             debug(.apsManager, "Temp Basal succeeded")
+            callback?(
+                true,
+                String(
+                    localized: "Temp Basal of \(Formatter.decimalFormatterWithTwoFractionDigits.string(from: roundedAmout as NSNumber) ?? "\(roundedAmout)") U/hr set successfully.",
+                    comment: "Success message after setting a temp basal"
+                )
+            )
         } catch {
             debug(.apsManager, "Temp Basal failed with error: \(error)")
             processError(APSError.pumpError(error))
+            callback?(false, String(localized: "Error! Temp Basal failed with error: \(error.localizedDescription)"))
+        }
+    }
+
+    func suspendPump(callback: ((Bool, String) -> Void)?) async {
+        guard let pump = pumpManager else {
+            callback?(false, String(localized: "No pump configured."))
+            return
+        }
+
+        debug(.apsManager, "Suspend insulin delivery")
+
+        do {
+            try await pump.suspendDelivery()
+            debug(.apsManager, "Suspend delivery succeeded")
+            callback?(
+                true,
+                String(
+                    localized: "Insulin delivery suspended successfully.",
+                    comment: "Success message after suspending insulin delivery"
+                )
+            )
+        } catch {
+            debug(.apsManager, "Suspend delivery failed with error: \(error)")
+            processError(APSError.pumpError(error))
+            callback?(false, String(localized: "Error! Suspending insulin delivery failed: \(error.localizedDescription)"))
+        }
+    }
+
+    func resumePump(callback: ((Bool, String) -> Void)?) async {
+        guard let pump = pumpManager else {
+            callback?(false, String(localized: "No pump configured."))
+            return
+        }
+
+        debug(.apsManager, "Resume insulin delivery")
+
+        do {
+            try await pump.resumeDelivery()
+            debug(.apsManager, "Resume delivery succeeded")
+            callback?(
+                true,
+                String(
+                    localized: "Insulin delivery resumed successfully.",
+                    comment: "Success message after resuming insulin delivery"
+                )
+            )
+        } catch {
+            debug(.apsManager, "Resume delivery failed with error: \(error)")
+            processError(APSError.pumpError(error))
+            callback?(false, String(localized: "Error! Resuming insulin delivery failed: \(error.localizedDescription)"))
         }
     }
 
