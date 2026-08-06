@@ -80,6 +80,15 @@ struct TrioSettings: JSON, Equatable, Encodable {
     /// AI-based meal photo analysis on the bolus calculator screen
     var mealPhotoAnalysisEnabled: Bool = false
 
+    /// Model used for meal photo analysis; empty = app default
+    var mealAnalysisModelId: String = ""
+
+    /// Model used for text food search; empty = fast app default
+    var foodSearchModelId: String = ""
+
+    /// Prompt to log carbs when glucose rises like a meal but nothing was logged
+    var unannouncedMealDetectionEnabled: Bool = true
+
     /// Caregiver messaging: compose glucose status texts for sending via the Messages app
     var caregiverMessagingEnabled: Bool = false
 
@@ -407,6 +416,21 @@ extension TrioSettings: Decodable {
 
         if let mealPhotoAnalysisEnabled = try? container.decode(Bool.self, forKey: .mealPhotoAnalysisEnabled) {
             settings.mealPhotoAnalysisEnabled = mealPhotoAnalysisEnabled
+        }
+
+        if let mealAnalysisModelId = try? container.decode(String.self, forKey: .mealAnalysisModelId) {
+            settings.mealAnalysisModelId = mealAnalysisModelId
+        }
+
+        if let foodSearchModelId = try? container.decode(String.self, forKey: .foodSearchModelId) {
+            settings.foodSearchModelId = foodSearchModelId
+        }
+
+        if let unannouncedMealDetectionEnabled = try? container.decode(
+            Bool.self,
+            forKey: .unannouncedMealDetectionEnabled
+        ) {
+            settings.unannouncedMealDetectionEnabled = unannouncedMealDetectionEnabled
         }
 
         if let caregiverMessagingEnabled = try? container.decode(Bool.self, forKey: .caregiverMessagingEnabled) {

@@ -20,6 +20,7 @@ extension Treatments {
         @ObservationIgnored @Injected() var determinationStorage: DeterminationStorage!
         @ObservationIgnored @Injected() var bolusCalculationManager: BolusCalculationManager!
         @ObservationIgnored @Injected() var mealPhotoAnalysisManager: MealPhotoAnalysisManager!
+        @ObservationIgnored @Injected() var foodSearchManager: FoodSearchManager!
 
         var lowGlucose: Decimal = 70
         var highGlucose: Decimal = 180
@@ -102,6 +103,7 @@ extension Treatments {
         var superBolusInsulin: Decimal = 0
 
         var showMealPhotoSheet: Bool = false
+        var showFoodSearchSheet: Bool = false
         var mealPhotoAnalysisEnabled: Bool = false
 
         var meal: [CarbsEntry]?
@@ -109,6 +111,10 @@ extension Treatments {
         var fat: Decimal = 0
         var protein: Decimal = 0
         var note: String = ""
+        /// AI-estimated absorption duration for the pending meal entry. Passed to
+        /// carb storage on save so slow meals are spread into future-dated carb
+        /// equivalents that oref's COB follows. Nil = absorb normally.
+        var mealAbsorptionHours: Decimal?
 
         var date = Date()
         let defaultDate = Date()
@@ -661,6 +667,10 @@ extension Treatments {
                     self.id_ = UUID().uuidString
                 }
 
+                // A shared fpuID groups the entry with any derived future-dated carb
+                // equivalents (from fat/protein or from extended absorption spreading).
+                let needsFpuID = fat > 0 || protein > 0 ||
+                    (mealAbsorptionHours ?? 0) > BaseCarbsStorage.standardAbsorptionHours
                 let carbsToStore = [CarbsEntry(
                     id: id_,
                     createdAt: now,
@@ -671,9 +681,14 @@ extension Treatments {
                     note: note,
                     enteredBy: CarbsEntry.local,
                     isFPU: false,
-                    fpuID: fat > 0 || protein > 0 ? UUID().uuidString : nil
+                    fpuID: needsFpuID ? UUID().uuidString : nil,
+                    absorptionHours: mealAbsorptionHours
                 )]
                 try await carbsStorage.storeCarbs(carbsToStore, areFetchedFromRemote: false)
+
+                await MainActor.run {
+                    self.mealAbsorptionHours = nil
+                }
 
                 // only perform determine basal sync if the user doesn't use the pump bolus, otherwise the enact bolus func in the APSManger does a sync
                 if amount <= 0 {

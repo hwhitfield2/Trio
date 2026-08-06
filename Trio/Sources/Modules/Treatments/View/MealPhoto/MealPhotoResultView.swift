@@ -167,6 +167,13 @@ struct MealPhotoResultView: View {
                         .font(.footnote)
                 }
             }
+            if result.absorptionHours > BaseCarbsStorage.standardAbsorptionHours {
+                Text(
+                    "When logged, the carbs will be spread across this duration so the loop's dosing follows the slower absorption."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
             Text(result.absorptionRationale)
                 .font(.footnote)
                 .foregroundStyle(.secondary)

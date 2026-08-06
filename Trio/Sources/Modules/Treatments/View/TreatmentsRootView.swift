@@ -148,6 +148,15 @@ extension Treatments {
                     .foregroundStyle(.blue)
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Analyze meal photo")
+
+                    Button {
+                        state.showFoodSearchSheet = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .foregroundStyle(.blue)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Search food")
                 }
                 Spacer()
                 TextFieldWithToolBar(
@@ -454,6 +463,9 @@ extension Treatments {
             }
             .sheet(isPresented: $state.showMealPhotoSheet) {
                 MealPhotoAnalysisView(state: state)
+            }
+            .sheet(isPresented: $state.showFoodSearchSheet) {
+                FoodSearchView(state: state)
             }
             .sheet(isPresented: $showPresetSheet, onDismiss: {
                 showPresetSheet = false

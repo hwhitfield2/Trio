@@ -113,6 +113,9 @@ extension Home {
         var shouldRunDeleteOnSettingsChange = true
 
         var showCarbsRequiredBadge: Bool = true
+        /// Set by the unannounced meal detector while the app is active; the Home
+        /// view presents a prompt offering to open the carbs entry.
+        var unannouncedMealSuggestion: UnannouncedMealSuggestion?
         private(set) var setupPumpType: PumpConfig.PumpType = .minimed
         var minForecast: [Int] = []
         var maxForecast: [Int] = []
@@ -318,6 +321,7 @@ extension Home {
             broadcaster.register(BGTargetsObserver.self, observer: self)
             broadcaster.register(PumpReservoirObserver.self, observer: self)
             broadcaster.register(PumpDeactivatedObserver.self, observer: self)
+            broadcaster.register(UnannouncedMealObserver.self, observer: self)
 
             timer.eventHandler = {
                 DispatchQueue.main.async { [weak self] in
@@ -737,6 +741,12 @@ extension Home.StateModel:
         displayPumpStatusHighlightMessage(true)
         displayPumpStatusBadge(true)
         batteryFromPersistence = []
+    }
+}
+
+extension Home.StateModel: UnannouncedMealObserver {
+    @MainActor func unannouncedMealDetected(_ suggestion: UnannouncedMealSuggestion) {
+        unannouncedMealSuggestion = suggestion
     }
 }
 

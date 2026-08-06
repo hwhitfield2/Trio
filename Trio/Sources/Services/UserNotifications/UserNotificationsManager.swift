@@ -25,6 +25,7 @@ enum NotificationAction: String {
 
     case snooze
     case pumpConfig
+    case logCarbs
     case none
 }
 
@@ -735,6 +736,10 @@ extension BaseUserNotificationsManager: UNUserNotificationCenterDelegate {
             switch action {
             case .snooze:
                 self.router.mainModalScreen.send(.snooze)
+            case .logCarbs:
+                // Unannounced meal notification tapped: open the treatments entry
+                // so the meal can be logged right away.
+                self.router.mainModalScreen.send(.treatmentView)
             case .pumpConfig:
                 let messageCont = MessageContent(
                     content: response.notification.request.content.body,

@@ -69,8 +69,100 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
             entriesToStore.append(additionalEntry)
         }
 
+        // Extended absorption: a meal whose estimated absorption exceeds the ~3 hours
+        // oref's carb model assumes is split into an immediate portion plus
+        // future-dated carb equivalents, so COB - and with it the algorithm's dosing -
+        // follows the estimated absorption curve instead of front-loading everything.
+        var extendedTailEntries: [CarbsEntry] = []
+        if let last = entriesToStore.last, let split = Self.extendedAbsorptionSplit(for: last) {
+            entriesToStore[entriesToStore.count - 1] = split.immediate
+            extendedTailEntries = split.tail
+        }
+
         await saveCarbsToCoreData(entries: entriesToStore, areFetchedFromRemote: areFetchedFromRemote)
         await saveCarbEquivalents(entries: entriesToStore, areFetchedFromRemote: areFetchedFromRemote)
+
+        if !extendedTailEntries.isEmpty {
+            await saveFPUToCoreDataAsBatchInsert(entries: extendedTailEntries, areFetchedFromRemote: areFetchedFromRemote)
+        }
+    }
+
+    /// Absorption duration oref's carb model already covers on its own; only meals
+    /// estimated to absorb longer than this are spread.
+    static let standardAbsorptionHours: Decimal = 3
+
+    /**
+     Splits a slow-absorbing carb entry into an immediate portion and future-dated
+     carb-equivalent entries (analogous to FPUs) across the estimated absorption window.
+
+     Model: carbs arrive uniformly over `absorptionHours` (clamped to 4-10 h). The
+     immediate entry keeps the share covered by oref's own ~3 h absorption model
+     (3/duration of the total); the remainder is spread in even chunks (>= 5 g,
+     up to 7 entries) from +3 h to the end of the window. The generated entries are
+     marked `isFPU = true` and share the parent's `fpuID`, so they upload, chart,
+     and group-delete exactly like FPU carb equivalents.
+
+     Returns nil - store unchanged - when no absorption estimate is present, the
+     estimate is within the standard window, the entry is too small to split
+     meaningfully, or the entry itself is already a carb equivalent.
+     */
+    static func extendedAbsorptionSplit(for entry: CarbsEntry) -> (immediate: CarbsEntry, tail: [CarbsEntry])? {
+        guard let absorptionHours = entry.absorptionHours,
+              absorptionHours > standardAbsorptionHours,
+              entry.isFPU != true
+        else { return nil }
+
+        let totalGrams = Int(truncating: NSDecimalNumber(decimal: entry.carbs))
+        guard totalGrams >= 20 else { return nil }
+
+        let duration = Double(truncating: NSDecimalNumber(decimal: min(max(absorptionHours, 4), 10)))
+        let immediateGrams = Int((Double(totalGrams) * 3.0 / duration).rounded())
+        let tailGrams = totalGrams - immediateGrams
+        guard tailGrams >= 6 else { return nil }
+
+        // Chunk count: one per extension hour, capped so every chunk is >= 5 g.
+        let extensionHours = Int(duration.rounded(.up)) - 3
+        let count = max(1, min(extensionHours, tailGrams / 5))
+        let intervalHours = (duration - 3.0) / Double(count)
+
+        // Even split, difference between chunks at most 1 g.
+        let base = tailGrams / count
+        let remainder = tailGrams % count
+        let amounts = (0 ..< count).map { base + ($0 < remainder ? 1 : 0) }
+
+        let fpuID = entry.fpuID ?? UUID().uuidString
+        let startDate = entry.actualDate ?? entry.createdAt
+
+        let immediate = CarbsEntry(
+            id: entry.id,
+            createdAt: entry.createdAt,
+            actualDate: entry.actualDate,
+            carbs: Decimal(immediateGrams),
+            fat: entry.fat,
+            protein: entry.protein,
+            note: entry.note,
+            enteredBy: entry.enteredBy,
+            isFPU: entry.isFPU,
+            fpuID: fpuID,
+            absorptionHours: entry.absorptionHours
+        )
+
+        let tail: [CarbsEntry] = amounts.enumerated().map { idx, grams in
+            CarbsEntry(
+                id: UUID().uuidString,
+                createdAt: entry.createdAt,
+                actualDate: startDate.addingTimeInterval((3.0 + Double(idx) * intervalHours) * 3600),
+                carbs: Decimal(grams),
+                fat: 0,
+                protein: 0,
+                note: entry.note,
+                enteredBy: CarbsEntry.local,
+                isFPU: true,
+                fpuID: fpuID
+            )
+        }
+
+        return (immediate, tail)
     }
 
     private func filterRemoteEntries(entries: [CarbsEntry]) async throws -> [CarbsEntry] {
@@ -293,7 +385,9 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
             newItem.isUploadedToHealth = false
             newItem.isUploadedToTidepool = false
 
-            if entry.fat != nil, entry.protein != nil, let fpuId = entry.fpuID {
+            // Any entry with an fpuID gets it stored: it links FPU carb equivalents
+            // and extended-absorption tail entries to their parent for group deletion.
+            if let fpuId = entry.fpuID {
                 newItem.fpuID = UUID(uuidString: fpuId)
             }
 

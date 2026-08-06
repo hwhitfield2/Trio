@@ -6,13 +6,83 @@ enum MealPhotoAnalysis {
     enum Config {
         static let apiKeyKey = "MealPhotoAnalysis.apiKey"
         static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
+        static let modelsEndpoint = URL(string: "https://api.anthropic.com/v1/models?limit=100")!
         static let apiVersion = "2023-06-01"
-        static let model = "claude-opus-5"
+        /// Used for photo analysis when the user has not picked a model (or the stored pick is empty).
+        static let defaultModel = "claude-opus-5"
+        /// Used for text food search when the user has not picked a model. A faster
+        /// model by default: nutrition lookup from text needs speed more than the
+        /// deep visual reasoning the photo flow benefits from.
+        static let defaultFoodSearchModel = "claude-sonnet-5"
         static let maxTokens = 16000
+        /// Food search replies are compact JSON; a smaller cap keeps latency down.
+        static let foodSearchMaxTokens = 4000
         static let timeout: TimeInterval = 180
         /// Longest image edge sent to the API; larger photos are downscaled to control cost.
         static let maxImageDimension: CGFloat = 1568
         static let jpegQuality: CGFloat = 0.7
+    }
+
+    /// Resolves the model for meal photo analysis: the model picked in Meal
+    /// Settings, falling back to the built-in default.
+    static func model(from settings: TrioSettings) -> String {
+        let picked = settings.mealAnalysisModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return picked.isEmpty ? Config.defaultModel : picked
+    }
+
+    /// Resolves the model for text food search: its own pick in Meal Settings,
+    /// falling back to the fast default.
+    static func foodSearchModel(from settings: TrioSettings) -> String {
+        let picked = settings.foodSearchModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return picked.isEmpty ? Config.defaultFoodSearchModel : picked
+    }
+}
+
+// MARK: - Model listing (GET /v1/models)
+
+/// One model offered by the provider, as returned by the models endpoint.
+struct AnthropicModelInfo: Decodable, Identifiable, Equatable {
+    let id: String
+    let displayName: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
+    }
+}
+
+/// Fetches the models available to the configured API key, for the Meal Settings
+/// model picker. Shares key, version, and error semantics with the analysis calls.
+enum AnthropicModelsAPI {
+    private struct ModelListResponse: Decodable {
+        let data: [AnthropicModelInfo]
+    }
+
+    static func listModels(apiKey: String) async throws -> [AnthropicModelInfo] {
+        var request = URLRequest(url: MealPhotoAnalysis.Config.modelsEndpoint)
+        request.httpMethod = "GET"
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue(MealPhotoAnalysis.Config.apiVersion, forHTTPHeaderField: "anthropic-version")
+        request.timeoutInterval = 30
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw MealPhotoAnalysisError.invalidResponse
+        }
+
+        guard 200 ..< 300 ~= http.statusCode else {
+            let apiError = try? JSONDecoder().decode(AnthropicErrorEnvelope.self, from: data)
+            debug(.service, "Model list fetch failed with status \(http.statusCode)")
+            throw MealPhotoAnalysisError.badStatusCode(http.statusCode, apiError?.error.message)
+        }
+
+        do {
+            return try JSONDecoder().decode(ModelListResponse.self, from: data).data
+        } catch {
+            debug(.service, "Model list JSON decoding failed: \(error)")
+            throw MealPhotoAnalysisError.invalidResponse
+        }
     }
 }
 
@@ -56,6 +126,7 @@ protocol MealPhotoAnalysisManager {
 
 final class BaseMealPhotoAnalysisManager: MealPhotoAnalysisManager, Injectable {
     @Injected() private var keychain: Keychain!
+    @Injected() private var settingsManager: SettingsManager!
 
     init(resolver: Resolver) {
         injectServices(resolver)
@@ -162,7 +233,7 @@ final class BaseMealPhotoAnalysisManager: MealPhotoAnalysisManager, Injectable {
         request.timeoutInterval = MealPhotoAnalysis.Config.timeout
 
         let body: [String: Any] = [
-            "model": MealPhotoAnalysis.Config.model,
+            "model": MealPhotoAnalysis.model(from: settingsManager.settings),
             "max_tokens": MealPhotoAnalysis.Config.maxTokens,
             "output_config": ["format": ["type": "json_schema", "schema": Self.resultSchema]],
             "messages": [
@@ -217,8 +288,10 @@ final class BaseMealPhotoAnalysisManager: MealPhotoAnalysisManager, Injectable {
         """
     }
 
-    /// JSON schema enforced via structured outputs so the reply always decodes into `MealPhotoAnalysisResult`.
-    private static let resultSchema: [String: Any] = [
+    /// JSON schema enforced via structured outputs so the reply always decodes into
+    /// `MealPhotoAnalysisResult`. Shared with the text-based food search, which returns
+    /// the same structure.
+    static let resultSchema: [String: Any] = [
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -261,9 +334,9 @@ final class BaseMealPhotoAnalysisManager: MealPhotoAnalysisManager, Injectable {
     ]
 }
 
-// MARK: - Anthropic API response models
+// MARK: - Anthropic API response models (shared with FoodSearchManager)
 
-private struct AnthropicMessageResponse: Decodable {
+struct AnthropicMessageResponse: Decodable {
     struct ContentBlock: Decodable {
         let type: String
         let text: String?
@@ -278,7 +351,7 @@ private struct AnthropicMessageResponse: Decodable {
     }
 }
 
-private struct AnthropicErrorEnvelope: Decodable {
+struct AnthropicErrorEnvelope: Decodable {
     struct APIError: Decodable {
         let message: String
     }
