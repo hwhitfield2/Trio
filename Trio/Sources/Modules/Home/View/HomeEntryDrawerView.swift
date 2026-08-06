@@ -37,6 +37,11 @@ struct HomeEntryDrawer: View {
     @State private var treatments = Treatments.StateModel()
     @State private var amount: Decimal = 0
     @State private var showLowGlucoseConfirm = false
+    @State private var showMealPhotoSheet = false
+    @State private var showFoodSearchSheet = false
+    /// True once an AI meal scan or food search result has been applied: the commit
+    /// then keeps the fat/protein/note the analysis set instead of zeroing them.
+    @State private var aiAnalysisApplied = false
     @State private var debounceTask: Task<Void, Never>?
     @State private var isEvaluatingBolus = false
     @State private var ctaEvaluationTask: Task<Void, Never>?
@@ -187,6 +192,9 @@ struct HomeEntryDrawer: View {
     private var noteText: String {
         switch kind {
         case .carbs:
+            if aiAnalysisApplied, !treatments.note.isEmpty, amount > 0, let suggestion = suggestionString {
+                return String(localized: "\(treatments.note) · Bolus calculator suggests \(suggestion) U.")
+            }
             if amount > 0, let suggestion = suggestionString {
                 return String(localized: "Bolus calculator suggests \(suggestion) U for this entry.")
             }
@@ -242,6 +250,12 @@ struct HomeEntryDrawer: View {
                 quickAmountsRow
                     .padding(.horizontal, 16)
                     .padding(.bottom, 14)
+
+                if showsAIRow {
+                    aiEntryRow
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 14)
+                }
 
                 Text(noteText)
                     .font(.footnote)
@@ -351,6 +365,20 @@ struct HomeEntryDrawer: View {
                 pendingBolusAmount = nil
             }
         }
+        .sheet(isPresented: $showMealPhotoSheet) {
+            MealPhotoAnalysisView(state: treatments, onApplied: syncAppliedAnalysis)
+        }
+        .sheet(isPresented: $showFoodSearchSheet) {
+            FoodSearchView(state: treatments, onApplied: syncAppliedAnalysis)
+        }
+    }
+
+    /// Mirrors an accepted AI meal scan / food search result into the drawer's
+    /// stepper. applyMealPhotoAnalysis already clamped the values and set
+    /// fat/protein/note on the treatments model; commit keeps them.
+    private func syncAppliedAnalysis() {
+        aiAnalysisApplied = true
+        amount = treatments.carbs
     }
 
     private var header: some View {
@@ -450,6 +478,45 @@ struct HomeEntryDrawer: View {
         .disabled(!enabled)
     }
 
+    /// Whether the AI scan/search row is shown: carbs entry only, and only when the
+    /// meal photo analysis feature (which also provides the API key) is enabled.
+    private var showsAIRow: Bool {
+        kind == .carbs && treatments.mealPhotoAnalysisEnabled
+    }
+
+    /// Scan Meal (camera) and Search Food (text lookup) shortcuts for the carbs entry.
+    private var aiEntryRow: some View {
+        HStack(spacing: 8) {
+            Button {
+                guard !controlsLocked else { return }
+                showMealPhotoSheet = true
+            } label: {
+                Label(String(localized: "Scan Meal"), systemImage: "camera.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .glassCard(radius: GlassDesign.tileRadius, opacity: 0.7)
+            }
+            .buttonStyle(.plain)
+            .disabled(controlsLocked)
+
+            Button {
+                guard !controlsLocked else { return }
+                showFoodSearchSheet = true
+            } label: {
+                Label(String(localized: "Search Food"), systemImage: "magnifyingglass")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .glassCard(radius: GlassDesign.tileRadius, opacity: 0.7)
+            }
+            .buttonStyle(.plain)
+            .disabled(controlsLocked)
+        }
+    }
+
     private var quickAmountsRow: some View {
         HStack(spacing: 8) {
             ForEach(quickAmounts, id: \.self) { value in
@@ -535,12 +602,15 @@ struct HomeEntryDrawer: View {
         switch kind {
         case .carbs:
             // Same path the Treatments screen action button uses: saveMeal clamps
-            // to maxCarbs, persists, and runs determineBasalSync.
+            // to maxCarbs, persists, and runs determineBasalSync. An applied AI
+            // scan/search keeps the fat, protein, and meal-name note it set.
             debounceTask?.cancel()
             treatments.carbs = amount
             treatments.amount = 0
-            treatments.fat = 0
-            treatments.protein = 0
+            if !aiAnalysisApplied {
+                treatments.fat = 0
+                treatments.protein = 0
+            }
             treatments.invokeTreatmentsTask()
             onCommitted(String(localized: "Logging \(amountString) g carbs"))
             dismiss()

@@ -4,6 +4,9 @@ import SwiftUI
 /// capture (with scale-reference overlay) -> AI analysis -> review -> apply to the meal entry.
 struct MealPhotoAnalysisView: View {
     @Bindable var state: Treatments.StateModel
+    /// Called after an accepted result has been applied to the state model, so
+    /// non-router presenters (the Home carbs drawer) can sync their local UI.
+    var onApplied: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
@@ -71,6 +74,7 @@ struct MealPhotoAnalysisView: View {
                 showsFatProtein: state.useFPUconversion,
                 onAccept: {
                     state.applyMealPhotoAnalysis(result)
+                    onApplied?()
                     dismiss()
                 },
                 onRetake: { phase = .capture }

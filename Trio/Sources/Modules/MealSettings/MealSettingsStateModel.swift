@@ -16,6 +16,7 @@ extension MealSettings {
         @Published var maxMealAbsorptionTime: Decimal = 6
         @Published var mealPhotoAnalysisEnabled: Bool = false
         @Published var mealPhotoApiKey: String = ""
+        @Published var unannouncedMealDetectionEnabled: Bool = true
 
         override func subscribe() {
             units = settingsManager.settings.units
@@ -36,6 +37,11 @@ extension MealSettings {
                 .store(in: &lifetime)
 
             subscribeSetting(\.mealPhotoAnalysisEnabled, on: $mealPhotoAnalysisEnabled) { mealPhotoAnalysisEnabled = $0 }
+
+            subscribeSetting(
+                \.unannouncedMealDetectionEnabled,
+                on: $unannouncedMealDetectionEnabled
+            ) { unannouncedMealDetectionEnabled = $0 }
 
             subscribeSetting(\.maxCarbs, on: $maxCarbs) { maxCarbs = $0 }
             subscribeSetting(\.maxFat, on: $maxFat) { maxFat = $0 }

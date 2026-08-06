@@ -217,8 +217,10 @@ final class BaseMealPhotoAnalysisManager: MealPhotoAnalysisManager, Injectable {
         """
     }
 
-    /// JSON schema enforced via structured outputs so the reply always decodes into `MealPhotoAnalysisResult`.
-    private static let resultSchema: [String: Any] = [
+    /// JSON schema enforced via structured outputs so the reply always decodes into
+    /// `MealPhotoAnalysisResult`. Shared with the text-based food search, which returns
+    /// the same structure.
+    static let resultSchema: [String: Any] = [
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -261,9 +263,9 @@ final class BaseMealPhotoAnalysisManager: MealPhotoAnalysisManager, Injectable {
     ]
 }
 
-// MARK: - Anthropic API response models
+// MARK: - Anthropic API response models (shared with FoodSearchManager)
 
-private struct AnthropicMessageResponse: Decodable {
+struct AnthropicMessageResponse: Decodable {
     struct ContentBlock: Decodable {
         let type: String
         let text: String?
@@ -278,7 +280,7 @@ private struct AnthropicMessageResponse: Decodable {
     }
 }
 
-private struct AnthropicErrorEnvelope: Decodable {
+struct AnthropicErrorEnvelope: Decodable {
     struct APIError: Decodable {
         let message: String
     }

@@ -1132,6 +1132,17 @@ extension Home {
             return items
         }
 
+        /// Glucose rise in display units for the unannounced meal prompt.
+        private func riseString(_ mgdl: Int) -> String {
+            if state.units == .mmolL {
+                return (
+                    Formatter.decimalFormatterWithOneFractionDigit
+                        .string(from: Decimal(mgdl).asMmolL as NSNumber) ?? "\(mgdl)"
+                ) + " " + state.units.rawValue
+            }
+            return "\(mgdl) " + state.units.rawValue
+        }
+
         /// Scheduled profile basal rate for the drawer's temp-basal note.
         private var profileBasalRateString: String? {
             guard let rate = scheduledBasalDeliveryRate(at: Date()) else { return nil }
@@ -1390,8 +1401,8 @@ extension Home {
                 }
         }
 
-        /// Center + button: tap opens the treatments entry, long-press pops the
-        /// quick actions menu (with press scale/glow feedback).
+        /// Center + button: tap pops the quick actions menu (long-press still
+        /// works for muscle memory, with press scale/glow feedback).
         var plusButton: some View {
             ZStack {
                 Circle()
@@ -1412,7 +1423,9 @@ extension Home {
             .contentShape(Circle())
             .accessibilityLabel(String(localized: "Add treatment"))
             .onTapGesture {
-                activeEntryKind = .carbs
+                let impactLight = UIImpactFeedbackGenerator(style: .light)
+                impactLight.impactOccurred()
+                withAnimation(.easeOut(duration: 0.18)) { showQuickActions = true }
             }
             .onLongPressGesture(minimumDuration: 0.42) {
                 let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
@@ -1481,8 +1494,32 @@ extension Home {
                         if !text.isEmpty { showDockToast(text) }
                     }
                 )
-                .presentationDetents([.height(430)])
+                .presentationDetents([.height(
+                    kind == .carbs && state.settingsManager.settings.mealPhotoAnalysisEnabled ? 484 : 430
+                )])
                 .presentationDragIndicator(.visible)
+            }
+            .alert(
+                String(localized: "Possible Unannounced Meal"),
+                isPresented: Binding(
+                    get: { state.unannouncedMealSuggestion != nil },
+                    set: { if !$0 { state.unannouncedMealSuggestion = nil } }
+                ),
+                presenting: state.unannouncedMealSuggestion
+            ) { _ in
+                Button(String(localized: "Log Carbs")) {
+                    state.unannouncedMealSuggestion = nil
+                    activeEntryKind = .carbs
+                }
+                Button(String(localized: "Dismiss"), role: .cancel) {
+                    state.unannouncedMealSuggestion = nil
+                }
+            } message: { suggestion in
+                Text(
+                    String(
+                        localized: "Glucose rose \(riseString(suggestion.riseMgdl)) in the last \(suggestion.windowMinutes) min with no carbs logged. Did you eat something?"
+                    )
+                )
             }
             .sheet(isPresented: $showDockSheet) {
                 HomeAdjustmentsSheetView(

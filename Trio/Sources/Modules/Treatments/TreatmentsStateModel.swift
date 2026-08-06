@@ -20,6 +20,7 @@ extension Treatments {
         @ObservationIgnored @Injected() var determinationStorage: DeterminationStorage!
         @ObservationIgnored @Injected() var bolusCalculationManager: BolusCalculationManager!
         @ObservationIgnored @Injected() var mealPhotoAnalysisManager: MealPhotoAnalysisManager!
+        @ObservationIgnored @Injected() var foodSearchManager: FoodSearchManager!
 
         var lowGlucose: Decimal = 70
         var highGlucose: Decimal = 180
@@ -102,6 +103,7 @@ extension Treatments {
         var superBolusInsulin: Decimal = 0
 
         var showMealPhotoSheet: Bool = false
+        var showFoodSearchSheet: Bool = false
         var mealPhotoAnalysisEnabled: Bool = false
 
         var meal: [CarbsEntry]?

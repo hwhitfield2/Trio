@@ -370,20 +370,22 @@ extension MealSettings {
                     units: state.units,
                     type: .boolean,
                     label: String(localized: "Enable AI Meal Photo Analysis"),
-                    miniHint: String(localized: "Estimate carbs by photographing your meal with a camera button on the bolus calculator."),
+                    miniHint: String(
+                        localized: "Estimate carbs by photographing your meal or searching for a dish by name, from the bolus calculator and the carbs quick entry."
+                    ),
                     verboseHint: VStack(alignment: .leading, spacing: 10) {
                         Text("Default: OFF").bold()
                         Text(
-                            "Adds a camera button to the bolus calculator. Take a photo of your meal with a common object (soda can, credit card, fork) placed next to it as a size reference, and AI will identify the components, judge whether the meal is homemade or from a restaurant, and estimate carbs, fat, protein, and how quickly the carbs will absorb."
+                            "Adds a camera button to the bolus calculator and Scan Meal / Search Food shortcuts to the carbs quick entry. Take a photo of your meal with a common object (soda can, credit card, fork) placed next to it as a size reference, or describe a dish in text (e.g. a restaurant meal), and AI will identify the components, judge whether the meal is homemade or from a restaurant, and estimate carbs, fat, protein, and how quickly the carbs will absorb."
                         )
                         Text(
-                            "The photo is sent to Anthropic's Claude API for analysis, which requires your own API key and an internet connection."
+                            "The photo or description is sent to Anthropic's Claude API for analysis, which requires your own API key and an internet connection."
                         )
                         Text(
                             "AI estimates can be wrong. Always review the suggested values before logging them or bolusing."
                         ).bold()
                     },
-                    headerText: String(localized: "AI Meal Photo Analysis")
+                    headerText: String(localized: "AI Meal Photo Analysis & Food Search")
                 )
 
                 if state.mealPhotoAnalysisEnabled {
@@ -400,11 +402,38 @@ extension MealSettings {
                         }
                     } footer: {
                         Text(
-                            "Create an API key at console.anthropic.com. The key is stored securely in the iOS keychain and is only used to analyze your meal photos."
+                            "Create an API key at console.anthropic.com. The key is stored securely in the iOS keychain and is only used to analyze your meal photos and food searches."
                         )
                     }
                     .listRowBackground(Color.chart)
                 }
+
+                SettingInputSection(
+                    decimalValue: $decimalPlaceholder,
+                    booleanValue: $state.unannouncedMealDetectionEnabled,
+                    shouldDisplayHint: $shouldDisplayHint,
+                    selectedVerboseHint: Binding(
+                        get: { selectedVerboseHint },
+                        set: {
+                            selectedVerboseHint = $0.map { AnyView($0) }
+                            hintLabel = String(localized: "Unannounced Meal Detection")
+                        }
+                    ),
+                    units: state.units,
+                    type: .boolean,
+                    label: String(localized: "Unannounced Meal Detection"),
+                    miniHint: String(localized: "Prompt to log carbs when glucose rises like a meal but nothing was logged."),
+                    verboseHint: VStack(alignment: .leading, spacing: 10) {
+                        Text("Default: ON").bold()
+                        Text(
+                            "When glucose rises quickly while no carbs are on board and no meal was logged recently, Trio prompts you to log the meal - as an alert while the app is open, or as a notification otherwise. Tapping the notification opens the meal entry."
+                        )
+                        Text(
+                            "This only ever reminds you to log; it never logs carbs or doses insulin by itself. Prompts are limited to once per hour, and notifications additionally respect the Carbs notification setting."
+                        )
+                    },
+                    headerText: String(localized: "Unannounced Meals")
+                )
             }
             .listSectionSpacing(sectionSpacing)
             .sheet(isPresented: $shouldDisplayHint) {

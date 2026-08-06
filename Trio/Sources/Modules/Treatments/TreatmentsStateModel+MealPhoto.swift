@@ -16,6 +16,17 @@ extension Treatments.StateModel {
         return result
     }
 
+    /// Runs the AI food search for a free-text description (e.g. a restaurant dish).
+    func searchFood(query: String) async throws -> MealPhotoAnalysisResult {
+        debug(.bolusState, "Food search started")
+        let result = try await foodSearchManager.searchFood(query: query)
+        debug(
+            .bolusState,
+            "Food search finished: \(result.mealName), carbs \(result.totalCarbsGrams) g, source \(result.mealSource.rawValue)"
+        )
+        return result
+    }
+
     /// Applies an accepted analysis to the meal entry fields and recalculates the recommendation.
     ///
     /// Values are clamped to the configured per-entry limits; fat and protein are only
