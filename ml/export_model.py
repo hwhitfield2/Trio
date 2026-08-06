@@ -27,7 +27,7 @@ import numpy as np
 
 from train import HORIZONS_MIN, build_samples, load_export
 
-MODEL_VERSION = "1"
+MODEL_VERSION = "2"
 
 
 def tree_to_dict(tree):
