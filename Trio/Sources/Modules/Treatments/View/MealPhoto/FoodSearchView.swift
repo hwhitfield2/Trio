@@ -60,7 +60,7 @@ struct FoodSearchView: View {
         case let .result(result):
             FoodSearchResultView(
                 result: result,
-                showsFatProtein: state.useFPUconversion,
+                showsFatProtein: true,
                 onAccept: {
                     state.applyMealPhotoAnalysis(result)
                     onApplied?()
@@ -340,6 +340,13 @@ struct FoodSearchResultView: View {
                     Text("Slow-absorbing meal - a reduced initial bolus may be appropriate.")
                         .font(.footnote)
                 }
+            }
+            if result.absorptionHours > BaseCarbsStorage.standardAbsorptionHours {
+                Text(
+                    "When logged, the carbs will be spread across this duration so the loop's dosing follows the slower absorption."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
             Text(result.absorptionRationale)
                 .font(.footnote)

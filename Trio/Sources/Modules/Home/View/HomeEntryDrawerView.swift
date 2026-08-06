@@ -193,6 +193,9 @@ struct HomeEntryDrawer: View {
         switch kind {
         case .carbs:
             if aiAnalysisApplied, !treatments.note.isEmpty, amount > 0, let suggestion = suggestionString {
+                if let hours = treatments.mealAbsorptionHours, hours > BaseCarbsStorage.standardAbsorptionHours {
+                    return String(localized: "\(treatments.note) · spread over \(hours.description) h · suggests \(suggestion) U.")
+                }
                 return String(localized: "\(treatments.note) · Bolus calculator suggests \(suggestion) U.")
             }
             if amount > 0, let suggestion = suggestionString {

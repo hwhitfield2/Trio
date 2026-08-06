@@ -71,7 +71,7 @@ struct MealPhotoAnalysisView: View {
             MealPhotoResultView(
                 image: image,
                 result: result,
-                showsFatProtein: state.useFPUconversion,
+                showsFatProtein: true,
                 onAccept: {
                     state.applyMealPhotoAnalysis(result)
                     onApplied?()

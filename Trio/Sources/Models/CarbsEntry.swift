@@ -12,6 +12,37 @@ struct CarbsEntry: JSON, Equatable, Hashable, Identifiable {
     let enteredBy: String?
     let isFPU: Bool?
     let fpuID: String?
+    /// Estimated carb absorption duration in hours (e.g. from the AI meal analysis).
+    /// When longer than the ~3 hours oref's carb model assumes, storage spreads part
+    /// of the entry into future-dated carb equivalents so the algorithm's COB decays
+    /// over this duration. Nil = absorb normally.
+    let absorptionHours: Decimal?
+
+    init(
+        id: String?,
+        createdAt: Date,
+        actualDate: Date?,
+        carbs: Decimal,
+        fat: Decimal?,
+        protein: Decimal?,
+        note: String?,
+        enteredBy: String?,
+        isFPU: Bool?,
+        fpuID: String?,
+        absorptionHours: Decimal? = nil
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.actualDate = actualDate
+        self.carbs = carbs
+        self.fat = fat
+        self.protein = protein
+        self.note = note
+        self.enteredBy = enteredBy
+        self.isFPU = isFPU
+        self.fpuID = fpuID
+        self.absorptionHours = absorptionHours
+    }
 
     static let local = "Trio"
     static let appleHealth = "applehealth"
@@ -37,6 +68,7 @@ extension CarbsEntry {
         case enteredBy
         case isFPU
         case fpuID
+        case absorptionHours
     }
 }
 
