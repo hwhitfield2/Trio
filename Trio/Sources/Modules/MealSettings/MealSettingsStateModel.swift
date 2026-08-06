@@ -18,6 +18,13 @@ extension MealSettings {
         @Published var mealPhotoApiKey: String = ""
         @Published var unannouncedMealDetectionEnabled: Bool = true
 
+        /// Selected model for both AI features; empty string = app default.
+        @Published var mealAnalysisModelId: String = ""
+        /// Models offered by the provider for the configured API key.
+        @Published var availableModels: [AnthropicModelInfo] = []
+        @Published var isLoadingModels: Bool = false
+        @Published var modelsLoadError: String?
+
         override func subscribe() {
             units = settingsManager.settings.units
 
@@ -37,6 +44,8 @@ extension MealSettings {
                 .store(in: &lifetime)
 
             subscribeSetting(\.mealPhotoAnalysisEnabled, on: $mealPhotoAnalysisEnabled) { mealPhotoAnalysisEnabled = $0 }
+
+            subscribeSetting(\.mealAnalysisModelId, on: $mealAnalysisModelId) { mealAnalysisModelId = $0 }
 
             subscribeSetting(
                 \.unannouncedMealDetectionEnabled,
@@ -59,6 +68,29 @@ extension MealSettings {
 
             // "Fat and Protein Percentage"
             subscribeSetting(\.individualAdjustmentFactor, on: $individualAdjustmentFactor) { individualAdjustmentFactor = $0 }
+        }
+
+        /// Fetches the models the configured API key can use, for the model picker.
+        /// The current selection is kept in the list even if the provider no longer
+        /// returns it, so the picker cannot silently change a stored choice.
+        @MainActor func loadAvailableModels() async {
+            let apiKey = mealPhotoApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !apiKey.isEmpty, !isLoadingModels else { return }
+
+            isLoadingModels = true
+            modelsLoadError = nil
+            defer { isLoadingModels = false }
+
+            do {
+                var models = try await AnthropicModelsAPI.listModels(apiKey: apiKey)
+                let selected = mealAnalysisModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !selected.isEmpty, !models.contains(where: { $0.id == selected }) {
+                    models.append(AnthropicModelInfo(id: selected, displayName: selected))
+                }
+                availableModels = models
+            } catch {
+                modelsLoadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
         }
     }
 }

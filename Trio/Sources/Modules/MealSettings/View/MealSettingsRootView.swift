@@ -40,6 +40,18 @@ extension MealSettings {
             return formatter
         }
 
+        /// Models offered in the picker: the fetched list, always including the
+        /// current selection so a stored choice never falls out of the picker
+        /// (e.g. before the list has loaded or while offline).
+        private var modelPickerOptions: [AnthropicModelInfo] {
+            var options = state.availableModels
+            let selected = state.mealAnalysisModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !selected.isEmpty, !options.contains(where: { $0.id == selected }) {
+                options.append(AnthropicModelInfo(id: selected, displayName: selected))
+            }
+            return options
+        }
+
         var body: some View {
             List {
                 Section(
@@ -400,10 +412,44 @@ extension MealSettings {
                                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                             }
                         }
+
+                        if !state.mealPhotoApiKey.isEmpty {
+                            HStack {
+                                Image(systemName: "cpu")
+                                Picker("AI Model", selection: $state.mealAnalysisModelId) {
+                                    Text("Default (\(MealPhotoAnalysis.Config.defaultModel))").tag("")
+                                    ForEach(modelPickerOptions) { model in
+                                        Text(model.displayName).tag(model.id)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+
+                                if state.isLoadingModels {
+                                    ProgressView()
+                                } else {
+                                    Button {
+                                        Task { await state.loadAvailableModels() }
+                                    } label: {
+                                        Image(systemName: "arrow.clockwise")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel("Reload available models")
+                                }
+                            }
+                        }
                     } footer: {
-                        Text(
-                            "Create an API key at console.anthropic.com. The key is stored securely in the iOS keychain and is only used to analyze your meal photos and food searches."
-                        )
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(
+                                "Create an API key at console.anthropic.com. The key is stored securely in the iOS keychain and is only used to analyze your meal photos and food searches."
+                            )
+                            Text(
+                                "The model is used for both meal photo analysis and food search. The list shows the models your API key can access."
+                            )
+                            if let error = state.modelsLoadError {
+                                Text("Could not load models: \(error)")
+                                    .foregroundStyle(.orange)
+                            }
+                        }
                     }
                     .listRowBackground(Color.chart)
                 }
@@ -446,6 +492,14 @@ extension MealSettings {
                 )
             }
             .scrollContentBackground(.hidden).background(appState.trioBackgroundColor(for: colorScheme))
+            // Loads the model list on appear and after API key edits (debounced so
+            // typing a key does not fire a request per keystroke).
+            .task(id: state.mealPhotoAnalysisEnabled ? state.mealPhotoApiKey : "") {
+                guard state.mealPhotoAnalysisEnabled else { return }
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard !Task.isCancelled else { return }
+                await state.loadAvailableModels()
+            }
             .onAppear(perform: configureView)
             .navigationBarTitle("Meal Settings")
             .navigationBarTitleDisplayMode(.automatic)

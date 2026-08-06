@@ -46,6 +46,7 @@ protocol FoodSearchManager {
 /// photo API key, endpoint, and result schema.
 final class BaseFoodSearchManager: FoodSearchManager, Injectable {
     @Injected() private var keychain: Keychain!
+    @Injected() private var settingsManager: SettingsManager!
 
     init(resolver: Resolver) {
         injectServices(resolver)
@@ -120,7 +121,7 @@ final class BaseFoodSearchManager: FoodSearchManager, Injectable {
         request.timeoutInterval = MealPhotoAnalysis.Config.timeout
 
         let body: [String: Any] = [
-            "model": MealPhotoAnalysis.Config.model,
+            "model": MealPhotoAnalysis.model(from: settingsManager.settings),
             "max_tokens": MealPhotoAnalysis.Config.maxTokens,
             "output_config": ["format": ["type": "json_schema", "schema": BaseMealPhotoAnalysisManager.resultSchema]],
             "messages": [
