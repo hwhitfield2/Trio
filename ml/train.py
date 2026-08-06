@@ -52,6 +52,10 @@ def load_export(path):
             elif kind in records:
                 rec["ts"] = parse_ts(rec["date"])
                 records[kind].append(rec)
+    # Drop physiologically invalid CGM readings (below the ~39 mg/dL reporting
+    # floor of a working sensor). These appear as a dying-sensor plunge right
+    # before session gaps and would poison training targets.
+    records["glucose"] = [r for r in records["glucose"] if r["glucose"] >= 39]
     for kind in records:
         records[kind].sort(key=lambda r: r["ts"])
     return header, records

@@ -27,23 +27,31 @@ import numpy as np
 
 from train import HORIZONS_MIN, build_samples, load_export
 
-MODEL_VERSION = "2"
+MODEL_VERSION = "3"
+
+# The model predicts the CHANGE from current BG (delta), shrunk toward zero:
+# prediction = bg + SHRINKAGE * ensemble(features). Zero output = persistence.
+# SHRINKAGE is folded into the exported leaf values and baseline.
+SHRINKAGE = 0.2
+DELTA_FEATURE = 0  # index of "bg" in the feature vector
 
 
-def tree_to_dict(tree):
+def tree_to_dict(tree, scale):
     t = tree.tree_
     return {
         "childrenLeft": t.children_left.tolist(),
         "childrenRight": t.children_right.tolist(),
         "feature": t.feature.tolist(),
         "threshold": [round(x, 6) for x in t.threshold.tolist()],
-        "value": [round(v[0][0], 6) for v in t.value.tolist()],
+        "value": [round(v[0][0] * scale, 6) for v in t.value.tolist()],
     }
 
 
 def predict_from_json(model_json, x):
     """Reference implementation of the Swift evaluator, kept deliberately dumb."""
     total = model_json["baseline"]
+    if "outputOffsetFeature" in model_json:
+        total += x[model_json["outputOffsetFeature"]]
     for tree in model_json["trees"]:
         node = 0
         while tree["childrenLeft"][node] != -1:
@@ -82,18 +90,20 @@ def main():
 
     for h in HORIZONS_MIN:
         model = GradientBoostingRegressor(
-            n_estimators=150, max_depth=3, learning_rate=0.05, random_state=0
+            n_estimators=60, max_depth=2, learning_rate=0.03, subsample=0.7, random_state=0
         )
-        model.fit(X, y[h])
+        delta = y[h] - X[:, DELTA_FEATURE]
+        model.fit(X, delta)
 
         model_json = {
             "learningRate": model.learning_rate,
-            "baseline": round(float(model.init_.constant_[0][0]), 6),
-            "trees": [tree_to_dict(est[0]) for est in model.estimators_],
+            "baseline": round(float(model.init_.constant_[0][0]) * SHRINKAGE, 6),
+            "outputOffsetFeature": DELTA_FEATURE,
+            "trees": [tree_to_dict(est[0], SHRINKAGE) for est in model.estimators_],
         }
 
-        # Prove the JSON reproduces sklearn before shipping it
-        sk_pred = model.predict(X)
+        # Prove the JSON reproduces the shrunk-delta prediction before shipping it
+        sk_pred = X[:, DELTA_FEATURE] + SHRINKAGE * model.predict(X)
         json_pred = np.array([predict_from_json(model_json, x) for x in X])
         max_dev = float(np.max(np.abs(sk_pred - json_pred)))
         if max_dev > 0.01:

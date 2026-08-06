@@ -252,6 +252,9 @@ struct MLForecastModel: Decodable {
     struct Ensemble: Decodable {
         let learningRate: Double
         let baseline: Double
+        /// When set, the value of this feature is added to the ensemble output —
+        /// used by delta models that predict the change from current glucose.
+        let outputOffsetFeature: Int?
         let trees: [Tree]
     }
 
@@ -267,6 +270,10 @@ struct MLForecastModel: Decodable {
               features.count == featureNames.count else { return nil }
 
         var total = ensemble.baseline
+        if let offsetFeature = ensemble.outputOffsetFeature {
+            guard offsetFeature >= 0, offsetFeature < features.count else { return nil }
+            total += features[offsetFeature]
+        }
         for tree in ensemble.trees {
             var node = 0
             while tree.childrenLeft[node] != -1 {
