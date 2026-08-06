@@ -8,20 +8,33 @@ enum MealPhotoAnalysis {
         static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
         static let modelsEndpoint = URL(string: "https://api.anthropic.com/v1/models?limit=100")!
         static let apiVersion = "2023-06-01"
-        /// Used when the user has not picked a model (or the stored pick is empty).
+        /// Used for photo analysis when the user has not picked a model (or the stored pick is empty).
         static let defaultModel = "claude-opus-5"
+        /// Used for text food search when the user has not picked a model. A faster
+        /// model by default: nutrition lookup from text needs speed more than the
+        /// deep visual reasoning the photo flow benefits from.
+        static let defaultFoodSearchModel = "claude-sonnet-5"
         static let maxTokens = 16000
+        /// Food search replies are compact JSON; a smaller cap keeps latency down.
+        static let foodSearchMaxTokens = 4000
         static let timeout: TimeInterval = 180
         /// Longest image edge sent to the API; larger photos are downscaled to control cost.
         static let maxImageDimension: CGFloat = 1568
         static let jpegQuality: CGFloat = 0.7
     }
 
-    /// Resolves the model both AI features (photo analysis and food search) should
-    /// use: the model picked in Meal Settings, falling back to the built-in default.
+    /// Resolves the model for meal photo analysis: the model picked in Meal
+    /// Settings, falling back to the built-in default.
     static func model(from settings: TrioSettings) -> String {
         let picked = settings.mealAnalysisModelId.trimmingCharacters(in: .whitespacesAndNewlines)
         return picked.isEmpty ? Config.defaultModel : picked
+    }
+
+    /// Resolves the model for text food search: its own pick in Meal Settings,
+    /// falling back to the fast default.
+    static func foodSearchModel(from settings: TrioSettings) -> String {
+        let picked = settings.foodSearchModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return picked.isEmpty ? Config.defaultFoodSearchModel : picked
     }
 }
 

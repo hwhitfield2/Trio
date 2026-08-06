@@ -18,8 +18,10 @@ extension MealSettings {
         @Published var mealPhotoApiKey: String = ""
         @Published var unannouncedMealDetectionEnabled: Bool = true
 
-        /// Selected model for both AI features; empty string = app default.
+        /// Selected model for meal photo analysis; empty string = app default.
         @Published var mealAnalysisModelId: String = ""
+        /// Selected model for text food search; empty string = fast app default.
+        @Published var foodSearchModelId: String = ""
         /// Models offered by the provider for the configured API key.
         @Published var availableModels: [AnthropicModelInfo] = []
         @Published var isLoadingModels: Bool = false
@@ -46,6 +48,8 @@ extension MealSettings {
             subscribeSetting(\.mealPhotoAnalysisEnabled, on: $mealPhotoAnalysisEnabled) { mealPhotoAnalysisEnabled = $0 }
 
             subscribeSetting(\.mealAnalysisModelId, on: $mealAnalysisModelId) { mealAnalysisModelId = $0 }
+
+            subscribeSetting(\.foodSearchModelId, on: $foodSearchModelId) { foodSearchModelId = $0 }
 
             subscribeSetting(
                 \.unannouncedMealDetectionEnabled,
@@ -83,8 +87,9 @@ extension MealSettings {
 
             do {
                 var models = try await AnthropicModelsAPI.listModels(apiKey: apiKey)
-                let selected = mealAnalysisModelId.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !selected.isEmpty, !models.contains(where: { $0.id == selected }) {
+                let selections = [mealAnalysisModelId, foodSearchModelId]
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                for selected in selections where !selected.isEmpty && !models.contains(where: { $0.id == selected }) {
                     models.append(AnthropicModelInfo(id: selected, displayName: selected))
                 }
                 availableModels = models

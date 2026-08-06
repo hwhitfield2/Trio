@@ -61,8 +61,8 @@ struct FoodSearchView: View {
             FoodSearchResultView(
                 result: result,
                 showsFatProtein: true,
-                onAccept: {
-                    state.applyMealPhotoAnalysis(result)
+                onAccept: { adjustedResult in
+                    state.applyMealPhotoAnalysis(adjustedResult)
                     onApplied?()
                     dismiss()
                 },
@@ -199,15 +199,24 @@ struct FoodSearchView: View {
 }
 
 /// Review screen for a food search result. Mirrors MealPhotoResultView, but with the
-/// stated portion assumptions in place of the photo and scale-reference details.
+/// stated portion assumptions in place of the photo details, and a quantity stepper
+/// per item: "McDonald's chicken nuggets" comes back as one 10 pc serving and the
+/// user multiplies it to what they actually ordered. Totals recompute locally - no
+/// second AI round-trip - and the adjusted values are what gets applied.
 struct FoodSearchResultView: View {
     let result: MealPhotoAnalysisResult
     let showsFatProtein: Bool
-    let onAccept: () -> Void
+    let onAccept: (MealPhotoAnalysisResult) -> Void
     let onEditSearch: () -> Void
 
     @Environment(\.colorScheme) var colorScheme
     @Environment(AppState.self) var appState
+
+    /// Quantity multiplier per component (keyed by component id). 0 = excluded.
+    @State private var quantities: [String: Decimal] = [:]
+
+    private static let quantityStep: Decimal = Decimal(string: "0.5")!
+    private static let maxQuantity: Decimal = 10
 
     private var gramsFormatter: NumberFormatter {
         let formatter = NumberFormatter()
@@ -223,8 +232,90 @@ struct FoodSearchResultView: View {
         return formatter
     }
 
+    private var quantityFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }
+
     private func grams(_ value: Decimal) -> String {
         (gramsFormatter.string(from: value as NSNumber) ?? "0") + String(localized: " g", comment: "grams unit")
+    }
+
+    // MARK: - Quantity adjustment
+
+    private func quantity(for component: MealComponent) -> Decimal {
+        quantities[component.id] ?? 1
+    }
+
+    private func quantityLabel(for component: MealComponent) -> String {
+        "×" + (quantityFormatter.string(from: quantity(for: component) as NSNumber) ?? "1")
+    }
+
+    private func scaled(_ component: MealComponent) -> MealComponent {
+        let factor = quantity(for: component)
+        let portion = factor == 1
+            ? component.portionEstimate
+            : component.portionEstimate + " " + quantityLabel(for: component)
+        return MealComponent(
+            name: component.name,
+            portionEstimate: portion,
+            carbsGrams: component.carbsGrams * factor,
+            fatGrams: component.fatGrams * factor,
+            proteinGrams: component.proteinGrams * factor,
+            confidence: component.confidence
+        )
+    }
+
+    /// Components with the user's quantities applied; excluded (×0) items dropped.
+    private var adjustedComponents: [MealComponent] {
+        result.components.filter { quantity(for: $0) > 0 }.map(scaled)
+    }
+
+    private var adjustedCarbs: Decimal {
+        result.components.isEmpty
+            ? result.totalCarbsGrams
+            : adjustedComponents.reduce(0) { $0 + $1.carbsGrams }
+    }
+
+    private var adjustedFat: Decimal {
+        result.components.isEmpty
+            ? result.totalFatGrams
+            : adjustedComponents.reduce(0) { $0 + $1.fatGrams }
+    }
+
+    private var adjustedProtein: Decimal {
+        result.components.isEmpty
+            ? result.totalProteinGrams
+            : adjustedComponents.reduce(0) { $0 + $1.proteinGrams }
+    }
+
+    /// The result with quantity adjustments baked into components and totals.
+    private var adjustedResult: MealPhotoAnalysisResult {
+        MealPhotoAnalysisResult(
+            isFood: result.isFood,
+            mealName: result.mealName,
+            components: adjustedComponents,
+            totalCarbsGrams: adjustedCarbs,
+            totalFatGrams: adjustedFat,
+            totalProteinGrams: adjustedProtein,
+            mealSource: result.mealSource,
+            mealSourceRationale: result.mealSourceRationale,
+            scaleReferenceDetected: result.scaleReferenceDetected,
+            scaleReferenceNote: result.scaleReferenceNote,
+            absorptionHours: result.absorptionHours,
+            absorptionRationale: result.absorptionRationale,
+            slowAbsorptionMeal: result.slowAbsorptionMeal,
+            overallConfidence: result.overallConfidence,
+            warnings: result.warnings
+        )
+    }
+
+    private func adjustQuantity(for component: MealComponent, by delta: Decimal) {
+        let current = quantity(for: component)
+        let next = min(max(current + delta, 0), Self.maxQuantity)
+        quantities[component.id] = next
     }
 
     var body: some View {
@@ -278,49 +369,91 @@ struct FoodSearchResultView: View {
     }
 
     private var componentsSection: some View {
-        Section(header: Text("Components")) {
+        Section {
             ForEach(result.components) { component in
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack {
-                        Text(component.name)
-                        Spacer()
-                        Text(grams(component.carbsGrams) + String(localized: " carbs"))
-                            .foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text(component.portionEstimate)
-                        Spacer()
-                        if showsFatProtein {
-                            Text(
-                                String(localized: "Fat ") + grams(component.fatGrams)
-                                    + String(localized: " · Protein ") + grams(component.proteinGrams)
-                            )
-                        }
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
+                componentRow(component)
             }
 
             HStack {
                 Text("Total Carbs").bold()
                 Spacer()
-                Text(grams(result.totalCarbsGrams)).bold()
+                Text(grams(adjustedCarbs)).bold()
             }
 
             if showsFatProtein {
                 HStack {
                     Text("Total Fat")
                     Spacer()
-                    Text(grams(result.totalFatGrams))
+                    Text(grams(adjustedFat))
                 }
                 HStack {
                     Text("Total Protein")
                     Spacer()
-                    Text(grams(result.totalProteinGrams))
+                    Text(grams(adjustedProtein))
                 }
             }
-        }.listRowBackground(Color.chart)
+        } header: {
+            Text("Components")
+        } footer: {
+            Text("Adjust the quantity of each item to match what you ordered. Set an item to ×0 to leave it out.")
+        }
+        .listRowBackground(Color.chart)
+    }
+
+    private func componentRow(_ component: MealComponent) -> some View {
+        let factor = quantity(for: component)
+        let excluded = factor == 0
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(component.name)
+                    .strikethrough(excluded)
+                    .foregroundStyle(excluded ? Color.secondary : Color.primary)
+                Spacer()
+                Text(grams(component.carbsGrams * factor) + String(localized: " carbs"))
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Text(component.portionEstimate)
+                Spacer()
+                if showsFatProtein, !excluded {
+                    Text(
+                        String(localized: "Fat ") + grams(component.fatGrams * factor)
+                            + String(localized: " · Protein ") + grams(component.proteinGrams * factor)
+                    )
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+
+            HStack(spacing: 14) {
+                Text("Quantity")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    adjustQuantity(for: component, by: -Self.quantityStep)
+                } label: {
+                    Image(systemName: "minus.circle")
+                        .foregroundStyle(factor > 0 ? Color.accentColor : Color.secondary.opacity(0.4))
+                }
+                .buttonStyle(.borderless)
+                .disabled(factor <= 0)
+
+                Text(quantityLabel(for: component))
+                    .font(.subheadline.bold())
+                    .frame(minWidth: 44)
+
+                Button {
+                    adjustQuantity(for: component, by: Self.quantityStep)
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .foregroundStyle(factor < Self.maxQuantity ? Color.accentColor : Color.secondary.opacity(0.4))
+                }
+                .buttonStyle(.borderless)
+                .disabled(factor >= Self.maxQuantity)
+            }
+            .padding(.top, 2)
+        }
     }
 
     private var absorptionSection: some View {
@@ -366,10 +499,14 @@ struct FoodSearchResultView: View {
         }.listRowBackground(Color.chart)
     }
 
+    private var everythingExcluded: Bool {
+        !result.components.isEmpty && adjustedComponents.isEmpty
+    }
+
     private var actionSection: some View {
         Section {
             Button {
-                onAccept()
+                onAccept(adjustedResult)
             } label: {
                 Text("Use These Values")
                     .font(.headline)
@@ -377,7 +514,8 @@ struct FoodSearchResultView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .frame(height: 35)
             }
-            .listRowBackground(Color(.systemBlue))
+            .listRowBackground(everythingExcluded ? Color.secondary.opacity(0.4) : Color(.systemBlue))
+            .disabled(everythingExcluded)
 
             Button {
                 onEditSearch()

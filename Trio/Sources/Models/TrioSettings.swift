@@ -80,8 +80,11 @@ struct TrioSettings: JSON, Equatable, Encodable {
     /// AI-based meal photo analysis on the bolus calculator screen
     var mealPhotoAnalysisEnabled: Bool = false
 
-    /// Model used for meal photo analysis and food search; empty = app default
+    /// Model used for meal photo analysis; empty = app default
     var mealAnalysisModelId: String = ""
+
+    /// Model used for text food search; empty = fast app default
+    var foodSearchModelId: String = ""
 
     /// Prompt to log carbs when glucose rises like a meal but nothing was logged
     var unannouncedMealDetectionEnabled: Bool = true
@@ -417,6 +420,10 @@ extension TrioSettings: Decodable {
 
         if let mealAnalysisModelId = try? container.decode(String.self, forKey: .mealAnalysisModelId) {
             settings.mealAnalysisModelId = mealAnalysisModelId
+        }
+
+        if let foodSearchModelId = try? container.decode(String.self, forKey: .foodSearchModelId) {
+            settings.foodSearchModelId = foodSearchModelId
         }
 
         if let unannouncedMealDetectionEnabled = try? container.decode(

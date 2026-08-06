@@ -40,16 +40,34 @@ extension MealSettings {
             return formatter
         }
 
-        /// Models offered in the picker: the fetched list, always including the
+        /// Models offered in a picker: the fetched list, always including the
         /// current selection so a stored choice never falls out of the picker
         /// (e.g. before the list has loaded or while offline).
-        private var modelPickerOptions: [AnthropicModelInfo] {
+        private func modelPickerOptions(for selected: String) -> [AnthropicModelInfo] {
             var options = state.availableModels
-            let selected = state.mealAnalysisModelId.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !selected.isEmpty, !options.contains(where: { $0.id == selected }) {
-                options.append(AnthropicModelInfo(id: selected, displayName: selected))
+            let trimmed = selected.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !options.contains(where: { $0.id == trimmed }) {
+                options.append(AnthropicModelInfo(id: trimmed, displayName: trimmed))
             }
             return options
+        }
+
+        /// One model-picker row (shared layout for the photo and search models).
+        private func modelPickerRow(
+            title: String,
+            selection: Binding<String>,
+            defaultModelId: String
+        ) -> some View {
+            HStack {
+                Image(systemName: "cpu")
+                Picker(title, selection: selection) {
+                    Text("Default (\(defaultModelId))").tag("")
+                    ForEach(modelPickerOptions(for: selection.wrappedValue)) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
         }
 
         var body: some View {
@@ -415,14 +433,11 @@ extension MealSettings {
 
                         if !state.mealPhotoApiKey.isEmpty {
                             HStack {
-                                Image(systemName: "cpu")
-                                Picker("AI Model", selection: $state.mealAnalysisModelId) {
-                                    Text("Default (\(MealPhotoAnalysis.Config.defaultModel))").tag("")
-                                    ForEach(modelPickerOptions) { model in
-                                        Text(model.displayName).tag(model.id)
-                                    }
-                                }
-                                .pickerStyle(.menu)
+                                modelPickerRow(
+                                    title: String(localized: "Photo Model"),
+                                    selection: $state.mealAnalysisModelId,
+                                    defaultModelId: MealPhotoAnalysis.Config.defaultModel
+                                )
 
                                 if state.isLoadingModels {
                                     ProgressView()
@@ -436,6 +451,12 @@ extension MealSettings {
                                     .accessibilityLabel("Reload available models")
                                 }
                             }
+
+                            modelPickerRow(
+                                title: String(localized: "Search Model"),
+                                selection: $state.foodSearchModelId,
+                                defaultModelId: MealPhotoAnalysis.Config.defaultFoodSearchModel
+                            )
                         }
                     } footer: {
                         VStack(alignment: .leading, spacing: 5) {
@@ -443,7 +464,7 @@ extension MealSettings {
                                 "Create an API key at console.anthropic.com. The key is stored securely in the iOS keychain and is only used to analyze your meal photos and food searches."
                             )
                             Text(
-                                "The model is used for both meal photo analysis and food search. The list shows the models your API key can access."
+                                "Photo Model analyzes meal photos; Search Model answers text food searches and defaults to a faster model so lookups stay quick. The lists show the models your API key can access."
                             )
                             if let error = state.modelsLoadError {
                                 Text("Could not load models: \(error)")

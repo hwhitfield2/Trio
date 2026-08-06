@@ -15,6 +15,9 @@ extension TwilioConfig {
         @State private var isSendingTest: Bool = false
         @State private var testResultMessage: String?
         @State private var showTestResult: Bool = false
+        @State private var newRecipientNumber: String = ""
+        @State private var editingRecipientIndex: Int?
+        @State private var editedRecipientNumber: String = ""
 
         @Environment(\.colorScheme) var colorScheme
         @Environment(AppState.self) var appState
@@ -77,6 +80,25 @@ extension TwilioConfig {
                 actions: { Button("OK", role: .cancel) {} },
                 message: { Text(testResultMessage ?? "") }
             )
+            .alert(
+                String(localized: "Edit Number"),
+                isPresented: Binding(
+                    get: { editingRecipientIndex != nil },
+                    set: { if !$0 { editingRecipientIndex = nil } }
+                )
+            ) {
+                TextField(String(localized: "Number"), text: $editedRecipientNumber)
+                    .keyboardType(.phonePad)
+                Button(String(localized: "Save")) {
+                    if let index = editingRecipientIndex {
+                        state.updateRecipient(at: index, to: editedRecipientNumber)
+                    }
+                    editingRecipientIndex = nil
+                }
+                Button(String(localized: "Cancel"), role: .cancel) {
+                    editingRecipientIndex = nil
+                }
+            }
             .scrollContentBackground(.hidden).background(appState.trioBackgroundColor(for: colorScheme))
             .onAppear(perform: configureView)
             .navigationBarTitle("Twilio SMS")
@@ -120,23 +142,60 @@ extension TwilioConfig {
 
         private var recipientsSection: some View {
             Section {
+                ForEach(Array(state.parsedRecipients.enumerated()), id: \.offset) { index, number in
+                    HStack {
+                        Image(systemName: "person")
+                        Text(number)
+                        Spacer()
+                        Button {
+                            editingRecipientIndex = index
+                            editedRecipientNumber = number
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Edit number")
+
+                        Button {
+                            state.removeRecipients(at: IndexSet(integer: index))
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Delete number")
+                    }
+                }
+                .onDelete { offsets in
+                    state.removeRecipients(at: offsets)
+                }
+
                 HStack {
-                    Image(systemName: "person.2")
-                    TextField(
-                        String(localized: "Destination numbers, comma-separated"),
-                        text: $state.twilioRecipients
-                    )
-                    .keyboardType(.phonePad)
-                    .autocorrectionDisabled(true)
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.green)
+                    TextField(String(localized: "Add number, e.g. +15551234567"), text: $newRecipientNumber)
+                        .keyboardType(.phonePad)
+                        .autocorrectionDisabled(true)
+                        .onSubmit { addNewRecipient() }
+                    Button(String(localized: "Add")) {
+                        addNewRecipient()
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(newRecipientNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             } header: {
                 Text("Destination Numbers")
             } footer: {
                 Text(
-                    "The caregivers' phone numbers in international format, e.g. +15551234567. Separate several recipients with commas. Each recipient receives their own SMS."
+                    "The caregivers' phone numbers in international format, e.g. +15551234567. Each number is its own entry - add one at a time, tap the pencil to edit it, or the trash to remove it. Each recipient receives their own SMS."
                 )
             }
             .listRowBackground(Color.chart)
+        }
+
+        private func addNewRecipient() {
+            state.addRecipient(newRecipientNumber)
+            newRecipientNumber = ""
         }
 
         private var conditionsSection: some View {

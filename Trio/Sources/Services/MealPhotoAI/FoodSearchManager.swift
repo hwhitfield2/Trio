@@ -121,8 +121,8 @@ final class BaseFoodSearchManager: FoodSearchManager, Injectable {
         request.timeoutInterval = MealPhotoAnalysis.Config.timeout
 
         let body: [String: Any] = [
-            "model": MealPhotoAnalysis.model(from: settingsManager.settings),
-            "max_tokens": MealPhotoAnalysis.Config.maxTokens,
+            "model": MealPhotoAnalysis.foodSearchModel(from: settingsManager.settings),
+            "max_tokens": MealPhotoAnalysis.Config.foodSearchMaxTokens,
             "output_config": ["format": ["type": "json_schema", "schema": BaseMealPhotoAnalysisManager.resultSchema]],
             "messages": [
                 [
@@ -150,8 +150,8 @@ final class BaseFoodSearchManager: FoodSearchManager, Injectable {
 
         Perform the following analysis:
         1. Verify the description refers to food or drink. If it does not, set isFood to false and leave the other fields as sensible empty defaults.
-        2. Identify each distinct food component the description implies (including typical sides, sauces, and drinks that are explicitly mentioned). If the description names a specific restaurant or chain, use published nutrition information for that restaurant's dishes where you know it; otherwise use typical restaurant portion sizes. Do not invent items that were not mentioned.
-        3. When the portion size is not stated, assume a standard single serving of that dish and state the assumed portion in portionEstimate so the user can correct it.
+        2. Make each component one separately orderable item (e.g. "Chicken McNuggets (10 pc)", "Medium Fries", "Ketchup packet") so the user can scale the quantity of each item independently in the app. If the description names a specific restaurant or chain, use published nutrition information for that restaurant's dishes where you know it; otherwise use typical restaurant portion sizes. Do not invent items that were not mentioned.
+        3. If a quantity or size is stated ("20 piece nuggets", "large fries", "two tacos"), use it exactly. When it is not stated, assume the smallest standard serving of that item and state the assumed count or size in both the component name and portionEstimate - the user will multiply the quantity in the app if they ordered more.
         4. Estimate carbohydrates, fat, and protein in grams for each component and in total. Be realistic and slightly conservative rather than overestimating carbs.
         5. Set mealSource to restaurant when a restaurant or takeout dish is described, packaged for packaged snacks or drinks, homemade when clearly home-cooked, and unknown otherwise. Explain the reasoning in mealSourceRationale. Restaurant and packaged meals often contain more hidden fat and sugar - account for that in your estimates and mention it.
         6. Set scaleReferenceDetected to false and use scaleReferenceNote to state the portion assumptions you made (this lookup has no photo to measure from).

@@ -69,10 +69,9 @@ extension TwilioConfig {
                 on: $twilioFromNumber.debounce(for: .seconds(1), scheduler: RunLoop.main)
             ) { twilioFromNumber = $0 }
 
-            subscribeSetting(
-                \.twilioRecipients,
-                on: $twilioRecipients.debounce(for: .seconds(1), scheduler: RunLoop.main)
-            ) { twilioRecipients = $0 }
+            // Recipients are edited as discrete add/edit/delete actions (not
+            // keystrokes), so persist them immediately.
+            subscribeSetting(\.twilioRecipients, on: $twilioRecipients) { twilioRecipients = $0 }
         }
 
         static func nearestCooldownOption(to value: Decimal) -> Decimal {
@@ -92,6 +91,37 @@ extension TwilioConfig {
 
         var parsedRecipients: [String] {
             CaregiverMessage.recipients(from: twilioRecipients)
+        }
+
+        // MARK: - Recipient list editing
+        // The setting stays a comma-separated string (compatible with settings
+        // import/export and the manager's parser); the UI edits it as records.
+
+        func addRecipient(_ number: String) {
+            let trimmed = number.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            var list = parsedRecipients
+            guard !list.contains(trimmed) else { return }
+            list.append(trimmed)
+            twilioRecipients = list.joined(separator: ",")
+        }
+
+        func updateRecipient(at index: Int, to number: String) {
+            var list = parsedRecipients
+            guard list.indices.contains(index) else { return }
+            let trimmed = number.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                list.remove(at: index)
+            } else {
+                list[index] = trimmed
+            }
+            twilioRecipients = list.joined(separator: ",")
+        }
+
+        func removeRecipients(at offsets: IndexSet) {
+            var list = parsedRecipients
+            list.remove(atOffsets: offsets)
+            twilioRecipients = list.joined(separator: ",")
         }
 
         var isConfigured: Bool {
