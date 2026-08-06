@@ -431,6 +431,7 @@ extension CarbsEntry: Codable {
         enteredBy = try container.decodeIfPresent(String.self, forKey: .enteredBy)
         isFPU = try container.decodeIfPresent(Bool.self, forKey: .isFPU)
         fpuID = try container.decodeIfPresent(String.self, forKey: .fpuID)
+        absorptionHours = try container.decodeIfPresent(Decimal.self, forKey: .absorptionHours)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -446,6 +447,7 @@ extension CarbsEntry: Codable {
         try container.encodeIfPresent(enteredBy, forKey: .enteredBy)
         try container.encodeIfPresent(isFPU, forKey: .isFPU)
         try container.encodeIfPresent(fpuID, forKey: .fpuID)
+        try container.encodeIfPresent(absorptionHours, forKey: .absorptionHours)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -460,6 +462,7 @@ extension CarbsEntry: Codable {
         case enteredBy
         case isFPU
         case fpuID
+        case absorptionHours
     }
 
     /// Helper function to convert `CarbsStored` to `CarbEntryStored` while importing JSON carb entries
