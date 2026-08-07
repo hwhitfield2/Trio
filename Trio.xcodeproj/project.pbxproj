@@ -99,6 +99,12 @@
 		3811DF0225CA9FEA00A708ED /* Credentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0125CA9FEA00A708ED /* Credentials.swift */; };
 		3811DF1025CAAAE200A708ED /* APSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0F25CAAAE200A708ED /* APSManager.swift */; };
 		FA6E57A72E0A00000000B004 /* MLForecastService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A004 /* MLForecastService.swift */; };
+		FA6E57A72E0A00000000B010 /* MLTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A010 /* MLTrainer.swift */; };
+		FA6E57A72E0A00000000B011 /* MLSampleBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A011 /* MLSampleBuilder.swift */; };
+		FA6E57A72E0A00000000B012 /* MLModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A012 /* MLModelStore.swift */; };
+		FA6E57A72E0A00000000B013 /* MLRetrainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A013 /* MLRetrainService.swift */; };
+		FA6E57A72E0A00000000B014 /* MLModelReviewSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A014 /* MLModelReviewSection.swift */; };
+		FA6E57A72E0A00000000B015 /* MLTrainerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6E57A72E0A00000000A015 /* MLTrainerTests.swift */; };
 		38192E04261B82FA0094D973 /* ReachabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E03261B82FA0094D973 /* ReachabilityManager.swift */; };
 		38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */; };
 		38192E0D261BAF980094D973 /* ConvenienceExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E0C261BAF980094D973 /* ConvenienceExtensions.swift */; };
@@ -1026,6 +1032,12 @@
 		3811DF0125CA9FEA00A708ED /* Credentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Credentials.swift; sourceTree = "<group>"; };
 		3811DF0F25CAAAE200A708ED /* APSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APSManager.swift; sourceTree = "<group>"; };
 		FA6E57A72E0A00000000A004 /* MLForecastService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLForecastService.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A010 /* MLTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLTrainer.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A011 /* MLSampleBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLSampleBuilder.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A012 /* MLModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLModelStore.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A013 /* MLRetrainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLRetrainService.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A014 /* MLModelReviewSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLModelReviewSection.swift; sourceTree = "<group>"; };
+		FA6E57A72E0A00000000A015 /* MLTrainerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLTrainerTests.swift; sourceTree = "<group>"; };
 		3818AA45274C229000843DB3 /* LibreTransmitter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LibreTransmitter; path = Dependencies/LibreTransmitter; sourceTree = "<group>"; };
 		3818AA49274C267000843DB3 /* CGMBLEKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = CGMBLEKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		3818AA4C274C26A300843DB3 /* LoopKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = LoopKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -2393,6 +2405,7 @@
 				CE95BF562BA5F5FE00DC3DE3 /* PluginManager.swift */,
 				3811DF0F25CAAAE200A708ED /* APSManager.swift */,
 				FA6E57A72E0A00000000A004 /* MLForecastService.swift */,
+				FA6E57A72E0A00000000C002 /* ML */,
 				38BF021E25E7F0DE00579895 /* DeviceDataManager.swift */,
 				38DAB289260D349500F74C1A /* FetchGlucoseManager.swift */,
 				38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */,
@@ -2869,6 +2882,7 @@
 				38FCF3F825E902C20078B0D1 /* FileStorageTests.swift */,
 				3B997DCE2DC00A3A006B6BB2 /* JSONImporterTests.swift */,
 				FA6E57A72E0A00000000A007 /* MLForecasterTests.swift */,
+				FA6E57A72E0A00000000A015 /* MLTrainerTests.swift */,
 				CE1F6DD82BADF4620064EB8D /* PluginManagerTests.swift */,
 				B3919BBB515547118D684CA2 /* SettingsSearchTests.swift */,
 				BD8FC0532D66186000B95AED /* TestError.swift */,
@@ -3165,6 +3179,17 @@
 				FA6E57A72E0A00000000C001 /* Forecast */,
 			);
 			path = ViewElements;
+			sourceTree = "<group>";
+		};
+		FA6E57A72E0A00000000C002 /* ML */ = {
+			isa = PBXGroup;
+			children = (
+				FA6E57A72E0A00000000A010 /* MLTrainer.swift */,
+				FA6E57A72E0A00000000A011 /* MLSampleBuilder.swift */,
+				FA6E57A72E0A00000000A012 /* MLModelStore.swift */,
+				FA6E57A72E0A00000000A013 /* MLRetrainService.swift */,
+			);
+			path = ML;
 			sourceTree = "<group>";
 		};
 		BD249D952D42FCA800412DEB /* StatStateModel+Setup */ = {
@@ -4219,6 +4244,7 @@
 			isa = PBXGroup;
 			children = (
 				FAB1E5000000000000000025 /* MLEngineDataRootView.swift */,
+				FA6E57A72E0A00000000A014 /* MLModelReviewSection.swift */,
 				FAB1E5000000000000000048 /* AuditRecordViews.swift */,
 			);
 			path = View;
@@ -4671,6 +4697,11 @@
 				DDF847E82C5DABA30049BB3B /* WatchConfigAppleWatchView.swift in Sources */,
 				3811DF1025CAAAE200A708ED /* APSManager.swift in Sources */,
 				FA6E57A72E0A00000000B004 /* MLForecastService.swift in Sources */,
+				FA6E57A72E0A00000000B010 /* MLTrainer.swift in Sources */,
+				FA6E57A72E0A00000000B011 /* MLSampleBuilder.swift in Sources */,
+				FA6E57A72E0A00000000B012 /* MLModelStore.swift in Sources */,
+				FA6E57A72E0A00000000B013 /* MLRetrainService.swift in Sources */,
+				FA6E57A72E0A00000000B014 /* MLModelReviewSection.swift in Sources */,
 				FAB1E5000000000000000012 /* SafetyEnvelope.swift in Sources */,
 				FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */,
 				FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */,
@@ -5298,6 +5329,7 @@
 				DDC6CA6D2DD90A2A0060EE25 /* LocalizationTests.swift in Sources */,
 				3B997DCF2DC00A3A006B6BB2 /* JSONImporterTests.swift in Sources */,
 				FA6E57A72E0A00000000B007 /* MLForecasterTests.swift in Sources */,
+				FA6E57A72E0A00000000B015 /* MLTrainerTests.swift in Sources */,
 				BD8FC0662D661A0000B95AED /* GlucoseStorageTests.swift in Sources */,
 				DDDD0FFF2F4E231B00F9C645 /* MockTDDStorage.swift in Sources */,
 				BD8FC05B2D6618AF00B95AED /* DeterminationStorageTests.swift in Sources */,

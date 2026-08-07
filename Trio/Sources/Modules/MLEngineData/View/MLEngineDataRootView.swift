@@ -59,6 +59,8 @@ extension MLEngineData {
                     }
                 ).listRowBackground(Color.chart)
 
+                MLModelReviewSection()
+
                 Section(
                     header: Text("Decision Audit Records"),
                     footer: Text(

@@ -43,8 +43,8 @@ final class MLForecastService {
     }
 
     private func computeAndStore() async throws {
-        guard let model = model else {
-            debug(.apsManager, "ML shadow forecast: no bundled model")
+        guard let model = MLModelStore.shared.activePromotedModel() ?? self.model else {
+            debug(.apsManager, "ML shadow forecast: no model available")
             return
         }
         guard let features = try await buildFeatures() else { return }
@@ -227,6 +227,18 @@ final class MLForecastService {
         }
     }
 
+    /// The 13 features, in training order — shared with the sample builder and trainer.
+    static let featureNames = [
+        "bg", "delta_5m", "delta_15m", "delta_30m", "iob", "cob",
+        "sensitivity_ratio", "basal_rate", "insulin_last_1h",
+        "carbs_last_1h", "carbs_last_3h", "tod_sin", "tod_cos"
+    ]
+
+    /// The factory model shipped in the app bundle (the fallback champion).
+    static func bundledModel() -> MLForecastModel? {
+        loadBundledModel()
+    }
+
     private static func loadBundledModel() -> MLForecastModel? {
         guard let url = Foundation.Bundle.main.url(forResource: "json/defaults/TrioMLForecaster", withExtension: "json"),
               let data = try? Data(contentsOf: url),
@@ -240,8 +252,8 @@ final class MLForecastService {
 
 /// Bundled gradient-boosted tree ensemble, exported by ml/export_model.py.
 /// Prediction = baseline + learningRate * Σ leaf values, one tree walk per estimator.
-struct MLForecastModel: Decodable {
-    struct Tree: Decodable {
+struct MLForecastModel: Codable {
+    struct Tree: Codable {
         let childrenLeft: [Int]
         let childrenRight: [Int]
         let feature: [Int]
@@ -249,7 +261,7 @@ struct MLForecastModel: Decodable {
         let value: [Double]
     }
 
-    struct Ensemble: Decodable {
+    struct Ensemble: Codable {
         let learningRate: Double
         let baseline: Double
         /// When set, the value of this feature is added to the ensemble output —

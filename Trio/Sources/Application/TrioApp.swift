@@ -169,6 +169,10 @@ extension Notification.Name {
                     // Clear the persistentHistory and the NSManagedObjects that are older than 90 days every time the app starts
                     cleanupOldData()
 
+                    // Weekly on-device shadow-forecaster retrain; produces a
+                    // review-gated candidate only, never changes behavior by itself
+                    MLRetrainService.shared.retrainIfDue()
+
                     self.initState.complete = true
 
                     // Notifications handling
