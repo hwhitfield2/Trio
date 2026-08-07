@@ -202,6 +202,106 @@ extension WatchState {
         }
     }
 
+    /// Sends a request to suspend insulin delivery to the paired iPhone
+    func sendPumpSuspendRequest() {
+        guard let session = session, session.isReachable else {
+            Task {
+                await WatchLogger.shared.log("⌚️ Suspend pump request aborted: session unreachable")
+            }
+            return
+        }
+
+        Task {
+            await WatchLogger.shared.log("⌚️ Sending suspend pump request")
+        }
+
+        let message: [String: Any] = [
+            WatchMessageKeys.suspendPump: true
+        ]
+
+        session.sendMessage(message, replyHandler: nil) { error in
+            Task {
+                await WatchLogger.shared.log("⌚️ Error sending suspend pump request: \(error)")
+                await WatchLogger.shared.log("⌚️ Saving logs to disk as fallback!")
+                await WatchLogger.shared.persistLogsLocally()
+            }
+        }
+
+        // Display pending communication animation
+        showCommsAnimation = true
+        Task {
+            await WatchLogger.shared.log("⌚️ showCommsAnimation = true")
+        }
+    }
+
+    /// Sends a request to resume insulin delivery to the paired iPhone
+    func sendPumpResumeRequest() {
+        guard let session = session, session.isReachable else {
+            Task {
+                await WatchLogger.shared.log("⌚️ Resume pump request aborted: session unreachable")
+            }
+            return
+        }
+
+        Task {
+            await WatchLogger.shared.log("⌚️ Sending resume pump request")
+        }
+
+        let message: [String: Any] = [
+            WatchMessageKeys.resumePump: true
+        ]
+
+        session.sendMessage(message, replyHandler: nil) { error in
+            Task {
+                await WatchLogger.shared.log("⌚️ Error sending resume pump request: \(error)")
+                await WatchLogger.shared.log("⌚️ Saving logs to disk as fallback!")
+                await WatchLogger.shared.persistLogsLocally()
+            }
+        }
+
+        // Display pending communication animation
+        showCommsAnimation = true
+        Task {
+            await WatchLogger.shared.log("⌚️ showCommsAnimation = true")
+        }
+    }
+
+    /// Sends a temp basal request to the paired iPhone
+    /// - Parameters:
+    ///   - rate: The basal rate in U/hr
+    ///   - durationMinutes: The duration of the temp basal in minutes
+    func sendTempBasalRequest(rate: Double, durationMinutes: Int) {
+        guard let session = session, session.isReachable else {
+            Task {
+                await WatchLogger.shared.log("⌚️ Temp basal request aborted: session unreachable")
+            }
+            return
+        }
+
+        Task {
+            await WatchLogger.shared.log("⌚️ Sending temp basal request: \(rate) U/hr for \(durationMinutes) min")
+        }
+
+        let message: [String: Any] = [
+            WatchMessageKeys.setTempBasal: rate,
+            WatchMessageKeys.tempBasalDuration: durationMinutes
+        ]
+
+        session.sendMessage(message, replyHandler: nil) { error in
+            Task {
+                await WatchLogger.shared.log("⌚️ Error sending temp basal request: \(error)")
+                await WatchLogger.shared.log("⌚️ Saving logs to disk as fallback!")
+                await WatchLogger.shared.persistLogsLocally()
+            }
+        }
+
+        // Display pending communication animation
+        showCommsAnimation = true
+        Task {
+            await WatchLogger.shared.log("⌚️ showCommsAnimation = true")
+        }
+    }
+
     /// Sends a request to calculate a bolus recommendation based on the current carbs amount
     func requestBolusRecommendation() {
         guard let session = session, session.isReachable else {
