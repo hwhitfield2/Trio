@@ -6,6 +6,7 @@ enum NavigationDestinations: String {
     case carbsInput = "CarbsInputView"
     case bolusInput = "BolusInputView"
     case bolusConfirm = "BolusConfirmView"
+    case tempBasalInput = "TempBasalInputView"
 }
 
 enum MealBolusStep: String {
@@ -28,6 +29,9 @@ enum AcknowledgmentCode: String, Codable {
     case overrideStopped = "override_stopped"
     case tempTargetStarted = "temp_target_started"
     case tempTargetStopped = "temp_target_stopped"
+    case pumpSuspended = "pump_suspended"
+    case pumpResumed = "pump_resumed"
+    case tempBasalSet = "temp_basal_set"
     case genericSuccess = "success"
     case genericFailure = "failure"
 }

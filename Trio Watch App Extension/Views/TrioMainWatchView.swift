@@ -13,6 +13,7 @@ struct TrioMainWatchView: View {
     // view visbility
     @State private var showingTreatmentMenuSheet: Bool = false
     @State private var showingOverrideSheet: Bool = false
+    @State private var showingInsulinMenuSheet: Bool = false
     // navigation flag for meal bolus combo
     @State private var continueToBolus = false
     @State private var navigationPath = NavigationPath()
@@ -111,15 +112,21 @@ struct TrioMainWatchView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    VStack {
-                        Image(systemName: "syringe.fill")
-                            .foregroundStyle(Color.insulin)
+                    Button {
+                        showingInsulinMenuSheet = true
+                    } label: {
+                        VStack {
+                            Image(systemName: state.isPumpSuspended ? "pause.circle.fill" : "syringe.fill")
+                                .foregroundStyle(state.isPumpSuspended ? Color.loopRed : Color.insulin)
 
-                        Text(isWatchStateDated || isSessionUnreachable ? "--" : state.iob ?? "--")
-                            .foregroundStyle(isWatchStateDated ? Color.secondary : Color.white)
-                            .frame(alignment: .leading)
-                            .minimumScaleFactor(0.5)
-                    }.font(.caption2)
+                            Text(isWatchStateDated || isSessionUnreachable ? "--" : state.iob ?? "--")
+                                .foregroundStyle(isWatchStateDated ? Color.secondary : Color.white)
+                                .frame(alignment: .leading)
+                                .minimumScaleFactor(0.5)
+                        }.font(.caption2)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isWatchStateDated || isSessionUnreachable)
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -182,6 +189,19 @@ struct TrioMainWatchView: View {
                     navigationPath.append(NavigationDestinations.acknowledgmentPending)
                 }
             }
+            .sheet(isPresented: $showingInsulinMenuSheet) {
+                InsulinMenuView(
+                    state: state,
+                    onActionSent: {
+                        showingInsulinMenuSheet = false
+                        navigationPath.append(NavigationDestinations.acknowledgmentPending)
+                    },
+                    onSetTempBasal: {
+                        showingInsulinMenuSheet = false
+                        navigationPath.append(NavigationDestinations.tempBasalInput)
+                    }
+                )
+            }
             .sheet(isPresented: $showingTempTargetSheet) {
                 TempTargetPresetsView(
                     state: state,
@@ -216,6 +236,11 @@ struct TrioMainWatchView: View {
                         state: state,
                         bolusAmount: $state.bolusAmount,
                         confirmationProgress: $state.confirmationProgress
+                    )
+                case .tempBasalInput:
+                    TempBasalInputView(
+                        navigationPath: $navigationPath,
+                        state: state
                     )
                 }
             }

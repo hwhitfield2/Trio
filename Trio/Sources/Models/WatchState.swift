@@ -17,7 +17,11 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
     var overridePresets: [OverridePresetWatch] = []
     var tempTargetPresets: [TempTargetPresetWatch] = []
 
+    // Pump state
+    var isPumpSuspended: Bool = false
+
     // Safety limits
+    var maxBasal: Decimal = 0.0
     var maxBolus: Decimal = 10.0
     var maxCarbs: Decimal = 250.0
     var maxFat: Decimal = 250.0
@@ -44,6 +48,8 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
             lhs.lastLoopTime == rhs.lastLoopTime &&
             lhs.overridePresets == rhs.overridePresets &&
             lhs.tempTargetPresets == rhs.tempTargetPresets &&
+            lhs.isPumpSuspended == rhs.isPumpSuspended &&
+            lhs.maxBasal == rhs.maxBasal &&
             lhs.maxBolus == rhs.maxBolus &&
             lhs.maxCarbs == rhs.maxCarbs &&
             lhs.maxFat == rhs.maxFat &&
@@ -70,6 +76,8 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
         hasher.combine(lastLoopTime)
         hasher.combine(overridePresets)
         hasher.combine(tempTargetPresets)
+        hasher.combine(isPumpSuspended)
+        hasher.combine(maxBasal)
         hasher.combine(maxBolus)
         hasher.combine(maxCarbs)
         hasher.combine(maxFat)

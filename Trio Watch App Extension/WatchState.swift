@@ -28,6 +28,13 @@ import WatchConnectivity
     var overridePresets: [OverridePresetWatch] = []
     var tempTargetPresets: [TempTargetPresetWatch] = []
 
+    /// pump state
+    var isPumpSuspended: Bool = false
+
+    /// temp basal input
+    var tempBasalRate: Double = 0.0
+    var tempBasalDurationMinutes: Int = 30
+
     /// treatments inputs
     /// used to store carbs for combined meal-bolus-treatments
     var carbsAmount: Int = 0
@@ -37,6 +44,7 @@ import WatchConnectivity
     var confirmationProgress: Double = 0.0
 
     // Safety limits
+    var maxBasal: Decimal = 0
     var maxBolus: Decimal = 10
     var maxCarbs: Decimal = 250
     var maxFat: Decimal = 250
@@ -520,6 +528,16 @@ import WatchConnectivity
                       let isEnabled = data["isEnabled"] as? Bool
                 else { return nil }
                 return TempTargetPresetWatch(name: name, isEnabled: isEnabled)
+            }
+        }
+
+        if let isPumpSuspended = message[WatchMessageKeys.isPumpSuspended] as? Bool {
+            self.isPumpSuspended = isPumpSuspended
+        }
+
+        if let maxBasalValue = message[WatchMessageKeys.maxBasal] {
+            if let decimalValue = (maxBasalValue as? NSNumber)?.decimalValue {
+                maxBasal = decimalValue
             }
         }
 
