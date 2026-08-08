@@ -162,9 +162,10 @@ struct TandemCancelBolusResponse: TandemResponse {
     var cancelled: Bool { statusId == 0 && reasonId == 0 }
 
     init(cargo: Data) throws {
-        // Documented cargo is 5 bytes (byte 4 unused); reads only touch 0..3.
-        guard cargo.count >= 4 else {
-            throw TandemMessageError.unexpectedCargoSize(message: "CancelBolusResponse", expected: 4, actual: cargo.count)
+        // Documented cargo is 5 bytes (byte 4 unused); reject anything shorter,
+        // matching the guard-equals-documented-size convention used elsewhere.
+        guard cargo.count >= 5 else {
+            throw TandemMessageError.unexpectedCargoSize(message: "CancelBolusResponse", expected: 5, actual: cargo.count)
         }
         let bytes = [UInt8](cargo)
         statusId = bytes[0]
