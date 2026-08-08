@@ -78,23 +78,21 @@ class TandemPumpManager: DeviceManager {
 
     // MARK: - Capabilities
 
-    /// t:slim X2 bolus delivery is in 0.01 U increments; the BLE cargo is in
-    /// milliunits (0.001 U). pumpx2 validates remote InitiateBolus against a
-    /// 0.05 U floor, but that constant is uncited and may be conservative — the
-    /// pump's own increment is 0.01 U. We expose down to 0.01 U so the
-    /// microbolus-basal engine can deliver fine-grained pulses. NOTE: sub-0.05 U
-    /// *remote* delivery has NOT been confirmed on hardware; the pump may nack
-    /// a bolus below its true minimum, which the delivery path treats as a
-    /// (non-fatal) rejection.
-    static var onboardingSupportedBolusVolumes: [Double] {
-        (1 ... 2500).map { Double($0) / 100 }
-    }
+    /// The t:slim X2 BLE bolus cargo is in milliunits (0.001 U), so we expose
+    /// volumes down to 0.001 U for boluses and the microbolus-basal engine.
+    /// The pump's on-screen delivery increment is 0.01 U and pumpx2 validates
+    /// remote InitiateBolus against a 0.05 U floor, but that floor is uncited
+    /// and may be conservative. NOTE: sub-0.05 U *remote* delivery has NOT
+    /// been confirmed on hardware; the pump may nack a bolus below its true
+    /// minimum, which the delivery path treats as a (non-fatal) rejection.
+    static let onboardingSupportedBolusVolumes: [Double] =
+        (1 ... 25000).map { Double($0) / 1000 }
 
-    /// t:slim X2: basal 0-15 U/hr. 0.01 U/hr granularity used for display;
-    /// the pump's profile is never written by Trio.
-    static var onboardingSupportedBasalRates: [Double] {
-        (0 ... 1500).map { Double($0) / 100 }
-    }
+    /// t:slim X2: basal 0-15 U/hr. 0.001 U/hr granularity so the
+    /// microbolus-basal engine can honor fine-grained oref rates; the pump's
+    /// own profile is never written by Trio.
+    static let onboardingSupportedBasalRates: [Double] =
+        (0 ... 15000).map { Double($0) / 1000 }
 
     static var onboardingSupportedMaximumBolusVolumes: [Double] {
         onboardingSupportedBolusVolumes
@@ -109,12 +107,17 @@ class TandemPumpManager: DeviceManager {
     var maximumBasalScheduleEntryCount: Int { Self.onboardingMaximumBasalScheduleEntryCount }
     var minimumBasalScheduleEntryDuration: TimeInterval { .minutes(15) }
 
+    // Arithmetic floor-to-milliunit instead of scanning the supported-value
+    // arrays (25k/15k entries). The +1e-6 nudge keeps binary-float artifacts
+    // (e.g. 0.003 * 1000 == 2.999...) from flooring one milliunit low.
     func roundToSupportedBolusVolume(units: Double) -> Double {
-        supportedBolusVolumes.last(where: { $0 <= units }) ?? 0
+        let milliunits = (units * 1000 + 1e-6).rounded(.down)
+        return min(max(milliunits, 0), 25000) / 1000
     }
 
     func roundToSupportedBasalRate(unitsPerHour: Double) -> Double {
-        supportedBasalRates.last(where: { $0 <= unitsPerHour }) ?? 0
+        let milliunitsPerHour = (unitsPerHour * 1000 + 1e-6).rounded(.down)
+        return min(max(milliunitsPerHour, 0), 15000) / 1000
     }
 
     var debugDescription: String {
@@ -979,7 +982,7 @@ enum TandemUnsupportedError: LocalizedError {
         case .bolusInProgress:
             return "A bolus is already in progress."
         case .bolusTooSmall:
-            return "The requested bolus is below the pump's 0.01 U minimum increment."
+            return "The requested bolus is below the pump's 0.001 U minimum increment."
         case let .bolusPermissionDenied(reason):
             return "The pump denied the bolus request (reason \(reason)). Dismiss any open screens on the pump and try again."
         case let .bolusRejected(status):

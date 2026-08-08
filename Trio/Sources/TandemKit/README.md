@@ -31,7 +31,8 @@ by delivering **all** basal as a stream of small automatic boluses:
 
 - Each loop cycle, oref's requested basal rate is integrated over the elapsed
   time into an "owed" accumulator; the accrued amount is delivered as one
-  microbolus (rounded down to the 0.01 U increment). Sub-minimum rates
+  microbolus (rounded down to the 0.001 U increment — the milliunit
+  resolution of the BLE bolus cargo). Sub-minimum rates
   accumulate until they cross the pulse threshold, so even low rates are
   delivered on average.
 - **Hard precondition:** the pump's own basal profile must be **0 U/hr** and

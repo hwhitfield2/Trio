@@ -11,7 +11,7 @@ import LoopKit
 /// Each loop cycle Trio calls `enactTempBasal(rate, duration)`. We integrate the
 /// previously-commanded rate over the elapsed time into an "owed" accumulator,
 /// then deliver whatever has accrued as a single microbolus (rounded down to the
-/// 0.01 U increment). Amounts below the minimum pulse keep accumulating until
+/// 0.001 U increment). Amounts below the minimum pulse keep accumulating until
 /// they cross the threshold, so even sub-minimum rates are delivered on average.
 ///
 /// Deliveries are recorded as **automatic bolus** pump events (not temp-basal):
@@ -92,8 +92,10 @@ extension TandemPumpManager {
             return
         }
 
-        // Round owed down to a deliverable 0.01 U pulse, capped.
-        var deliverable = (state.owedBasalInsulin * 100).rounded(.down) / 100
+        // Round owed down to a deliverable 0.001 U (1 milliunit) pulse, capped.
+        // The +1e-6 nudge keeps binary-float artifacts from flooring one
+        // milliunit low.
+        var deliverable = (state.owedBasalInsulin * 1000 + 1e-6).rounded(.down) / 1000
         deliverable = min(deliverable, Self.maxSingleMicrobolusUnits)
         let milliunits = UInt32((deliverable * 1000).rounded())
 

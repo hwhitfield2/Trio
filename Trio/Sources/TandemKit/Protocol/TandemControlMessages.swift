@@ -82,13 +82,14 @@ struct TandemInitiateBolusRequest: TandemRequest {
     static let signed = true
     static let modifiesInsulinDelivery = true
 
-    /// Smallest bolus we will command, in milliunits. The pump's delivery
-    /// increment is 0.01 U (10 milliunits) and the cargo is milliunits, so 10
-    /// is the finest well-defined amount. pumpx2 uses a more conservative
-    /// 50-milliunit (0.05 U) floor; whether the firmware actually accepts a
-    /// sub-0.05 U *remote* bolus is unverified, so a pump nack of a small
-    /// pulse is handled gracefully rather than assumed impossible.
-    static let minBolusMilliunits: UInt32 = 10
+    /// Smallest bolus we will command, in milliunits. The cargo is milliunits
+    /// (0.001 U), so 1 is the finest amount the wire format can express and we
+    /// allow commands all the way down to it. The pump's on-screen delivery
+    /// increment is 0.01 U and pumpx2 uses a more conservative 50-milliunit
+    /// (0.05 U) floor; whether the firmware actually accepts a sub-0.05 U
+    /// *remote* bolus is unverified, so a pump nack of a small pulse is
+    /// handled gracefully rather than assumed impossible.
+    static let minBolusMilliunits: UInt32 = 1
 
     /// Total bolus volume in milliunits.
     let totalVolume: UInt32
