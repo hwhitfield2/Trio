@@ -51,9 +51,51 @@ final class TandemPumpState: RawRepresentable {
     /// default; requires firmware with API >= 2.5 (t:slim X2 7.6+).
     var remoteBolusEnabled: Bool
 
-    /// Highest bolus id already reported to Trio, for deduplication.
-    var lastReportedBolusId: UInt16
+    /// User opt-in for the microbolus-basal closed-loop mode: Trio delivers all
+    /// basal/temp-basal as a stream of small boluses. REQUIRES the pump's own
+    /// basal profile to be 0 U/hr and Control-IQ off, or delivery would stack
+    /// on top of the pump's own delivery. Implies remoteBolusEnabled.
+    var microbolusBasalEnabled: Bool
+
+    /// Trio-commanded suspend of microbolus delivery (distinct from the pump's
+    /// own `suspended`). With the pump basal zeroed, withholding microboluses
+    /// is a true suspend.
+    var microbolusSuspended: Bool
+
+    // MARK: Runtime-only microbolus-basal accumulator (NOT persisted)
+    //
+    // These are deliberately reset to zero on every manager construction
+    // (including app restart). Persisting them would risk dumping stale accrued
+    // basal after the app was closed for a long time. Losing at most one cycle's
+    // worth of accrual on restart is the safe trade.
+
+    /// Insulin (U) accrued from the commanded basal rate but not yet delivered
+    /// because it was below the minimum bolus. Carried across cycles in-session.
+    var owedBasalInsulin: Double
+    /// The most recently commanded basal rate (U/hr) being integrated.
+    var lastBasalRate: Double
+    /// When `lastBasalRate` was last updated (start of the current accrual step).
+    var lastBasalUpdate: Date?
+
+    /// Runtime-only: recently handled bolus ids (driver-initiated pulses/SMBs
+    /// and pump-UI boluses already recorded), for reconcile dedup. Bounded and
+    /// wrap-around safe — only the most recent ids matter. NOT persisted.
+    var recentBolusIds: [UInt16]
     var activeBolus: TandemActiveBolus?
+
+    /// Remember a handled bolus id, evicting the oldest beyond the bound.
+    func noteBolusId(_ id: UInt16) {
+        guard !recentBolusIds.contains(id) else { return }
+        recentBolusIds.append(id)
+        let maxRecent = 64
+        if recentBolusIds.count > maxRecent {
+            recentBolusIds.removeFirst(recentBolusIds.count - maxRecent)
+        }
+    }
+
+    func hasRecentBolusId(_ id: UInt16) -> Bool {
+        recentBolusIds.contains(id)
+    }
 
     /// Remote bolus requires API >= 2.5 per pumpx2 message gating.
     var supportsRemoteBolus: Bool {
@@ -61,7 +103,9 @@ final class TandemPumpState: RawRepresentable {
     }
 
     var basalDeliveryState: PumpManagerStatus.BasalDeliveryState {
-        if suspended {
+        // Either the pump's own suspend or a Trio-commanded microbolus suspend
+        // stops delivery (with the pump basal zeroed, the latter is a true stop).
+        if suspended || microbolusSuspended {
             return .suspended(lastSync)
         }
         return .active(lastSync == .distantPast ? .distantPast : lastSync)
@@ -102,7 +146,12 @@ final class TandemPumpState: RawRepresentable {
         controlIQEnabled = false
         insulinType = nil
         remoteBolusEnabled = false
-        lastReportedBolusId = 0
+        microbolusBasalEnabled = false
+        microbolusSuspended = false
+        owedBasalInsulin = 0
+        lastBasalRate = 0
+        lastBasalUpdate = nil
+        recentBolusIds = []
         activeBolus = nil
     }
 
@@ -128,7 +177,12 @@ final class TandemPumpState: RawRepresentable {
         suspended = rawValue["suspended"] as? Bool ?? false
         controlIQEnabled = rawValue["controlIQEnabled"] as? Bool ?? false
         remoteBolusEnabled = rawValue["remoteBolusEnabled"] as? Bool ?? false
-        lastReportedBolusId = UInt16(rawValue["lastReportedBolusId"] as? Int ?? 0)
+        microbolusBasalEnabled = rawValue["microbolusBasalEnabled"] as? Bool ?? false
+        microbolusSuspended = rawValue["microbolusSuspended"] as? Bool ?? false
+        // owedBasalInsulin / lastBasalRate / lastBasalUpdate / recentBolusIds
+        // are runtime-only: they keep the init() defaults so the accumulator and
+        // dedup state always start fresh after a restart, never dumping stale
+        // accrued basal.
         if let rawInsulinType = rawValue["insulinType"] as? InsulinType.RawValue {
             insulinType = InsulinType(rawValue: rawInsulinType)
         }
@@ -157,7 +211,10 @@ final class TandemPumpState: RawRepresentable {
         value["suspended"] = suspended
         value["controlIQEnabled"] = controlIQEnabled
         value["remoteBolusEnabled"] = remoteBolusEnabled
-        value["lastReportedBolusId"] = Int(lastReportedBolusId)
+        value["microbolusBasalEnabled"] = microbolusBasalEnabled
+        value["microbolusSuspended"] = microbolusSuspended
+        // owedBasalInsulin / lastBasalRate / lastBasalUpdate / recentBolusIds
+        // are intentionally NOT persisted (runtime-only; see declarations).
         value["insulinType"] = insulinType?.rawValue
         if let activeBolus = activeBolus {
             value["activeBolus"] = try? JSONEncoder().encode(activeBolus)

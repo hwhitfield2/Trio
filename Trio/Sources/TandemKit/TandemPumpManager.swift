@@ -73,9 +73,16 @@ class TandemPumpManager: DeviceManager {
 
     // MARK: - Capabilities
 
-    /// t:slim X2: boluses 0.05-25 U in 0.01 U increments.
+    /// t:slim X2 bolus delivery is in 0.01 U increments; the BLE cargo is in
+    /// milliunits (0.001 U). pumpx2 validates remote InitiateBolus against a
+    /// 0.05 U floor, but that constant is uncited and may be conservative — the
+    /// pump's own increment is 0.01 U. We expose down to 0.01 U so the
+    /// microbolus-basal engine can deliver fine-grained pulses. NOTE: sub-0.05 U
+    /// *remote* delivery has NOT been confirmed on hardware; the pump may nack
+    /// a bolus below its true minimum, which the delivery path treats as a
+    /// (non-fatal) rejection.
     static var onboardingSupportedBolusVolumes: [Double] {
-        (5 ... 2500).map { Double($0) / 100 }
+        (1 ... 2500).map { Double($0) / 100 }
     }
 
     /// t:slim X2: basal 0-15 U/hr. 0.01 U/hr granularity used for display;
@@ -343,45 +350,86 @@ extension TandemPumpManager {
             return
         }
 
-        let isOurs = state.activeBolus != nil && state.activeBolus?.bolusId == lastBolus.bolusId
+        guard lastBolus.bolusId != 0 else {
+            checkStuckActiveBolus()
+            return
+        }
 
-        // Record a finished bolus once. LastBolusStatus reports a concluded
-        // bolus (complete, stopped, or terminated), so its deliveredVolume is
-        // the final amount — record it whatever the terminal reason. For our
-        // own tracked bolus always finalize; for another source (pump UI) skip
-        // if we already reported this id.
-        if lastBolus.bolusId != 0, isOurs || lastBolus.bolusId != state.lastReportedBolusId {
-            let units = Double(lastBolus.deliveredVolume) / 1000
-            let date = TandemTime.date(fromTandemSeconds: lastBolus.timestamp)
+        let units = Double(lastBolus.deliveredVolume) / 1000
+
+        // Case 1: this is our tracked (SMB/manual) bolus, now concluded.
+        // Finalize by re-reporting the DELIVERED amount at the SAME timestamp
+        // the initial (mutable) event used — Trio dedups pump events by exact
+        // timestamp, so re-reporting at the original time updates that record
+        // (to a smaller amount if the bolus was cancelled) instead of adding a
+        // second, double-counted entry at the pump's timestamp.
+        if let active = state.activeBolus, active.bolusId == lastBolus.bolusId {
             let dose = DoseEntry(
                 type: .bolus,
-                startDate: date,
+                startDate: active.startDate,
                 value: units,
                 unit: .units,
                 deliveredUnits: units,
                 insulinType: state.insulinType,
-                automatic: false,
+                automatic: active.activationType.isAutomatic,
                 isMutable: false
             )
             let event = NewPumpEvent(
-                date: date,
+                date: active.startDate,
                 dose: dose,
-                raw: withUnsafeBytes(of: lastBolus.bolusId.littleEndian) { Data($0) } + withUnsafeBytes(
-                    of: lastBolus.timestamp.littleEndian
-                ) { Data($0) },
+                raw: withUnsafeBytes(of: lastBolus.bolusId.littleEndian) { Data($0) } + Data([0xFD]),
                 title: "Bolus \(units) U (id \(lastBolus.bolusId))",
                 type: .bolus
             )
-
-            state.lastReportedBolusId = lastBolus.bolusId
-            if isOurs {
-                state.activeBolus = nil
-                releaseBolusPermission(bolusId: lastBolus.bolusId)
-            }
+            state.noteBolusId(lastBolus.bolusId)
+            state.activeBolus = nil
+            releaseBolusPermission(bolusId: lastBolus.bolusId)
             emitPumpEvents([event])
             return
         }
 
+        // Case 2: a bolus id we already handled (a basal microbolus recorded at
+        // delivery time, a finalized SMB, or a pump-UI bolus already recorded).
+        // Skip — recording again would double-count (basal pulses were recorded
+        // at wall-clock time, not the pump timestamp, so timestamp-dedup would
+        // not catch them).
+        if state.hasRecentBolusId(lastBolus.bolusId) {
+            checkStuckActiveBolus()
+            return
+        }
+
+        // Case 3: a new bolus from another source (the pump's own UI). Record it
+        // once at the pump timestamp; that timestamp is stable, so later polls
+        // are deduped by timestamp, and we also remember the id.
+        let date = TandemTime.date(fromTandemSeconds: lastBolus.timestamp)
+        let dose = DoseEntry(
+            type: .bolus,
+            startDate: date,
+            value: units,
+            unit: .units,
+            deliveredUnits: units,
+            insulinType: state.insulinType,
+            automatic: false,
+            isMutable: false
+        )
+        let event = NewPumpEvent(
+            date: date,
+            dose: dose,
+            raw: withUnsafeBytes(of: lastBolus.bolusId.littleEndian) { Data($0) } + withUnsafeBytes(
+                of: lastBolus.timestamp.littleEndian
+            ) { Data($0) },
+            title: "Bolus \(units) U (id \(lastBolus.bolusId))",
+            type: .bolus
+        )
+        state.noteBolusId(lastBolus.bolusId)
+        emitPumpEvents([event])
+        checkStuckActiveBolus()
+    }
+
+    /// Release the single-bolus gate if our tracked bolus is not the pump's last
+    /// bolus, is not currently in progress, and the grace period has elapsed.
+    /// commandQueue only.
+    private func checkStuckActiveBolus() {
         // Our tracked bolus is not the pump's last bolus. If it is also not
         // currently in progress and the grace period has elapsed, assume it
         // never delivered (e.g. an uncertain initiate that did not register)
@@ -421,11 +469,16 @@ extension TandemPumpManager {
             completion(.configuration(TandemUnsupportedError.remoteBolusUnsupportedFirmware))
             return
         }
-        guard activationType == .manualNoRecommendation || activationType == .manualRecommendationAccepted else {
-            // Never deliver automatic boluses: Control-IQ already doses on
-            // the pump; an automated second dosing authority is unsafe.
-            completion(.configuration(TandemUnsupportedError.automaticBolusNotAllowed))
-            return
+        if activationType == .automatic || activationType == .none {
+            // Automatic boluses (oref SMBs) are only allowed in the
+            // microbolus-basal closed-loop mode, where Trio is the sole dosing
+            // authority and the pump's own automation (Control-IQ) is off.
+            // Outside that mode we refuse automatic dosing outright, since a
+            // second autonomous authority alongside on-pump Control-IQ is unsafe.
+            guard state.microbolusBasalEnabled else {
+                completion(.configuration(TandemUnsupportedError.automaticBolusNotAllowed))
+                return
+            }
         }
         guard state.activeBolus == nil else {
             completion(.deviceState(TandemUnsupportedError.bolusInProgress))
@@ -448,119 +501,36 @@ extension TandemPumpManager {
                 return
             }
 
-            if let error = self.ensureConnectedAndAuthenticated() {
-                completion(.communication(error))
-                return
-            }
-
-            // A fresh time reference is required to sign delivery commands.
-            if case let .failure(error) = self.session.refreshTimeSinceReset() {
-                completion(.communication(error))
-                return
-            }
-
-            let permission: TandemBolusPermissionResponse
-            switch self.session.send(TandemBolusPermissionRequest()) {
-            case let .success(response): permission = response
-            case let .failure(error):
-                completion(.communication(error))
-                return
-            }
-
-            guard permission.granted else {
-                self.log.error("Bolus permission denied: nack \(permission.nackReasonId)")
-                completion(.deviceState(TandemUnsupportedError.bolusPermissionDenied(permission.nackReasonId)))
-                return
-            }
-
-            let request = TandemInitiateBolusRequest(
-                totalVolume: milliunits,
-                bolusId: permission.bolusId,
-                bolusTypeBitmask: 8, // standard remote bolus, as observed from t:connect
-                foodVolume: 0,
-                correctionVolume: 0
-            )
-
-            switch self.session.send(request) {
-            case let .success(response):
-                guard response.accepted else {
-                    self.log.error("Bolus rejected: status \(response.status)")
-                    self.releaseBolusPermission(bolusId: permission.bolusId)
-                    completion(.deviceState(TandemUnsupportedError.bolusRejected(response.status)))
+            // An AUTOMATIC bolus (oref SMB) must obey the same stacking guard as
+            // basal microboluses: only deliver it when the pump is not also
+            // delivering its own basal/Control-IQ, and not while microbolus
+            // delivery is suspended. Manual boluses are exempt (a user-initiated
+            // correction on top of pump basal is expected). This guard is local
+            // so the safety property does not depend on caller ordering.
+            if activationType == .automatic || activationType == .none {
+                guard self.microbolusBasalPreconditionsMet(), !self.state.microbolusSuspended else {
+                    self.log.error("Refusing automatic SMB: microbolus-basal preconditions not met or suspended")
+                    completion(.configuration(TandemUnsupportedError.microbolusBasalPreconditionFailed))
                     return
                 }
+            }
 
-                let bolus = TandemActiveBolus(
-                    bolusId: permission.bolusId,
-                    units: units,
-                    startDate: Date.now,
-                    activationTypeRaw: activationType.rawValue
-                )
-                self.state.activeBolus = bolus
-
-                let dose = DoseEntry(
-                    type: .bolus,
-                    startDate: bolus.startDate,
-                    value: units,
-                    unit: .units,
-                    insulinType: self.state.insulinType,
-                    automatic: false,
-                    isMutable: true
-                )
-                let event = NewPumpEvent(
-                    date: bolus.startDate,
-                    dose: dose,
-                    raw: withUnsafeBytes(of: bolus.bolusId.littleEndian) { Data($0) } + Data([0xFF]),
-                    title: "Bolus \(units) U (id \(bolus.bolusId))",
-                    type: .bolus
-                )
-                self.emitPumpEvents([event], replacePendingEvents: false)
-                self.notifyStateDidChange()
+            switch self.initiateBolusCommand(milliunits: milliunits) {
+            case let .delivered(bolusId):
+                self.recordTrackedBolus(units: units, bolusId: bolusId, activationType: activationType, uncertain: false)
                 completion(nil)
-
-            case let .failure(error):
-                // Distinguish a definite non-delivery from an uncertain one.
+            case let .rejected(reason):
+                completion(reason)
+            case let .uncertain(bolusId, error):
                 // The InitiateBolus request is SIGNED and may have reached the
-                // pump and started delivery even if we never saw the response.
-                // Only errors that provably happened before the pump acted are
-                // safe to treat as "no delivery"; everything else must be
-                // treated as uncertain so the activeBolus gate stays CLOSED and
-                // a second bolus cannot be initiated.
-                if Self.isDefiniteNonDelivery(error) {
-                    self.releaseBolusPermission(bolusId: permission.bolusId)
-                    completion(.communication(error))
-                } else {
-                    // Uncertain: assume the bolus MAY be delivering. Track it so
-                    // the gate stays closed; the next status poll reconciles the
-                    // real delivered amount. Do NOT release the permission.
-                    self.log.error("Bolus delivery uncertain (\(error.localizedDescription)); keeping gate closed")
-                    let bolus = TandemActiveBolus(
-                        bolusId: permission.bolusId,
-                        units: units,
-                        startDate: Date.now,
-                        activationTypeRaw: activationType.rawValue
-                    )
-                    self.state.activeBolus = bolus
-                    let dose = DoseEntry(
-                        type: .bolus,
-                        startDate: bolus.startDate,
-                        value: units,
-                        unit: .units,
-                        insulinType: self.state.insulinType,
-                        automatic: false,
-                        isMutable: true
-                    )
-                    let event = NewPumpEvent(
-                        date: bolus.startDate,
-                        dose: dose,
-                        raw: withUnsafeBytes(of: bolus.bolusId.littleEndian) { Data($0) } + Data([0xFE]),
-                        title: "Bolus \(units) U (id \(bolus.bolusId), uncertain)",
-                        type: .bolus
-                    )
-                    self.emitPumpEvents([event], replacePendingEvents: false)
-                    self.notifyStateDidChange()
-                    completion(.uncertainDelivery)
-                }
+                // pump even though we never saw the response. Track it so the
+                // gate stays CLOSED (no second bolus) and the next status poll
+                // reconciles the real delivered amount.
+                self.log.error("Bolus delivery uncertain (\(error.localizedDescription)); keeping gate closed")
+                self.recordTrackedBolus(units: units, bolusId: bolusId, activationType: activationType, uncertain: true)
+                completion(.uncertainDelivery)
+            case let .notSent(error):
+                completion(.communication(error))
             }
         }
     }
@@ -632,29 +602,152 @@ extension TandemPumpManager {
     }
 
     /// Best-effort permission release. Must be called on commandQueue.
-    private func releaseBolusPermission(bolusId: UInt16) {
+    func releaseBolusPermission(bolusId: UInt16) {
         if case let .failure(error) = session.send(TandemBolusPermissionReleaseRequest(bolusId: bolusId)) {
             log.error("Releasing bolus permission failed: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Basal (structurally unsupported on t:slim X2)
+    /// Outcome of the low-level connect → sign → permission → initiate handshake.
+    enum BolusInitiateOutcome {
+        /// The pump accepted the InitiateBolus. The permission is still held and
+        /// must be released once the bolus is reconciled.
+        case delivered(bolusId: UInt16)
+        /// The pump definitively refused (permission denied or initiate rejected);
+        /// no insulin was delivered. Any held permission was released.
+        case rejected(PumpManagerError)
+        /// The initiate was signed and sent but the outcome is unknown (timeout,
+        /// disconnect). It MAY be delivering. The permission is left held.
+        case uncertain(bolusId: UInt16, error: TandemSessionError)
+        /// A failure before the initiate could reach the pump; no delivery.
+        case notSent(TandemSessionError)
+    }
 
+    /// Runs the shared, reviewed bolus handshake for `milliunits`. Does NOT set
+    /// `activeBolus` or emit pump events — the caller decides how to record the
+    /// result (tracked bolus vs. basal microbolus). Must run on commandQueue.
+    func initiateBolusCommand(milliunits: UInt32) -> BolusInitiateOutcome {
+        dispatchPrecondition(condition: .onQueue(commandQueue))
+
+        if let error = ensureConnectedAndAuthenticated() {
+            return .notSent(error)
+        }
+        // A fresh time reference is required to sign delivery commands.
+        if case let .failure(error) = session.refreshTimeSinceReset() {
+            return .notSent(error)
+        }
+
+        let permission: TandemBolusPermissionResponse
+        switch session.send(TandemBolusPermissionRequest()) {
+        case let .success(response): permission = response
+        case let .failure(error):
+            // Permission failed before any initiate — nothing was delivered.
+            return .notSent(error)
+        }
+
+        guard permission.granted else {
+            log.error("Bolus permission denied: nack \(permission.nackReasonId)")
+            return .rejected(.deviceState(TandemUnsupportedError.bolusPermissionDenied(permission.nackReasonId)))
+        }
+
+        let request = TandemInitiateBolusRequest(
+            totalVolume: milliunits,
+            bolusId: permission.bolusId,
+            bolusTypeBitmask: 8, // standard remote bolus, as observed from t:connect
+            foodVolume: 0,
+            correctionVolume: 0
+        )
+
+        switch session.send(request) {
+        case let .success(response):
+            guard response.accepted else {
+                log.error("Bolus rejected: status \(response.status)")
+                releaseBolusPermission(bolusId: permission.bolusId)
+                return .rejected(.deviceState(TandemUnsupportedError.bolusRejected(response.status)))
+            }
+            return .delivered(bolusId: permission.bolusId)
+        case let .failure(error):
+            if Self.isDefiniteNonDelivery(error) {
+                releaseBolusPermission(bolusId: permission.bolusId)
+                return .notSent(error)
+            }
+            // Permission was granted and the signed initiate may have reached
+            // the pump; treat as uncertain and keep the permission held.
+            return .uncertain(bolusId: permission.bolusId, error: error)
+        }
+    }
+
+    /// Record a tracked (manual or SMB) bolus: hold the single-bolus gate and
+    /// emit a mutable bolus event. Must run on commandQueue.
+    func recordTrackedBolus(units: Double, bolusId: UInt16, activationType: BolusActivationType, uncertain: Bool) {
+        let bolus = TandemActiveBolus(
+            bolusId: bolusId,
+            units: units,
+            startDate: Date.now,
+            activationTypeRaw: activationType.rawValue
+        )
+        state.activeBolus = bolus
+        state.noteBolusId(bolusId)
+
+        let dose = DoseEntry(
+            type: .bolus,
+            startDate: bolus.startDate,
+            value: units,
+            unit: .units,
+            insulinType: state.insulinType,
+            automatic: activationType.isAutomatic,
+            isMutable: true
+        )
+        let event = NewPumpEvent(
+            date: bolus.startDate,
+            dose: dose,
+            raw: withUnsafeBytes(of: bolusId.littleEndian) { Data($0) } + Data([uncertain ? 0xFE : 0xFF]),
+            title: "Bolus \(units) U (id \(bolusId)\(uncertain ? ", uncertain" : ""))",
+            type: .bolus
+        )
+        emitPumpEvents([event], replacePendingEvents: false)
+        notifyStateDidChange()
+    }
+
+    // MARK: - Basal
+
+    /// The t:slim X2 has no remote temp-basal command. When the microbolus-basal
+    /// mode is off, this is unsupported. When on, Trio drives all basal as a
+    /// stream of small boluses (see TandemMicrobolusBasal); a temp-basal request
+    /// is realized as an accumulated microbolus.
     func enactTempBasal(
-        unitsPerHour _: Double,
-        for _: TimeInterval,
+        unitsPerHour: Double,
+        for duration: TimeInterval,
         completion: @escaping (PumpManagerError?) -> Void
     ) {
-        log.error("Temp basal requested; the t:slim X2 does not support remote basal control")
-        completion(.configuration(TandemUnsupportedError.basalControlUnsupported))
+        guard state.microbolusBasalEnabled else {
+            log.error("Temp basal requested but microbolus-basal mode is off; the t:slim X2 has no remote basal control")
+            completion(.configuration(TandemUnsupportedError.basalControlUnsupported))
+            return
+        }
+        commandQueue.async {
+            self.enactMicrobolusBasal(unitsPerHour: unitsPerHour, duration: duration, completion: completion)
+        }
     }
 
     func suspendDelivery(completion: @escaping ((any Error)?) -> Void) {
-        completion(TandemUnsupportedError.basalControlUnsupported)
+        guard state.microbolusBasalEnabled else {
+            completion(TandemUnsupportedError.basalControlUnsupported)
+            return
+        }
+        commandQueue.async {
+            self.suspendMicrobolusBasal(completion: completion)
+        }
     }
 
     func resumeDelivery(completion: @escaping ((any Error)?) -> Void) {
-        completion(TandemUnsupportedError.basalControlUnsupported)
+        guard state.microbolusBasalEnabled else {
+            completion(TandemUnsupportedError.basalControlUnsupported)
+            return
+        }
+        commandQueue.async {
+            self.resumeMicrobolusBasal(completion: completion)
+        }
     }
 
     func syncBasalRateSchedule(
@@ -746,8 +839,40 @@ extension TandemPumpManager {
     /// User opt-in/out for remote bolus.
     func setRemoteBolusEnabled(_ enabled: Bool) {
         state.remoteBolusEnabled = enabled
+        // Disabling remote bolus also forces the microbolus-basal mode off,
+        // since that mode depends on remote delivery. Tear it down the SAME way
+        // setMicrobolusBasalEnabled(false) does, so no stale accumulator or
+        // suspend state is left behind.
+        if !enabled {
+            teardownMicrobolusBasal()
+        }
         session.insulinDeliveryActionsEnabled = enabled
         notifyStateDidChange()
+    }
+
+    /// User opt-in/out for the microbolus-basal closed-loop mode. Enabling it
+    /// implies remote bolus. When turned off, any accrued basal is discarded.
+    func setMicrobolusBasalEnabled(_ enabled: Bool) {
+        if enabled {
+            state.microbolusBasalEnabled = true
+            state.microbolusSuspended = false
+            state.remoteBolusEnabled = true
+            session.insulinDeliveryActionsEnabled = true
+        } else {
+            teardownMicrobolusBasal()
+        }
+        notifyStateDidChange()
+    }
+
+    /// Fully disable the microbolus-basal mode and clear all of its transient
+    /// state so it can never be left half-configured (stuck suspended, stale
+    /// accrued insulin, or a dangling integration baseline).
+    private func teardownMicrobolusBasal() {
+        state.microbolusBasalEnabled = false
+        state.microbolusSuspended = false
+        state.owedBasalInsulin = 0
+        state.lastBasalRate = 0
+        state.lastBasalUpdate = nil
     }
 }
 
@@ -790,11 +915,14 @@ enum TandemUnsupportedError: LocalizedError {
     case bolusPermissionDenied(UInt8)
     case bolusRejected(UInt8)
     case bolusCancelFailed(UInt8)
+    case microbolusBasalPreconditionFailed
 
     var errorDescription: String? {
         switch self {
         case .basalControlUnsupported:
             return "The t:slim X2 does not accept remote basal commands. Control-IQ manages automated delivery on the pump itself, so Trio cannot run a closed loop with this pump."
+        case .microbolusBasalPreconditionFailed:
+            return "Microbolus-basal is on but the pump is still delivering its own basal or Control-IQ. Set the pump's basal profile to 0 U/hr and turn Control-IQ off, or Trio would stack insulin on top of the pump."
         case .remoteBolusDisabled:
             return "Remote bolus is disabled. Enable it in the pump settings to bolus from Trio."
         case .remoteBolusUnsupportedFirmware:
@@ -804,7 +932,7 @@ enum TandemUnsupportedError: LocalizedError {
         case .bolusInProgress:
             return "A bolus is already in progress."
         case .bolusTooSmall:
-            return "The requested bolus is below the pump's 0.05 U minimum."
+            return "The requested bolus is below the pump's 0.01 U minimum increment."
         case let .bolusPermissionDenied(reason):
             return "The pump denied the bolus request (reason \(reason)). Dismiss any open screens on the pump and try again."
         case let .bolusRejected(status):

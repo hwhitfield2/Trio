@@ -5,6 +5,8 @@ final class TandemSettingsViewModel: ObservableObject {
     @Published var refreshing = false
     @Published var remoteBolusEnabled: Bool
     @Published var showRemoteBolusWarning = false
+    @Published var microbolusBasalEnabled: Bool
+    @Published var showMicrobolusWarning = false
     @Published var showDeleteConfirmation = false
 
     let pumpManager: TandemPumpManager
@@ -15,9 +17,31 @@ final class TandemSettingsViewModel: ObservableObject {
     init(pumpManager: TandemPumpManager) {
         self.pumpManager = pumpManager
         remoteBolusEnabled = pumpManager.state.remoteBolusEnabled
+        microbolusBasalEnabled = pumpManager.state.microbolusBasalEnabled
     }
 
     var state: TandemPumpState { pumpManager.state }
+
+    /// The pump's own basal must be zeroed and Control-IQ off for microbolus-basal.
+    var microbolusPreconditionsMet: Bool {
+        pumpManager.microbolusBasalPreconditionsMet()
+    }
+
+    var preconditionDetail: String {
+        if state.lastSync == .distantPast {
+            return String(localized: "Waiting for a status sync from the pump…")
+        }
+        var problems: [String] = []
+        if state.profileBasalRate > 0.05 {
+            problems.append(String(localized: "pump basal is \(String(format: "%.2f", state.profileBasalRate)) U/hr (must be 0)"))
+        }
+        if state.controlIQEnabled {
+            problems.append(String(localized: "Control-IQ is on (must be off)"))
+        }
+        return problems.isEmpty
+            ? String(localized: "Pump basal is 0 U/hr and Control-IQ is off — ready.")
+            : problems.joined(separator: "; ")
+    }
 
     var lastSyncText: String {
         guard state.lastSync != .distantPast else { return String(localized: "Never") }
@@ -58,6 +82,25 @@ final class TandemSettingsViewModel: ObservableObject {
     func cancelRemoteBolusEnable() {
         remoteBolusEnabled = false
     }
+
+    func requestMicrobolusChange(_ enabled: Bool) {
+        if enabled {
+            showMicrobolusWarning = true
+        } else {
+            microbolusBasalEnabled = false
+            pumpManager.setMicrobolusBasalEnabled(false)
+        }
+    }
+
+    func confirmMicrobolusEnable() {
+        microbolusBasalEnabled = true
+        remoteBolusEnabled = true
+        pumpManager.setMicrobolusBasalEnabled(true)
+    }
+
+    func cancelMicrobolusEnable() {
+        microbolusBasalEnabled = false
+    }
 }
 
 struct TandemSettingsView: View {
@@ -68,6 +111,7 @@ struct TandemSettingsView: View {
             statusSection
             deliverySection
             remoteBolusSection
+            microbolusBasalSection
             aboutSection
             deleteSection
         }
@@ -83,6 +127,14 @@ struct TandemSettingsView: View {
         } message: {
             Text(
                 "Trio will be able to deliver boluses on this pump when you confirm them. Boluses delivered here are in addition to anything Control-IQ doses on the pump. Requires pump software 7.6 with the mobile bolus feature. Only enable this if you understand the risks."
+            )
+        }
+        .alert(String(localized: "Enable microbolus-basal looping?"), isPresented: $viewModel.showMicrobolusWarning) {
+            Button(String(localized: "Cancel"), role: .cancel) { viewModel.cancelMicrobolusEnable() }
+            Button(String(localized: "I understand, enable"), role: .destructive) { viewModel.confirmMicrobolusEnable() }
+        } message: {
+            Text(
+                "Trio will deliver ALL basal insulin as a stream of automatic microboluses. You MUST first set the pump's own basal profile to 0 U/hr and turn Control-IQ OFF — otherwise insulin will stack and you could go dangerously low. This disables the pump's built-in safety automation (Control-IQ / Basal-IQ) and relies entirely on Trio. It is experimental and unverified on hardware. Only enable if you fully understand the risk."
             )
         }
         .alert(String(localized: "Remove pump?"), isPresented: $viewModel.showDeleteConfirmation) {
@@ -157,6 +209,36 @@ struct TandemSettingsView: View {
                 )
             )
             .disabled(!viewModel.state.supportsRemoteBolus && viewModel.state.apiVersionMajor > 0)
+        }
+    }
+
+    private var microbolusBasalSection: some View {
+        Section(
+            header: Text("Microbolus-basal (experimental)"),
+            footer: Text(
+                "Delivers all basal as automatic microboluses so Trio can close the loop on the t:slim X2. Requires the pump's basal profile set to 0 U/hr and Control-IQ off. Disables the pump's own safety automation. Unverified on hardware — use at your own risk."
+            )
+        ) {
+            Toggle(
+                String(localized: "Loop via microbolus-basal"),
+                isOn: Binding(
+                    get: { viewModel.microbolusBasalEnabled },
+                    set: { viewModel.requestMicrobolusChange($0) }
+                )
+            )
+            .disabled(!viewModel.state.supportsRemoteBolus && viewModel.state.apiVersionMajor > 0)
+
+            if viewModel.microbolusBasalEnabled {
+                HStack(alignment: .top) {
+                    Image(systemName: viewModel.microbolusPreconditionsMet
+                        ? "checkmark.circle.fill"
+                        : "exclamationmark.triangle.fill")
+                        .foregroundColor(viewModel.microbolusPreconditionsMet ? .green : .orange)
+                    Text(viewModel.preconditionDetail)
+                        .font(.footnote)
+                        .foregroundColor(viewModel.microbolusPreconditionsMet ? .secondary : .orange)
+                }
+            }
         }
     }
 

@@ -846,6 +846,7 @@
 		7ADEE000000000000000001E /* TandemPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF000000000000000001D /* TandemPairingView.swift */; };
 		7ADEE0000000000000000020 /* TandemSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF000000000000000001F /* TandemSettingsView.swift */; };
 		7ADEE0000000000000000022 /* TandemUICoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000021 /* TandemUICoordinator.swift */; };
+		7ADEE0000000000000000100 /* TandemMicrobolusBasal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000100 /* TandemMicrobolusBasal.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1785,6 +1786,7 @@
 		7ADEF000000000000000001D /* TandemPairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemPairingView.swift"; sourceTree = "<group>"; };
 		7ADEF000000000000000001F /* TandemSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemSettingsView.swift"; sourceTree = "<group>"; };
 		7ADEF0000000000000000021 /* TandemUICoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemUICoordinator.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000100 /* TandemMicrobolusBasal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemMicrobolusBasal.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -1902,6 +1904,7 @@
 		7ADEB0000000000000000001 /* TandemKit */ = {
 			isa = PBXGroup;
 			children = (
+				7ADEF0000000000000000100 /* TandemMicrobolusBasal.swift */,
 				7ADEB000000000000000000A /* Bluetooth */,
 				7ADEB000000000000000000F /* Protocol */,
 				7ADEB000000000000000001A /* UI */,
@@ -4719,6 +4722,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7ADEE0000000000000000100 /* TandemMicrobolusBasal.swift in Sources */,
 				7ADEE0000000000000000003 /* TandemPumpManager.swift in Sources */,
 				7ADEE0000000000000000005 /* TandemPumpState.swift in Sources */,
 				7ADEE0000000000000000007 /* TandemLogger.swift in Sources */,

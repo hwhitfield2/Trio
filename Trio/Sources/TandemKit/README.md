@@ -16,14 +16,43 @@ supports:
 | Read status (reservoir, battery, basal, Control-IQ, CGM icon, suspend) | ✅ | Polled on Trio's heartbeat |
 | Report boluses to Trio's treatment log | ✅ | Reconciled from the pump's last-bolus status |
 | Remote bolus | ✅ (opt-in) | Firmware **7.6+** (API ≥ 2.5) only; user must explicitly enable |
-| Remote **basal** (temp basal / suspend / resume) | ❌ | **Not possible.** These commands are Tandem **Mobi**-only in the protocol. |
-| Closed loop | ❌ | Follows from the above — Trio cannot modulate basal on this pump. |
+| Native remote temp basal (protocol command) | ❌ | **Not possible.** The temp-basal/suspend/resume commands are Tandem **Mobi**-only in the protocol. |
+| Closed loop via microbolus-basal | ⚠️ experimental opt-in | Emulates basal with a stream of automatic microboluses; requires the pump basal zeroed + Control-IQ off. |
 
-Because Trio cannot set temp basals on the t:slim X2, **this pump cannot run
-Trio's closed loop.** Automated dosing stays with the pump's own Control-IQ.
-Trio acts as a **monitor, treatment log, and (optionally) a manual remote
-bolus interface**. `enactTempBasal`, `suspendDelivery`, and `resumeDelivery`
-return a clear "unsupported" error rather than silently failing.
+The t:slim X2 has no remote temp-basal command, so by default this pump is a
+**monitor, treatment log, and (optionally) a manual remote bolus interface**,
+and `enactTempBasal`/`suspendDelivery`/`resumeDelivery` return a clear
+"unsupported" error unless microbolus-basal mode (below) is enabled.
+
+### Microbolus-basal mode (experimental)
+
+An opt-in mode (`TandemMicrobolusBasal.swift`) lets Trio close the loop anyway
+by delivering **all** basal as a stream of small automatic boluses:
+
+- Each loop cycle, oref's requested basal rate is integrated over the elapsed
+  time into an "owed" accumulator; the accrued amount is delivered as one
+  microbolus (rounded down to the 0.01 U increment). Sub-minimum rates
+  accumulate until they cross the pulse threshold, so even low rates are
+  delivered on average.
+- **Hard precondition:** the pump's own basal profile must be **0 U/hr** and
+  **Control-IQ off**, verified against the last status sync. Otherwise Trio
+  would stack microboluses on top of the pump's own delivery, so the engine
+  refuses to dose and surfaces an error.
+- With the pump basal zeroed, `suspendDelivery` becomes a real suspend
+  (withholding microboluses = zero delivery), so Trio regains the ability to
+  stop insulin.
+- Deliveries are recorded as **automatic bolus** pump events (not temp basal):
+  bolus and temp basal contribute identically to IOB, and recording as bolus
+  avoids Trio's `maxBasal` temp-basal filter that would otherwise drop a
+  high-reconstructed-rate pulse and undercount IOB.
+- Automatic (SMB) boluses are only accepted while this mode is on. An ambiguous
+  initiate is recorded as delivered (safe direction, never re-delivered).
+  Backstops cap the single pulse (2 U) and total owed (5 U).
+
+This deliberately disables the pump's built-in Control-IQ/Basal-IQ safety
+automation and substitutes Trio's. It is a significant, genuinely risky,
+off-label configuration gated behind an explicit confirmation, is **unverified
+on hardware**, and must not be relied on without real-pump testing.
 
 The newer 6-digit **JPAKE** pairing flow (firmware 7.7+ and Tandem Mobi) is
 **not implemented**; those pumps are rejected during pairing with an
