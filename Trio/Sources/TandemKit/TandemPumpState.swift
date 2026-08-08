@@ -62,6 +62,16 @@ final class TandemPumpState: RawRepresentable {
     /// is a true suspend.
     var microbolusSuspended: Bool
 
+    /// Play a phone-side sound when the driver changes delivery (bolus accepted,
+    /// cancel, suspend/resume). The t:slim X2 protocol has no remote beep
+    /// command, so the phone provides the Omnipod-style audio indication.
+    var audioFeedbackEnabled: Bool
+
+    /// Also play the dose sound for automatic deliveries (SMBs and basal
+    /// microboluses). Off by default — in microbolus-basal mode this sounds
+    /// every loop cycle.
+    var audioFeedbackForAutomaticDoses: Bool
+
     // MARK: Runtime-only microbolus-basal accumulator (NOT persisted)
     //
     // These are deliberately reset to zero on every manager construction
@@ -148,6 +158,8 @@ final class TandemPumpState: RawRepresentable {
         remoteBolusEnabled = false
         microbolusBasalEnabled = false
         microbolusSuspended = false
+        audioFeedbackEnabled = true
+        audioFeedbackForAutomaticDoses = false
         owedBasalInsulin = 0
         lastBasalRate = 0
         lastBasalUpdate = nil
@@ -179,6 +191,8 @@ final class TandemPumpState: RawRepresentable {
         remoteBolusEnabled = rawValue["remoteBolusEnabled"] as? Bool ?? false
         microbolusBasalEnabled = rawValue["microbolusBasalEnabled"] as? Bool ?? false
         microbolusSuspended = rawValue["microbolusSuspended"] as? Bool ?? false
+        audioFeedbackEnabled = rawValue["audioFeedbackEnabled"] as? Bool ?? true
+        audioFeedbackForAutomaticDoses = rawValue["audioFeedbackForAutomaticDoses"] as? Bool ?? false
         // owedBasalInsulin / lastBasalRate / lastBasalUpdate / recentBolusIds
         // are runtime-only: they keep the init() defaults so the accumulator and
         // dedup state always start fresh after a restart, never dumping stale
@@ -213,6 +227,8 @@ final class TandemPumpState: RawRepresentable {
         value["remoteBolusEnabled"] = remoteBolusEnabled
         value["microbolusBasalEnabled"] = microbolusBasalEnabled
         value["microbolusSuspended"] = microbolusSuspended
+        value["audioFeedbackEnabled"] = audioFeedbackEnabled
+        value["audioFeedbackForAutomaticDoses"] = audioFeedbackForAutomaticDoses
         // owedBasalInsulin / lastBasalRate / lastBasalUpdate / recentBolusIds
         // are intentionally NOT persisted (runtime-only; see declarations).
         value["insulinType"] = insulinType?.rawValue

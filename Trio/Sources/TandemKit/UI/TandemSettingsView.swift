@@ -8,6 +8,8 @@ final class TandemSettingsViewModel: ObservableObject {
     @Published var microbolusBasalEnabled: Bool
     @Published var showMicrobolusWarning = false
     @Published var showDeleteConfirmation = false
+    @Published var audioFeedbackEnabled: Bool
+    @Published var audioFeedbackForAutomaticDoses: Bool
 
     let pumpManager: TandemPumpManager
 
@@ -18,6 +20,8 @@ final class TandemSettingsViewModel: ObservableObject {
         self.pumpManager = pumpManager
         remoteBolusEnabled = pumpManager.state.remoteBolusEnabled
         microbolusBasalEnabled = pumpManager.state.microbolusBasalEnabled
+        audioFeedbackEnabled = pumpManager.state.audioFeedbackEnabled
+        audioFeedbackForAutomaticDoses = pumpManager.state.audioFeedbackForAutomaticDoses
     }
 
     var state: TandemPumpState { pumpManager.state }
@@ -101,6 +105,16 @@ final class TandemSettingsViewModel: ObservableObject {
     func cancelMicrobolusEnable() {
         microbolusBasalEnabled = false
     }
+
+    func setAudioFeedback(_ enabled: Bool) {
+        audioFeedbackEnabled = enabled
+        pumpManager.setAudioFeedbackEnabled(enabled)
+    }
+
+    func setAudioFeedbackForAutomaticDoses(_ enabled: Bool) {
+        audioFeedbackForAutomaticDoses = enabled
+        pumpManager.setAudioFeedbackForAutomaticDoses(enabled)
+    }
 }
 
 struct TandemSettingsView: View {
@@ -112,6 +126,7 @@ struct TandemSettingsView: View {
             deliverySection
             remoteBolusSection
             microbolusBasalSection
+            soundsSection
             aboutSection
             deleteSection
         }
@@ -142,6 +157,32 @@ struct TandemSettingsView: View {
             Button(String(localized: "Remove"), role: .destructive) { viewModel.didDeletePump?() }
         } message: {
             Text("Trio will forget this pump. Delivery on the pump itself is not affected.")
+        }
+    }
+
+    private var soundsSection: some View {
+        Section(
+            header: Text("Sounds"),
+            footer: Text(
+                "The t:slim X2 cannot beep on command like an Omnipod, so Trio plays the confirmation sound on this phone instead: one tone when insulin delivery is accepted, another on cancel, suspend, or resume. Automatic doses (SMBs and basal microboluses) are silent unless enabled — with microbolus-basal looping on, they sound every loop cycle."
+            )
+        ) {
+            Toggle(
+                String(localized: "Sound on pump changes"),
+                isOn: Binding(
+                    get: { viewModel.audioFeedbackEnabled },
+                    set: { viewModel.setAudioFeedback($0) }
+                )
+            )
+            if viewModel.audioFeedbackEnabled {
+                Toggle(
+                    String(localized: "Also for automatic doses"),
+                    isOn: Binding(
+                        get: { viewModel.audioFeedbackForAutomaticDoses },
+                        set: { viewModel.setAudioFeedbackForAutomaticDoses($0) }
+                    )
+                )
+            }
         }
     }
 

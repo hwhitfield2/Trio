@@ -1,3 +1,4 @@
+import AudioToolbox
 import CoreBluetooth
 import Foundation
 import HealthKit
@@ -597,6 +598,7 @@ extension TandemPumpManager {
                     self.state.activeBolus = nil
                     self.releaseBolusPermission(bolusId: bolus.bolusId)
                 }
+                self.playFeedbackTone(.stateChange)
                 self.notifyStateDidChange()
                 completion(.success(nil))
             case let .failure(error):
@@ -710,6 +712,7 @@ extension TandemPumpManager {
             type: .bolus
         )
         emitPumpEvents([event], replacePendingEvents: false)
+        playFeedbackTone(.dose, forAutomaticDose: activationType.isAutomatic)
         notifyStateDidChange()
     }
 
@@ -885,6 +888,38 @@ extension TandemPumpManager {
         state.owedBasalInsulin = 0
         state.lastBasalRate = 0
         state.lastBasalUpdate = nil
+    }
+
+    // MARK: - Audio feedback
+
+    /// Distinct phone-side cues for pump activity. The t:slim X2 protocol has no
+    /// remote annunciate/beep command (unlike the Omnipod), so the phone plays
+    /// the indication instead of the pump.
+    enum FeedbackTone {
+        /// Insulin was accepted for delivery (bolus, SMB, basal microbolus).
+        case dose
+        /// Delivery state changed (cancel, suspend, resume).
+        case stateChange
+    }
+
+    func setAudioFeedbackEnabled(_ enabled: Bool) {
+        state.audioFeedbackEnabled = enabled
+        notifyStateDidChange()
+    }
+
+    func setAudioFeedbackForAutomaticDoses(_ enabled: Bool) {
+        state.audioFeedbackForAutomaticDoses = enabled
+        notifyStateDidChange()
+    }
+
+    /// Play the cue for `tone`, honoring the user's feedback settings.
+    /// Automatic doses (SMBs, basal microboluses) additionally require the
+    /// automatic-dose opt-in so microbolus-basal mode does not chirp every cycle.
+    func playFeedbackTone(_ tone: FeedbackTone, forAutomaticDose automatic: Bool = false) {
+        guard state.audioFeedbackEnabled else { return }
+        if automatic, !state.audioFeedbackForAutomaticDoses { return }
+        let soundID: SystemSoundID = tone == .dose ? 1103 : 1104
+        AudioServicesPlaySystemSound(soundID)
     }
 }
 

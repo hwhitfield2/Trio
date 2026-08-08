@@ -167,6 +167,7 @@ extension TandemPumpManager {
             type: .bolus
         )
         emitPumpEvents([event], replacePendingEvents: false)
+        playFeedbackTone(.dose, forAutomaticDose: true)
         // NOTE: do NOT bump state.lastSync here — that is reserved for real
         // status syncs. Bumping it would make ensureCurrentPumpData skip the
         // next status poll, letting a pump-side basal/Control-IQ change go
@@ -200,6 +201,7 @@ extension TandemPumpManager {
         let dose = DoseEntry(type: .suspend, startDate: now, value: 0, unit: .units)
         let raw = withUnsafeBytes(of: UInt32(now.timeIntervalSince1970).littleEndian) { Data($0) } + Data([0x5B])
         emitPumpEvents([NewPumpEvent(date: now, dose: dose, raw: raw, title: "Suspend", type: .suspend)], replacePendingEvents: false)
+        playFeedbackTone(.stateChange)
         notifyStateDidChange()
         completion(nil)
     }
@@ -215,6 +217,7 @@ extension TandemPumpManager {
         let dose = DoseEntry(type: .resume, startDate: now, value: 0, unit: .units)
         let raw = withUnsafeBytes(of: UInt32(now.timeIntervalSince1970).littleEndian) { Data($0) } + Data([0x5C])
         emitPumpEvents([NewPumpEvent(date: now, dose: dose, raw: raw, title: "Resume", type: .resume)], replacePendingEvents: false)
+        playFeedbackTone(.stateChange)
         notifyStateDidChange()
         completion(nil)
     }
