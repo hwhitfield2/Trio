@@ -22,13 +22,17 @@ class TandemPumpManager: DeviceManager {
     let managerIdentifier = "Tandem"
     let localizedTitle = "Tandem t:slim X2"
 
-    private let log = TandemLogger(category: "TandemPumpManager")
+    // Internal (not private): the microbolus-basal engine lives in a separate
+    // file (TandemMicrobolusBasal.swift) and needs to log through this instance.
+    let log = TandemLogger(category: "TandemPumpManager")
 
     let pumpDelegate = WeakSynchronizedDelegate<PumpManagerDelegate>()
     private let statusObservers = WeakSynchronizedSet<PumpManagerStatusObserver>()
 
     /// Serializes all pump exchanges; session.send blocks on responses.
-    private let commandQueue = DispatchQueue(label: "org.nightscout.trio.TandemPumpManager.commandQueue", qos: .userInitiated)
+    // Internal (not private): the microbolus-basal engine extension in
+    // TandemMicrobolusBasal.swift dispatches onto and asserts this queue.
+    let commandQueue = DispatchQueue(label: "org.nightscout.trio.TandemPumpManager.commandQueue", qos: .userInitiated)
 
     var state: TandemPumpState
     private var oldState: TandemPumpState
