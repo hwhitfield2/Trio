@@ -831,6 +831,21 @@
 		FE41E4D629463EE20047FD55 /* NightscoutPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE41E4D529463EE20047FD55 /* NightscoutPreferences.swift */; };
 		FE66D16B291F74F8005D6F77 /* Bundle+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE66D16A291F74F8005D6F77 /* Bundle+Extensions.swift */; };
 		FEFFA7A22929FE49007B8193 /* UIDevice+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFFA7A12929FE49007B8193 /* UIDevice+Extensions.swift */; };
+		7ADEE0000000000000000003 /* TandemPumpManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000002 /* TandemPumpManager.swift */; };
+		7ADEE0000000000000000005 /* TandemPumpState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000004 /* TandemPumpState.swift */; };
+		7ADEE0000000000000000007 /* TandemLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000006 /* TandemLogger.swift */; };
+		7ADEE0000000000000000009 /* TandemDoseProgressReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000008 /* TandemDoseProgressReporter.swift */; };
+		7ADEE000000000000000000C /* TandemBLEConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF000000000000000000B /* TandemBLEConstants.swift */; };
+		7ADEE000000000000000000E /* TandemBluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF000000000000000000D /* TandemBluetoothManager.swift */; };
+		7ADEE0000000000000000011 /* TandemCRC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000010 /* TandemCRC.swift */; };
+		7ADEE0000000000000000013 /* TandemPacketize.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000012 /* TandemPacketize.swift */; };
+		7ADEE0000000000000000015 /* TandemMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000014 /* TandemMessages.swift */; };
+		7ADEE0000000000000000017 /* TandemControlMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000016 /* TandemControlMessages.swift */; };
+		7ADEE0000000000000000019 /* TandemPumpSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000018 /* TandemPumpSession.swift */; };
+		7ADEE000000000000000001C /* TandemPumpManager+UI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF000000000000000001B /* TandemPumpManager+UI.swift */; };
+		7ADEE000000000000000001E /* TandemPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF000000000000000001D /* TandemPairingView.swift */; };
+		7ADEE0000000000000000020 /* TandemSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF000000000000000001F /* TandemSettingsView.swift */; };
+		7ADEE0000000000000000022 /* TandemUICoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000021 /* TandemUICoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1755,6 +1770,21 @@
 		FE41E4D529463EE20047FD55 /* NightscoutPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightscoutPreferences.swift; sourceTree = "<group>"; };
 		FE66D16A291F74F8005D6F77 /* Bundle+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Bundle+Extensions.swift"; sourceTree = "<group>"; };
 		FEFFA7A12929FE49007B8193 /* UIDevice+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UIDevice+Extensions.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000002 /* TandemPumpManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemPumpManager.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000004 /* TandemPumpState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemPumpState.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000006 /* TandemLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemLogger.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000008 /* TandemDoseProgressReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemDoseProgressReporter.swift"; sourceTree = "<group>"; };
+		7ADEF000000000000000000B /* TandemBLEConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemBLEConstants.swift"; sourceTree = "<group>"; };
+		7ADEF000000000000000000D /* TandemBluetoothManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemBluetoothManager.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000010 /* TandemCRC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCRC.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000012 /* TandemPacketize.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemPacketize.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000014 /* TandemMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemMessages.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000016 /* TandemControlMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemControlMessages.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000018 /* TandemPumpSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemPumpSession.swift"; sourceTree = "<group>"; };
+		7ADEF000000000000000001B /* TandemPumpManager+UI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemPumpManager+UI.swift"; sourceTree = "<group>"; };
+		7ADEF000000000000000001D /* TandemPairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemPairingView.swift"; sourceTree = "<group>"; };
+		7ADEF000000000000000001F /* TandemSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemSettingsView.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000021 /* TandemUICoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemUICoordinator.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -1869,6 +1899,52 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		7ADEB0000000000000000001 /* TandemKit */ = {
+			isa = PBXGroup;
+			children = (
+				7ADEB000000000000000000A /* Bluetooth */,
+				7ADEB000000000000000000F /* Protocol */,
+				7ADEB000000000000000001A /* UI */,
+				7ADEF0000000000000000002 /* TandemPumpManager.swift */,
+				7ADEF0000000000000000004 /* TandemPumpState.swift */,
+				7ADEF0000000000000000006 /* TandemLogger.swift */,
+				7ADEF0000000000000000008 /* TandemDoseProgressReporter.swift */,
+			);
+			path = TandemKit;
+			sourceTree = "<group>";
+		};
+		7ADEB000000000000000000A /* Bluetooth */ = {
+			isa = PBXGroup;
+			children = (
+				7ADEF000000000000000000B /* TandemBLEConstants.swift */,
+				7ADEF000000000000000000D /* TandemBluetoothManager.swift */,
+			);
+			path = Bluetooth;
+			sourceTree = "<group>";
+		};
+		7ADEB000000000000000000F /* Protocol */ = {
+			isa = PBXGroup;
+			children = (
+				7ADEF0000000000000000010 /* TandemCRC.swift */,
+				7ADEF0000000000000000012 /* TandemPacketize.swift */,
+				7ADEF0000000000000000014 /* TandemMessages.swift */,
+				7ADEF0000000000000000016 /* TandemControlMessages.swift */,
+				7ADEF0000000000000000018 /* TandemPumpSession.swift */,
+			);
+			path = Protocol;
+			sourceTree = "<group>";
+		};
+		7ADEB000000000000000001A /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				7ADEF000000000000000001B /* TandemPumpManager+UI.swift */,
+				7ADEF000000000000000001D /* TandemPairingView.swift */,
+				7ADEF000000000000000001F /* TandemSettingsView.swift */,
+				7ADEF0000000000000000021 /* TandemUICoordinator.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
 		0610F7D6D2EC00E3BA1569F0 /* ConfigEditor */ = {
 			isa = PBXGroup;
 			children = (
@@ -2193,6 +2269,7 @@
 				3811DE1425C9D40400A708ED /* Router */,
 				3811DE9125C9D88200A708ED /* Services */,
 				3883582E25EEAFC000E024B2 /* Views */,
+				7ADEB0000000000000000001 /* TandemKit */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -4642,6 +4719,21 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7ADEE0000000000000000003 /* TandemPumpManager.swift in Sources */,
+				7ADEE0000000000000000005 /* TandemPumpState.swift in Sources */,
+				7ADEE0000000000000000007 /* TandemLogger.swift in Sources */,
+				7ADEE0000000000000000009 /* TandemDoseProgressReporter.swift in Sources */,
+				7ADEE000000000000000000C /* TandemBLEConstants.swift in Sources */,
+				7ADEE000000000000000000E /* TandemBluetoothManager.swift in Sources */,
+				7ADEE0000000000000000011 /* TandemCRC.swift in Sources */,
+				7ADEE0000000000000000013 /* TandemPacketize.swift in Sources */,
+				7ADEE0000000000000000015 /* TandemMessages.swift in Sources */,
+				7ADEE0000000000000000017 /* TandemControlMessages.swift in Sources */,
+				7ADEE0000000000000000019 /* TandemPumpSession.swift in Sources */,
+				7ADEE000000000000000001C /* TandemPumpManager+UI.swift in Sources */,
+				7ADEE000000000000000001E /* TandemPairingView.swift in Sources */,
+				7ADEE0000000000000000020 /* TandemSettingsView.swift in Sources */,
+				7ADEE0000000000000000022 /* TandemUICoordinator.swift in Sources */,
 				DDA40BBA2F4DB18800257798 /* AlgorithmGlucose.swift in Sources */,
 				DD5DC9F12CF3D97C00AB8703 /* AdjustmentsStateModel+Overrides.swift in Sources */,
 				3811DE2325C9D48300A708ED /* MainDataFlow.swift in Sources */,
