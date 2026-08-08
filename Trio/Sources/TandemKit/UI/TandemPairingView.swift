@@ -139,7 +139,7 @@ struct TandemPairingView: View {
         Group {
             Section {
                 Text(
-                    "Trio connects to the t:slim X2 as a monitor and remote bolus interface. The pump keeps managing basal delivery itself (including Control-IQ). Trio cannot run a closed loop with this pump."
+                    "Trio connects to the t:slim X2 as a monitor and remote bolus interface. The pump keeps managing basal delivery itself (including Control-IQ). Closed loop is only possible via the experimental microbolus-basal mode, which can be enabled in the pump settings after pairing."
                 )
                 .font(.footnote)
             }

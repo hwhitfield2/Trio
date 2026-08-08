@@ -755,11 +755,19 @@ extension TandemPumpManager {
     }
 
     func syncBasalRateSchedule(
-        items _: [RepeatingScheduleValue<Double>],
+        items: [RepeatingScheduleValue<Double>],
         completion: @escaping (Result<BasalRateSchedule, any Error>) -> Void
     ) {
-        // The basal profile lives on the pump and cannot be written remotely.
-        completion(.failure(TandemUnsupportedError.basalControlUnsupported))
+        // Trio's basal profile is never written to the t:slim X2 — the pump has no
+        // remote basal command. In microbolus-basal mode Trio delivers this schedule
+        // itself, and in monitor mode oref only uses it for calculations, so accept
+        // the schedule locally; failing here would make every basal profile save in
+        // Trio's editor impossible while this pump is paired.
+        guard let schedule = BasalRateSchedule(dailyItems: items, timeZone: .current) else {
+            completion(.failure(TandemUnsupportedError.basalControlUnsupported))
+            return
+        }
+        completion(.success(schedule))
     }
 
     func syncDeliveryLimits(
