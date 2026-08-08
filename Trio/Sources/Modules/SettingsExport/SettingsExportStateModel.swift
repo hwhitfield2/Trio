@@ -1468,9 +1468,12 @@ extension SettingsExport.StateModel {
             return .validationFailed(String(localized: "The backup file is empty."))
         }
 
+        // Zero-rate segments are legitimate: pumps like the t:slim X2 support
+        // 0 U/hr and Trio's basal editor allows saving them, so the import must
+        // accept whatever the app itself can produce. Only negative values are invalid.
         if let basals = backup.basalProfile {
-            guard !basals.isEmpty, basals.allSatisfy({ $0.rate > 0 }) else {
-                return .validationFailed(String(localized: "Basal rates must be greater than 0 U/hr."))
+            guard !basals.isEmpty, basals.allSatisfy({ $0.rate >= 0 }) else {
+                return .validationFailed(String(localized: "Basal rates must not be negative."))
             }
         }
         if let carbRatios = backup.carbRatios {

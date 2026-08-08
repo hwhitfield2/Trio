@@ -88,8 +88,10 @@ final class SettingsExportTests: XCTestCase {
 
         backup.pumpSettings = PumpSettings(insulinActionCurve: 9, maxBolus: 10, maxBasal: 3.5)
 
+        // A 0 U/hr segment is a valid profile entry (e.g. t:slim X2 microbolus-basal
+        // setups) and must survive the round trip.
         backup.basalProfile = [
-            BasalProfileEntry(start: "00:00", minutes: 0, rate: 0.85),
+            BasalProfileEntry(start: "00:00", minutes: 0, rate: 0),
             BasalProfileEntry(start: "08:00", minutes: 480, rate: 1.15)
         ]
         backup.carbRatios = CarbRatios(units: .grams, schedule: [
