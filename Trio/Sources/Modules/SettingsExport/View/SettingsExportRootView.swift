@@ -1,5 +1,6 @@
 import SwiftUI
 import Swinject
+import UniformTypeIdentifiers
 
 extension SettingsExport {
     struct RootView: BaseView {
@@ -10,6 +11,14 @@ extension SettingsExport {
         @State private var showExportError = false
         @State private var exportErrorMessage = ""
         @State private var exportedFileURL: URL?
+
+        @State private var showImportFilePicker = false
+        @State private var pendingBackup: TrioSettingsBackup?
+        @State private var showImportConfirmation = false
+        @State private var showImportError = false
+        @State private var importErrorMessage = ""
+        @State private var showImportSuccess = false
+        @State private var importSuccessMessage = ""
 
         @Environment(\.colorScheme) var colorScheme
         @Environment(AppState.self) var appState
@@ -129,11 +138,46 @@ extension SettingsExport {
                 }.listRowBackground(
                     state.selectedCategories.isEmpty ? Color(.systemGray4) : Color(.systemBlue)
                 )
+
+                Section(
+                    header: Text("Backup & Restore"),
+                    footer: Text(
+                        "A backup file contains all Trio settings, therapy profiles and presets in a machine-readable format and can be imported again — for example on a new phone. The CSV export above is a human-readable report and cannot be imported."
+                    ),
+                    content: {
+                        Button(action: {
+                            Task { await exportBackup() }
+                        }, label: {
+                            if state.isExporting {
+                                HStack {
+                                    ProgressView().padding(.trailing, 10)
+                                    Text("Exporting...")
+                                }
+                            } else {
+                                Label("Export Backup File", systemImage: "square.and.arrow.up")
+                            }
+                        })
+
+                        Button(action: {
+                            showImportFilePicker = true
+                        }, label: {
+                            if state.isImporting {
+                                HStack {
+                                    ProgressView().padding(.trailing, 10)
+                                    Text("Importing...")
+                                }
+                            } else {
+                                Label("Import Backup File", systemImage: "square.and.arrow.down")
+                            }
+                        })
+                            .disabled(state.isImporting)
+                    }
+                ).listRowBackground(Color.chart)
             }
             .listSectionSpacing(sectionSpacing)
             .scrollContentBackground(.hidden).background(appState.trioBackgroundColor(for: colorScheme))
             .onAppear(perform: configureView)
-            .navigationTitle("Export Settings")
+            .navigationTitle("Export & Import Settings")
             .navigationBarTitleDisplayMode(.automatic)
 //            // TODO: implement help sheet
 //            .toolbar {
@@ -170,6 +214,104 @@ extension SettingsExport {
             } message: {
                 Text(exportErrorMessage)
             }
+            .fileImporter(
+                isPresented: $showImportFilePicker,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case let .success(urls):
+                    guard let url = urls.first else { return }
+                    switch state.readBackup(from: url) {
+                    case let .success(backup):
+                        pendingBackup = backup
+                        showImportConfirmation = true
+                    case let .failure(error):
+                        importErrorMessage = error.localizedDescription
+                        showImportError = true
+                    }
+                case let .failure(error):
+                    importErrorMessage = error.localizedDescription
+                    showImportError = true
+                }
+            }
+            .alert(
+                "Import Settings?",
+                isPresented: $showImportConfirmation,
+                presenting: pendingBackup
+            ) { backup in
+                Button("Cancel", role: .cancel) { pendingBackup = nil }
+                Button("Import", role: .destructive) {
+                    pendingBackup = nil
+                    Task { await importBackup(backup) }
+                }
+            } message: { backup in
+                Text(importConfirmationText(for: backup))
+            }
+            .alert("Import Complete", isPresented: $showImportSuccess) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(importSuccessMessage)
+            }
+            .alert("Import Error", isPresented: $showImportError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(importErrorMessage)
+            }
+        }
+
+        private func exportBackup() async {
+            let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
+            impactHeavy.impactOccurred()
+
+            switch await state.exportBackup() {
+            case let .success(fileURL):
+                exportedFileURL = fileURL
+                showSettingsExport = true
+            case let .failure(error):
+                exportErrorMessage = error.localizedDescription
+                showExportError = true
+            }
+        }
+
+        private func importBackup(_ backup: TrioSettingsBackup) async {
+            switch await state.applyBackup(backup) {
+            case let .success(summary):
+                importSuccessMessage = summary.message
+                showImportSuccess = true
+            case let .failure(error):
+                importErrorMessage = error.localizedDescription
+                showImportError = true
+            }
+        }
+
+        private func importConfirmationText(for backup: TrioSettingsBackup) -> String {
+            var contents: [String] = []
+            if backup.trioSettings != nil { contents.append(String(localized: "Trio settings")) }
+            if backup.preferences != nil { contents.append(String(localized: "algorithm preferences")) }
+            if backup.pumpSettings != nil { contents.append(String(localized: "delivery limits")) }
+            if backup.basalProfile != nil { contents.append(String(localized: "basal rates")) }
+            if backup.insulinSensitivities != nil { contents.append(String(localized: "insulin sensitivities")) }
+            if backup.carbRatios != nil { contents.append(String(localized: "carb ratios")) }
+            if backup.bgTargets != nil { contents.append(String(localized: "glucose targets")) }
+            let presetCount = (backup.tempTargetPresets?.count ?? 0) + (backup.overridePresets?.count ?? 0) +
+                (backup.mealPresets?.count ?? 0)
+            if presetCount > 0 { contents.append(String(localized: "\(presetCount) preset(s)")) }
+
+            var lines: [String] = []
+            if let exportDate = backup.exportDate {
+                let dateString = DateFormatter.localizedString(from: exportDate, dateStyle: .medium, timeStyle: .short)
+                if let appVersion = backup.appVersion {
+                    lines.append(String(localized: "Backup created \(dateString) with Trio \(appVersion)."))
+                } else {
+                    lines.append(String(localized: "Backup created \(dateString)."))
+                }
+            }
+            lines.append(String(localized: "Contains: \(contents.joined(separator: ", "))."))
+            lines.append(String(
+                localized: "Importing overwrites your current settings. Your CGM selection and closed loop setting will not be changed. Review all settings afterwards, especially your therapy settings."
+            ))
+            return lines.joined(separator: "\n\n")
         }
     }
 }

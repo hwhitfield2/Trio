@@ -56,4 +56,116 @@ final class SettingsExportTests: XCTestCase {
         }
         return value
     }
+
+    // MARK: - Backup (JSON export/import)
+
+    func testBackupFileNaming() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = formatter.string(from: Date())
+        let fileName = "TrioSettingsBackup_\(timestamp).json"
+
+        XCTAssertTrue(fileName.hasPrefix("TrioSettingsBackup_"), "Backup file name should start with TrioSettingsBackup_")
+        XCTAssertTrue(fileName.hasSuffix(".json"), "Backup file name should end with .json")
+    }
+
+    func testBackupRoundTrip() throws {
+        var backup = TrioSettingsBackup()
+        backup.exportDate = Date()
+        backup.appVersion = "1.0.0 (42)"
+        backup.branch = "main"
+
+        var settings = TrioSettings()
+        settings.units = .mmolL
+        settings.lowGlucose = 70
+        settings.highGlucose = 200
+        backup.trioSettings = settings
+
+        var preferences = Preferences()
+        preferences.maxIOB = 7.5
+        preferences.enableSMBAlways = true
+        backup.preferences = preferences
+
+        backup.pumpSettings = PumpSettings(insulinActionCurve: 9, maxBolus: 10, maxBasal: 3.5)
+
+        backup.basalProfile = [
+            BasalProfileEntry(start: "00:00", minutes: 0, rate: 0.85),
+            BasalProfileEntry(start: "08:00", minutes: 480, rate: 1.15)
+        ]
+        backup.carbRatios = CarbRatios(units: .grams, schedule: [
+            CarbRatioEntry(start: "00:00", offset: 0, ratio: 10)
+        ])
+        backup.insulinSensitivities = InsulinSensitivities(
+            units: .mgdL,
+            userPreferredUnits: .mgdL,
+            sensitivities: [InsulinSensitivityEntry(sensitivity: 45, offset: 0, start: "00:00")]
+        )
+        backup.bgTargets = BGTargets(units: .mgdL, userPreferredUnits: .mgdL, targets: [
+            BGTargetEntry(low: 100, high: 100, start: "00:00", offset: 0)
+        ])
+
+        backup.tempTargetPresets = [
+            TempTargetPresetBackup(name: "Exercise", target: 140, duration: 60, halfBasalTarget: 160)
+        ]
+        backup.overridePresets = [
+            OverridePresetBackup(
+                name: "Sick Day",
+                percentage: 120,
+                indefinite: false,
+                duration: 180,
+                target: 110,
+                advancedSettings: false,
+                smbIsOff: true,
+                smbIsScheduledOff: false,
+                start: nil,
+                end: nil,
+                smbMinutes: nil,
+                uamMinutes: nil,
+                isfAndCr: true,
+                isf: false,
+                cr: false
+            )
+        ]
+        backup.mealPresets = [
+            MealPresetBackup(dish: "Pizza", carbs: 60, fat: 25, protein: 20)
+        ]
+
+        let data = try JSONCoding.encoder.encode(backup)
+        let decoded = try JSONCoding.decoder.decode(TrioSettingsBackup.self, from: data)
+
+        XCTAssertEqual(decoded.schemaVersion, TrioSettingsBackup.currentSchemaVersion)
+        XCTAssertEqual(decoded.appVersion, "1.0.0 (42)")
+        XCTAssertEqual(decoded.trioSettings?.units, .mmolL)
+        XCTAssertEqual(decoded.trioSettings?.lowGlucose, 70)
+        XCTAssertEqual(decoded.preferences?.maxIOB, 7.5)
+        XCTAssertEqual(decoded.preferences?.enableSMBAlways, true)
+        XCTAssertEqual(decoded.pumpSettings?.maxBasal, 3.5)
+        XCTAssertEqual(decoded.basalProfile?.count, 2)
+        XCTAssertEqual(decoded.basalProfile?.last?.rate, 1.15)
+        XCTAssertEqual(decoded.carbRatios?.schedule.first?.ratio, 10)
+        XCTAssertEqual(decoded.insulinSensitivities?.sensitivities.first?.sensitivity, 45)
+        XCTAssertEqual(decoded.bgTargets?.targets.first?.low, 100)
+        XCTAssertEqual(decoded.tempTargetPresets?.first?.name, "Exercise")
+        XCTAssertEqual(decoded.tempTargetPresets?.first?.target, 140)
+        XCTAssertEqual(decoded.overridePresets?.first?.name, "Sick Day")
+        XCTAssertEqual(decoded.overridePresets?.first?.percentage, 120)
+        XCTAssertEqual(decoded.overridePresets?.first?.smbIsOff, true)
+        XCTAssertEqual(decoded.mealPresets?.first?.dish, "Pizza")
+        XCTAssertEqual(decoded.mealPresets?.first?.carbs, 60)
+    }
+
+    func testBackupDecodingRejectsGarbage() {
+        let notABackup = Data("Setting Category,Subcategory,Setting Name,Value,Unit".utf8)
+        XCTAssertThrowsError(try JSONCoding.decoder.decode(TrioSettingsBackup.self, from: notABackup))
+    }
+
+    func testBackupDecodingToleratesMissingSections() throws {
+        // A backup with only a subset of sections must still decode — every section is optional.
+        let minimal = Data("{\"schemaVersion\": 1}".utf8)
+        let decoded = try JSONCoding.decoder.decode(TrioSettingsBackup.self, from: minimal)
+        XCTAssertEqual(decoded.schemaVersion, 1)
+        XCTAssertNil(decoded.trioSettings)
+        XCTAssertNil(decoded.basalProfile)
+        XCTAssertNil(decoded.tempTargetPresets)
+    }
 }

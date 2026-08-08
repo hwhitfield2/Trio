@@ -328,8 +328,8 @@ extension Settings {
                                 symbol: "arrow.down.doc.fill",
                                 tint: .insulin,
                                 label: Text(String(
-                                    localized: "Export Settings",
-                                    comment: "Export Settings menu item in Trio Settings Root View"
+                                    localized: "Export & Import Settings",
+                                    comment: "Export & Import Settings menu item in Trio Settings Root View"
                                 ))
                             )
                             .navigationLink(to: .settingsExport, from: self)

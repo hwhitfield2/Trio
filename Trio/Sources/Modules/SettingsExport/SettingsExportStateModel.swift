@@ -48,6 +48,7 @@ extension SettingsExport {
         // Published state for UI binding
         @Published var selectedCategories: Set<ExportCategory> = Set(ExportCategory.allCases)
         @Published var isExporting: Bool = false
+        @Published var isImporting: Bool = false
 
         enum ExportError: LocalizedError {
             case documentsDirectoryNotFound
@@ -1324,6 +1325,437 @@ extension SettingsExport {
         /// Check if all categories are selected
         var allCategoriesSelected: Bool {
             selectedCategories.count == ExportCategory.allCases.count
+        }
+    }
+}
+
+// MARK: - Backup export & import (machine-readable JSON)
+
+extension SettingsExport.StateModel {
+    enum ImportError: LocalizedError {
+        case fileAccessDenied
+        case invalidFormat
+        case unsupportedSchema(Int)
+        case validationFailed(String)
+        case applyFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .fileAccessDenied:
+                return String(localized: "Could not read the selected file.")
+            case .invalidFormat:
+                return String(
+                    localized: "The selected file is not a Trio settings backup. Only JSON backup files exported by Trio can be imported — the CSV export is a human-readable report and cannot be imported."
+                )
+            case let .unsupportedSchema(version):
+                return String(
+                    localized: "This backup was created by a newer version of Trio (backup format \(version)). Please update Trio and try again."
+                )
+            case let .validationFailed(message):
+                return String(localized: "The backup contains invalid values: \(message)")
+            case let .applyFailed(message):
+                return String(localized: "Import failed: \(message)")
+            }
+        }
+    }
+
+    /// Result of applying a backup, shown to the user after a successful import.
+    struct ImportSummary {
+        var appliedCategories: [String] = []
+        var importedPresets = 0
+        var skippedPresets = 0
+        var notes: [String] = []
+
+        var message: String {
+            var lines: [String] = []
+            if !appliedCategories.isEmpty {
+                lines.append(String(localized: "Applied: \(appliedCategories.joined(separator: ", "))."))
+            }
+            if importedPresets > 0 {
+                lines.append(String(localized: "Imported \(importedPresets) preset(s)."))
+            }
+            if skippedPresets > 0 {
+                lines.append(String(localized: "Skipped \(skippedPresets) preset(s) that already exist."))
+            }
+            lines.append(contentsOf: notes)
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    /// Exports the complete configuration as a machine-readable JSON backup file.
+    ///
+    /// The backup contains the raw storage models (settings, algorithm preferences,
+    /// delivery limits, therapy profiles and presets) and can be re-imported via
+    /// `readBackup(from:)` + `applyBackup(_:)`.
+    func exportBackup() async -> Result<URL, ExportError> {
+        await MainActor.run { isExporting = true }
+        defer { Task { @MainActor in self.isExporting = false } }
+
+        debug(.default, "🔄 EXPORT: Starting settings backup export...")
+
+        var backup = TrioSettingsBackup()
+        backup.exportDate = Date()
+        backup.appVersion = "\(versionNumber) (\(buildNumber))"
+        backup.branch = branch
+        backup.trioSettings = settingsManager.settings
+        backup.preferences = settingsManager.preferences
+        backup.pumpSettings = settingsManager.pumpSettings
+        backup.basalProfile = storage.retrieve(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self)
+        backup.insulinSensitivities = storage.retrieve(OpenAPS.Settings.insulinSensitivities, as: InsulinSensitivities.self)
+        backup.carbRatios = storage.retrieve(OpenAPS.Settings.carbRatios, as: CarbRatios.self)
+        backup.bgTargets = storage.retrieve(OpenAPS.Settings.bgTargets, as: BGTargets.self)
+
+        do {
+            backup.tempTargetPresets = try await fetchTempTargetPresetBackups()
+            backup.overridePresets = try await fetchOverridePresetBackups()
+            backup.mealPresets = try await fetchMealPresetBackups()
+        } catch {
+            return .failure(.unknown("Failed to read presets: \(error.localizedDescription)"))
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let fileName = "TrioSettingsBackup_\(formatter.string(from: Date())).json"
+
+        guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return .failure(.documentsDirectoryNotFound)
+        }
+        let fileURL = documentsDirectory.appendingPathComponent(fileName)
+
+        do {
+            let data = try JSONCoding.encoder.encode(backup)
+            try data.write(to: fileURL, options: .atomic)
+            try fileManager.setAttributes([
+                .posixPermissions: 0o644,
+                .extensionHidden: false
+            ], ofItemAtPath: fileURL.path)
+            debug(.default, "✅ EXPORT: Backup written to \(fileURL.path)")
+            return .success(fileURL)
+        } catch {
+            return .failure(.fileWriteError(error))
+        }
+    }
+
+    /// Reads and validates a backup file picked by the user.
+    func readBackup(from url: URL) -> Result<TrioSettingsBackup, ImportError> {
+        let needsScope = url.startAccessingSecurityScopedResource()
+        defer { if needsScope { url.stopAccessingSecurityScopedResource() } }
+
+        guard let data = try? Data(contentsOf: url) else {
+            return .failure(.fileAccessDenied)
+        }
+        guard let backup = try? JSONCoding.decoder.decode(TrioSettingsBackup.self, from: data) else {
+            return .failure(.invalidFormat)
+        }
+        guard backup.schemaVersion <= TrioSettingsBackup.currentSchemaVersion else {
+            return .failure(.unsupportedSchema(backup.schemaVersion))
+        }
+        if let validationError = validate(backup) {
+            return .failure(validationError)
+        }
+        return .success(backup)
+    }
+
+    /// Sanity-checks therapy-critical values, mirroring the checks performed during
+    /// Nightscout onboarding import.
+    private func validate(_ backup: TrioSettingsBackup) -> ImportError? {
+        let hasAnyContent = backup.trioSettings != nil || backup.preferences != nil || backup.pumpSettings != nil
+            || backup.basalProfile != nil || backup.insulinSensitivities != nil || backup.carbRatios != nil
+            || backup.bgTargets != nil || !(backup.tempTargetPresets ?? []).isEmpty
+            || !(backup.overridePresets ?? []).isEmpty || !(backup.mealPresets ?? []).isEmpty
+
+        guard hasAnyContent else {
+            return .validationFailed(String(localized: "The backup file is empty."))
+        }
+
+        if let basals = backup.basalProfile {
+            guard !basals.isEmpty, basals.allSatisfy({ $0.rate > 0 }) else {
+                return .validationFailed(String(localized: "Basal rates must be greater than 0 U/hr."))
+            }
+        }
+        if let carbRatios = backup.carbRatios {
+            guard !carbRatios.schedule.isEmpty, carbRatios.schedule.allSatisfy({ $0.ratio > 0 }) else {
+                return .validationFailed(String(localized: "Carb ratios must be greater than 0 g/U."))
+            }
+        }
+        if let sensitivities = backup.insulinSensitivities {
+            guard !sensitivities.sensitivities.isEmpty, sensitivities.sensitivities.allSatisfy({ $0.sensitivity > 0 })
+            else {
+                return .validationFailed(String(localized: "Insulin sensitivities must be greater than 0."))
+            }
+        }
+        if let targets = backup.bgTargets {
+            guard !targets.targets.isEmpty, targets.targets.allSatisfy({ $0.low > 0 }) else {
+                return .validationFailed(String(localized: "Glucose targets must be greater than 0."))
+            }
+        }
+        if let pumpSettings = backup.pumpSettings {
+            guard pumpSettings.maxBolus > 0, pumpSettings.maxBasal > 0, pumpSettings.insulinActionCurve > 0 else {
+                return .validationFailed(String(localized: "Delivery limits must be greater than 0."))
+            }
+        }
+        return nil
+    }
+
+    /// Applies a validated backup to the app.
+    ///
+    /// Device pairing (CGM selection) and the closed-loop toggle are intentionally
+    /// preserved from the current configuration — importing a backup must never
+    /// silently switch the glucose source or enable closed loop.
+    func applyBackup(_ backup: TrioSettingsBackup) async -> Result<ImportSummary, ImportError> {
+        await MainActor.run { isImporting = true }
+        defer { Task { @MainActor in self.isImporting = false } }
+
+        var summary = ImportSummary()
+
+        if var importedSettings = backup.trioSettings {
+            let current = settingsManager.settings
+            importedSettings.cgm = current.cgm
+            importedSettings.cgmPluginIdentifier = current.cgmPluginIdentifier
+            importedSettings.closedLoop = current.closedLoop
+            settingsManager.settings = importedSettings
+            summary.appliedCategories.append(String(localized: "Trio Settings"))
+        }
+
+        if let importedPreferences = backup.preferences {
+            settingsManager.preferences = importedPreferences
+            summary.appliedCategories.append(String(localized: "Algorithm Preferences"))
+        }
+
+        if let pumpSettings = backup.pumpSettings {
+            storage.save(pumpSettings, as: OpenAPS.Settings.settings)
+            summary.appliedCategories.append(String(localized: "Delivery Limits"))
+        }
+
+        if let targets = backup.bgTargets {
+            storage.save(targets, as: OpenAPS.Settings.bgTargets)
+            summary.appliedCategories.append(String(localized: "Glucose Targets"))
+        }
+
+        if let carbRatios = backup.carbRatios {
+            storage.save(carbRatios, as: OpenAPS.Settings.carbRatios)
+            summary.appliedCategories.append(String(localized: "Carb Ratios"))
+        }
+
+        if let sensitivities = backup.insulinSensitivities {
+            storage.save(sensitivities, as: OpenAPS.Settings.insulinSensitivities)
+            summary.appliedCategories.append(String(localized: "Insulin Sensitivities"))
+        }
+
+        if let basalProfile = backup.basalProfile {
+            do {
+                try await saveBasalProfile(basalProfile)
+                summary.appliedCategories.append(String(localized: "Basal Rates"))
+            } catch {
+                summary.notes.append(String(
+                    localized: "Basal rates were NOT imported because they could not be synced to the pump: \(error.localizedDescription). Please review your basal rates manually."
+                ))
+            }
+        }
+
+        await importTempTargetPresets(backup.tempTargetPresets ?? [], summary: &summary)
+        await importOverridePresets(backup.overridePresets ?? [], summary: &summary)
+        await importMealPresets(backup.mealPresets ?? [], summary: &summary)
+
+        guard !summary.appliedCategories.isEmpty || summary.importedPresets > 0 || summary.skippedPresets > 0 else {
+            return .failure(.applyFailed(String(localized: "Nothing could be imported from this backup.")))
+        }
+
+        debug(.default, "✅ IMPORT: Applied backup — \(summary.message)")
+        return .success(summary)
+    }
+
+    /// Saves basal rates, syncing them to the pump first when one is paired
+    /// (same behavior as the basal rate editor). Without a paired pump the profile
+    /// is saved to storage and synced when a pump is set up.
+    private func saveBasalProfile(_ profile: [BasalProfileEntry]) async throws {
+        guard let pump = provider.deviceManager.pumpManager else {
+            storage.save(profile, as: OpenAPS.Settings.basalProfile)
+            return
+        }
+
+        let syncValues = profile.map {
+            RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate))
+        }
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            pump.syncBasalRateSchedule(items: syncValues) { result in
+                switch result {
+                case .success:
+                    self.storage.save(profile, as: OpenAPS.Settings.basalProfile)
+                    continuation.resume()
+                case let .failure(error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func importTempTargetPresets(_ presets: [TempTargetPresetBackup], summary: inout ImportSummary) async {
+        guard !presets.isEmpty else { return }
+        let existingNames = Set((try? await fetchTempTargetPresetBackups())?.map(\.name) ?? [])
+
+        for preset in presets {
+            guard !existingNames.contains(preset.name) else {
+                summary.skippedPresets += 1
+                continue
+            }
+            let tempTarget = TempTarget(
+                name: preset.name,
+                createdAt: Date(),
+                targetTop: preset.target,
+                targetBottom: preset.target,
+                duration: preset.duration,
+                enteredBy: TempTarget.local,
+                reason: preset.name,
+                isPreset: true,
+                enabled: false,
+                halfBasalTarget: preset.halfBasalTarget
+            )
+            do {
+                try await tempTargetsStorage.storeTempTarget(tempTarget: tempTarget)
+                summary.importedPresets += 1
+            } catch {
+                summary.notes
+                    .append(String(localized: "Could not import temp target preset \"\(preset.name)\"."))
+            }
+        }
+    }
+
+    private func importOverridePresets(_ presets: [OverridePresetBackup], summary: inout ImportSummary) async {
+        guard !presets.isEmpty else { return }
+        let existingNames = Set((try? await fetchOverridePresetBackups())?.map(\.name) ?? [])
+
+        for preset in presets {
+            guard !existingNames.contains(preset.name) else {
+                summary.skippedPresets += 1
+                continue
+            }
+            let override = Override(
+                name: preset.name,
+                enabled: false,
+                date: Date(),
+                duration: preset.duration,
+                indefinite: preset.indefinite,
+                percentage: preset.percentage,
+                smbIsOff: preset.smbIsOff,
+                isPreset: true,
+                id: UUID().uuidString,
+                overrideTarget: (preset.target ?? 0) != 0,
+                target: preset.target ?? 0,
+                advancedSettings: preset.advancedSettings,
+                isfAndCr: preset.isfAndCr,
+                isf: preset.isf,
+                cr: preset.cr,
+                smbIsScheduledOff: preset.smbIsScheduledOff,
+                start: preset.start ?? 0,
+                end: preset.end ?? 0,
+                smbMinutes: preset.smbMinutes ?? settingsManager.preferences.maxSMBBasalMinutes,
+                uamMinutes: preset.uamMinutes ?? settingsManager.preferences.maxUAMSMBBasalMinutes
+            )
+            do {
+                try await overrideStorage.storeOverride(override: override)
+                summary.importedPresets += 1
+            } catch {
+                summary.notes
+                    .append(String(localized: "Could not import override preset \"\(preset.name)\"."))
+            }
+        }
+    }
+
+    private func importMealPresets(_ presets: [MealPresetBackup], summary: inout ImportSummary) async {
+        guard !presets.isEmpty else { return }
+
+        let importedCount: Int = await viewContext.perform {
+            let request: NSFetchRequest<MealPresetStored> = MealPresetStored.fetchRequest()
+            let existingDishes = Set((try? self.viewContext.fetch(request))?.compactMap(\.dish) ?? [])
+
+            var imported = 0
+            for preset in presets where !existingDishes.contains(preset.dish) {
+                let newPreset = MealPresetStored(context: self.viewContext)
+                newPreset.dish = preset.dish
+                if let carbs = preset.carbs { newPreset.carbs = carbs as NSDecimalNumber }
+                if let fat = preset.fat { newPreset.fat = fat as NSDecimalNumber }
+                if let protein = preset.protein { newPreset.protein = protein as NSDecimalNumber }
+                imported += 1
+            }
+
+            do {
+                if self.viewContext.hasChanges {
+                    try self.viewContext.save()
+                }
+                return imported
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to import meal presets: \(error)")
+                self.viewContext.rollback()
+                return 0
+            }
+        }
+
+        summary.importedPresets += importedCount
+        summary.skippedPresets += presets.count - importedCount
+    }
+
+    // MARK: Preset snapshots
+
+    private func fetchTempTargetPresetBackups() async throws -> [TempTargetPresetBackup] {
+        let presetIDs = try await tempTargetsStorage.fetchForTempTargetPresets()
+        return try await viewContext.perform {
+            try presetIDs.compactMap { objectID in
+                guard let preset = try self.viewContext.existingObject(with: objectID) as? TempTargetStored,
+                      let name = preset.name, let target = preset.target
+                else { return nil }
+                return TempTargetPresetBackup(
+                    name: name,
+                    target: target.decimalValue,
+                    duration: preset.duration?.decimalValue ?? 0,
+                    halfBasalTarget: preset.halfBasalTarget?.decimalValue
+                )
+            }
+        }
+    }
+
+    private func fetchOverridePresetBackups() async throws -> [OverridePresetBackup] {
+        let presetIDs = try await overrideStorage.fetchForOverridePresets()
+        return try await viewContext.perform {
+            try presetIDs.compactMap { objectID in
+                guard let preset = try self.viewContext.existingObject(with: objectID) as? OverrideStored,
+                      let name = preset.name
+                else { return nil }
+                return OverridePresetBackup(
+                    name: name,
+                    percentage: preset.percentage,
+                    indefinite: preset.indefinite,
+                    duration: preset.duration?.decimalValue ?? 0,
+                    target: preset.target?.decimalValue,
+                    advancedSettings: preset.advancedSettings,
+                    smbIsOff: preset.smbIsOff,
+                    smbIsScheduledOff: preset.smbIsScheduledOff,
+                    start: preset.start?.decimalValue,
+                    end: preset.end?.decimalValue,
+                    smbMinutes: preset.smbMinutes?.decimalValue,
+                    uamMinutes: preset.uamMinutes?.decimalValue,
+                    isfAndCr: preset.isfAndCr,
+                    isf: preset.isf,
+                    cr: preset.cr
+                )
+            }
+        }
+    }
+
+    private func fetchMealPresetBackups() async throws -> [MealPresetBackup] {
+        try await viewContext.perform {
+            let request: NSFetchRequest<MealPresetStored> = MealPresetStored.fetchRequest()
+            let mealPresets = try self.viewContext.fetch(request)
+            return mealPresets.compactMap { preset in
+                guard let dish = preset.dish else { return nil }
+                return MealPresetBackup(
+                    dish: dish,
+                    carbs: preset.carbs?.decimalValue,
+                    fat: preset.fat?.decimalValue,
+                    protein: preset.protein?.decimalValue
+                )
+            }
         }
     }
 }
