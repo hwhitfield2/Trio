@@ -219,10 +219,21 @@ extension SettingsExport {
                 allowedContentTypes: [.json],
                 allowsMultipleSelection: false
             ) { result in
+                // Read the file immediately — the security-scoped URL is only valid now.
+                let readResult: Result<TrioSettingsBackup, Error>
                 switch result {
                 case let .success(urls):
                     guard let url = urls.first else { return }
-                    switch state.readBackup(from: url) {
+                    readResult = state.readBackup(from: url).mapError { $0 as Error }
+                case let .failure(error):
+                    readResult = .failure(error)
+                }
+
+                // The picker sheet is still dismissing when this closure runs; an alert
+                // presented during that dismissal is silently dropped. Defer until the
+                // dismissal has completed.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    switch readResult {
                     case let .success(backup):
                         pendingBackup = backup
                         showImportConfirmation = true
@@ -230,9 +241,6 @@ extension SettingsExport {
                         importErrorMessage = error.localizedDescription
                         showImportError = true
                     }
-                case let .failure(error):
-                    importErrorMessage = error.localizedDescription
-                    showImportError = true
                 }
             }
             .alert(
@@ -275,6 +283,10 @@ extension SettingsExport {
         }
 
         private func importBackup(_ backup: TrioSettingsBackup) async {
+            // Give the confirmation alert time to finish dismissing — presenting the
+            // result alert while it is still animating away silently drops it.
+            try? await Task.sleep(nanoseconds: 600_000_000)
+
             switch await state.applyBackup(backup) {
             case let .success(summary):
                 importSuccessMessage = summary.message
