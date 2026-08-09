@@ -279,7 +279,7 @@ enum InsightsEngine {
         struct Cell {
             var rateSum = 0.0
             var scheduledSum = 0.0
-            var count = 0
+            var sampleCount = 0
         }
 
         var cells: [DayHour: Cell] = [:]
@@ -290,7 +290,7 @@ enum InsightsEngine {
             var cell = cells[key, default: Cell()]
             cell.rateSum += rate
             cell.scheduledSum += scheduled
-            cell.count += 1
+            cell.sampleCount += 1
             cells[key] = cell
         }
 
@@ -302,9 +302,9 @@ enum InsightsEngine {
 
         var hourStats = [HourStat](repeating: HourStat(), count: 24)
         for (key, cell) in cells {
-            guard cell.count > 0, cell.scheduledSum > 0 else { continue }
-            let meanRate = cell.rateSum / Double(cell.count)
-            let meanScheduled = cell.scheduledSum / Double(cell.count)
+            guard cell.sampleCount > 0, cell.scheduledSum > 0 else { continue }
+            let meanRate = cell.rateSum / Double(cell.sampleCount)
+            let meanScheduled = cell.scheduledSum / Double(cell.sampleCount)
             let deviation = (meanRate - meanScheduled) / meanScheduled
             hourStats[key.hour].total += 1
             if deviation < -0.3 {

@@ -297,11 +297,14 @@ final class BaseSiteLifecycleManager: SiteLifecycleManager, Injectable {
 
         center.removeDeliveredNotifications(withIdentifiers: [Config.reminderNotificationIdentifier])
         center.removePendingNotificationRequests(withIdentifiers: [Config.reminderNotificationIdentifier])
-        try? await center.add(UNNotificationRequest(
-            identifier: Config.reminderNotificationIdentifier,
-            content: content,
-            trigger: nil
-        ))
+        center.add(
+            UNNotificationRequest(
+                identifier: Config.reminderNotificationIdentifier,
+                content: content,
+                trigger: nil
+            ),
+            withCompletionHandler: nil
+        )
 
         lastSiteReminderFor = siteDate
         lastSiteReminderDate = now
@@ -357,11 +360,14 @@ final class BaseSiteLifecycleManager: SiteLifecycleManager, Injectable {
 
             center.removeDeliveredNotifications(withIdentifiers: [Config.degradationNotificationIdentifier])
             center.removePendingNotificationRequests(withIdentifiers: [Config.degradationNotificationIdentifier])
-            try await center.add(UNNotificationRequest(
-                identifier: Config.degradationNotificationIdentifier,
-                content: content,
-                trigger: nil
-            ))
+            center.add(
+                UNNotificationRequest(
+                    identifier: Config.degradationNotificationIdentifier,
+                    content: content,
+                    trigger: nil
+                ),
+                withCompletionHandler: nil
+            )
 
             lastDegradationAlertFor = siteDate
             debug(.service, "Site tracker sent site degradation notice")
