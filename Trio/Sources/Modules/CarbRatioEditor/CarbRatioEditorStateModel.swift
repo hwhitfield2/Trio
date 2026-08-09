@@ -16,11 +16,19 @@ extension CarbRatioEditor {
         // type 1.5 with residual insulin production). Tiered step sizes keep the
         // picker wheel responsive across that range: 0.1 g steps where typical
         // ratios live, coarser steps above, where the relative difference between
-        // neighboring steps stays small.
-        let rateValues = stride(from: 10.0, to: 300.0, by: 1.0).map { ($0.decimal ?? .zero) / 10 } + // 1.0-29.9 by 0.1
-            stride(from: 300.0, to: 500.0, by: 5.0).map { ($0.decimal ?? .zero) / 10 } + // 30.0-49.5 by 0.5
-            stride(from: 50.0, to: 100.0, by: 1.0).map { $0.decimal ?? .zero } + // 50-99 by 1
-            stride(from: 100.0, to: 1001.0, by: 5.0).map { $0.decimal ?? .zero } // 100-1000 by 5
+        // neighboring steps stays small. Kept as separate typed arrays — a single
+        // chained expression exceeds the type-checker's budget.
+        private static let fineRatios: [Decimal] = stride(from: 10.0, to: 300.0, by: 1.0)
+            .map { ($0.decimal ?? .zero) / 10 } // 1.0-29.9 by 0.1
+        private static let mediumRatios: [Decimal] = stride(from: 300.0, to: 500.0, by: 5.0)
+            .map { ($0.decimal ?? .zero) / 10 } // 30.0-49.5 by 0.5
+        private static let coarseRatios: [Decimal] = stride(from: 50.0, to: 100.0, by: 1.0)
+            .map { $0.decimal ?? .zero } // 50-99 by 1
+        private static let veryCoarseRatios: [Decimal] = stride(from: 100.0, to: 1001.0, by: 5.0)
+            .map { $0.decimal ?? .zero } // 100-1000 by 5
+
+        let rateValues: [Decimal] = StateModel.fineRatios + StateModel.mediumRatios +
+            StateModel.coarseRatios + StateModel.veryCoarseRatios
 
         var canAdd: Bool {
             guard let lastItem = items.last else { return true }
