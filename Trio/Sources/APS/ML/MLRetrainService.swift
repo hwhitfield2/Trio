@@ -16,6 +16,13 @@ final class MLRetrainService {
     static let lastRetrainKey = "MLRetrainService.lastRetrainDate"
     /// Gates
     static let minWalkForwardSamples = 200
+    /// A candidate must be validated across several distinct days, not one long day
+    static let minWalkForwardDays = 3
+    /// Compute bounds so year-scale history stays phone-friendly: folds test the
+    /// most recent eligible days and training sets are capped to the newest samples
+    static let maxWalkForwardTestDays = 14
+    static let maxFoldTrainingSamples = 10_000
+    static let maxTrainingSamples = 25_000
     static let minPriorSamplesPerDay = 80
     static let minLowRegionSamples = 20
     static let minChampionComparisonSamples = 48
@@ -89,7 +96,7 @@ final class MLRetrainService {
         MLModelStore.shared.saveRetrainReport(report)
 
         if passed {
-            let ensembles = MLTrainer.train(samples: samples)
+            let ensembles = MLTrainer.train(samples: Array(samples.suffix(Self.maxTrainingSamples)))
             let model = MLForecastModel(
                 modelVersion: String(candidateVersion),
                 trainedOnSamples: samples.count,
@@ -150,10 +157,13 @@ final class MLRetrainService {
         var scored: [Scored] = []
         var evaluatedDays = 0
 
-        for day in days {
-            let train = samples.filter { dayOf($0) < day }
+        let eligibleDays = days.filter { day in
+            samples.filter { dayOf($0) < day }.count >= minPriorSamplesPerDay
+                && samples.contains { dayOf($0) == day }
+        }
+        for day in eligibleDays.suffix(maxWalkForwardTestDays) {
+            let train = Array(samples.filter { dayOf($0) < day }.suffix(maxFoldTrainingSamples))
             let test = samples.filter { dayOf($0) == day }
-            guard train.count >= minPriorSamplesPerDay, !test.isEmpty else { continue }
             evaluatedDays += 1
 
             let ensembles = MLTrainer.train(samples: train)
@@ -232,6 +242,11 @@ final class MLRetrainService {
             name: "minimum_samples",
             passed: totalSamples >= minWalkForwardSamples,
             detail: "\(totalSamples) walk-forward samples (need \(minWalkForwardSamples))"
+        ))
+        gates.append(MLEvalReport.GateResult(
+            name: "minimum_days",
+            passed: evaluation.days >= minWalkForwardDays,
+            detail: "\(evaluation.days) walk-forward days (need \(minWalkForwardDays)) — one long day is not enough evidence"
         ))
 
         for (horizon, eval) in evaluation.horizons.sorted(by: { $0.key < $1.key }) {
