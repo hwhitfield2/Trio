@@ -33,6 +33,12 @@ struct FeatureSettingsView: BaseView {
                         label: Text("Remote Control")
                     )
                     .navigationLink(to: .remoteControlConfig, from: self)
+                    SettingsIconRow(symbol: "doc.text.fill", tint: .tabBar, label: Text("Clinic Report (AGP)"))
+                        .navigationLink(to: .clinicReport, from: self)
+                    SettingsIconRow(symbol: "chart.line.text.clipboard", tint: .purple, label: Text("Insights"))
+                        .navigationLink(to: .insights, from: self)
+                    SettingsIconRow(symbol: "book.fill", tint: .orange, label: Text("Food Library"))
+                        .navigationLink(to: .foodLibrary, from: self)
                 }
             )
             .listRowBackground(Color.chart)

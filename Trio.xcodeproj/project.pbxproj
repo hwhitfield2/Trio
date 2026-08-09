@@ -8,6 +8,49 @@
 
 /* Begin PBXBuildFile section */
 		041D1E995A6AE92E9289DC49 /* TreatmentsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D1A7CA8C10C4403D4BBFA7 /* TreatmentsDataFlow.swift */; };
+		AB0300000000000000000B01 /* ClinicReportDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A01 /* ClinicReportDataFlow.swift */; };
+		AB0300000000000000000B02 /* ClinicReportProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A02 /* ClinicReportProvider.swift */; };
+		AB0300000000000000000B03 /* ClinicReportStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A03 /* ClinicReportStateModel.swift */; };
+		AB0300000000000000000B04 /* AGPCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A04 /* AGPCalculator.swift */; };
+		AB0300000000000000000B05 /* ClinicReportPDFRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A05 /* ClinicReportPDFRenderer.swift */; };
+		AB0300000000000000000B06 /* ClinicReportRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A06 /* ClinicReportRootView.swift */; };
+		AB0300000000000000000B07 /* AGPChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A07 /* AGPChartView.swift */; };
+		AB0300000000000000000B08 /* ClinicReportPDFPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A08 /* ClinicReportPDFPages.swift */; };
+		AB0300000000000000000B09 /* ClinicReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0300000000000000000A09 /* ClinicReportTests.swift */; };
+		AB0200000000000000000B01 /* InsightsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0200000000000000000A01 /* InsightsDataFlow.swift */; };
+		AB0200000000000000000B02 /* InsightsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0200000000000000000A02 /* InsightsProvider.swift */; };
+		AB0200000000000000000B03 /* InsightsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0200000000000000000A03 /* InsightsStateModel.swift */; };
+		AB0200000000000000000B04 /* InsightsEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0200000000000000000A04 /* InsightsEngine.swift */; };
+		AB0200000000000000000B05 /* InsightsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0200000000000000000A05 /* InsightsRootView.swift */; };
+		AB0200000000000000000B06 /* InsightCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0200000000000000000A06 /* InsightCardView.swift */; };
+		AB0200000000000000000B07 /* InsightsEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0200000000000000000A07 /* InsightsEngineTests.swift */; };
+		AB0400000000000000000B01 /* FoodLibraryDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A01 /* FoodLibraryDataFlow.swift */; };
+		AB0400000000000000000B02 /* FoodLibraryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A02 /* FoodLibraryProvider.swift */; };
+		AB0400000000000000000B03 /* FoodLibraryStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A03 /* FoodLibraryStateModel.swift */; };
+		AB0400000000000000000B04 /* FoodLibraryRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A04 /* FoodLibraryRootView.swift */; };
+		AB0400000000000000000B05 /* FoodDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A05 /* FoodDetailView.swift */; };
+		AB0400000000000000000B06 /* FoodPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A06 /* FoodPickerView.swift */; };
+		AB0400000000000000000B07 /* FoodLibraryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A07 /* FoodLibraryManager.swift */; };
+		AB0400000000000000000B08 /* FoodItemStored+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A08 /* FoodItemStored+CoreDataClass.swift */; };
+		AB0400000000000000000B09 /* FoodItemStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A09 /* FoodItemStored+CoreDataProperties.swift */; };
+		AB0400000000000000000B0A /* FoodUsageStored+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A0A /* FoodUsageStored+CoreDataClass.swift */; };
+		AB0400000000000000000B0B /* FoodUsageStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A0B /* FoodUsageStored+CoreDataProperties.swift */; };
+		AB0400000000000000000B0C /* FoodLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A0C /* FoodLibraryTests.swift */; };
+		AB0500000000000000000B01 /* SiteTrackerDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A01 /* SiteTrackerDataFlow.swift */; };
+		AB0500000000000000000B02 /* SiteTrackerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A02 /* SiteTrackerProvider.swift */; };
+		AB0500000000000000000B03 /* SiteTrackerStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A03 /* SiteTrackerStateModel.swift */; };
+		AB0500000000000000000B04 /* SiteTrackerRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A04 /* SiteTrackerRootView.swift */; };
+		AB0500000000000000000B05 /* SiteLifecycleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A05 /* SiteLifecycleManager.swift */; };
+		AB0500000000000000000B06 /* SiteChangeStored+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A06 /* SiteChangeStored+CoreDataClass.swift */; };
+		AB0500000000000000000B07 /* SiteChangeStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A07 /* SiteChangeStored+CoreDataProperties.swift */; };
+		AB0500000000000000000B08 /* SiteTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A08 /* SiteTrackerTests.swift */; };
+		AB0100000000000000000B01 /* SleepSafetySettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A01 /* SleepSafetySettingsDataFlow.swift */; };
+		AB0100000000000000000B02 /* SleepSafetySettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A02 /* SleepSafetySettingsProvider.swift */; };
+		AB0100000000000000000B03 /* SleepSafetySettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A03 /* SleepSafetySettingsStateModel.swift */; };
+		AB0100000000000000000B04 /* SleepSafetySettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A04 /* SleepSafetySettingsRootView.swift */; };
+		AB0100000000000000000B05 /* SleepSafetyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A05 /* SleepSafetyManager.swift */; };
+		AB0100000000000000000B06 /* SleepSafetyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A06 /* SleepSafetyPolicy.swift */; };
+		AB0100000000000000000B07 /* SleepSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A07 /* SleepSafetyTests.swift */; };
 		0437CE46C12535A56504EC19 /* SnoozeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5822B15939E719628E9FF7C /* SnoozeRootView.swift */; };
 		0D9A5E34A899219C5C4CDFAF /* HistoryStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9455FA2D92E77A6C4AFED8A3 /* HistoryStateModel.swift */; };
 		0F7A65FBD2CD8D6477ED4539 /* GlucoseNotificationSettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E625985B47742D498CB1681A /* GlucoseNotificationSettingsProvider.swift */; };
@@ -960,6 +1003,49 @@
 
 /* Begin PBXFileReference section */
 		0C2F762F5C1815939CC35029 /* MealPhotoAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPhotoAnalysisView.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A01 /* ClinicReportDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicReportDataFlow.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A02 /* ClinicReportProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicReportProvider.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A03 /* ClinicReportStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicReportStateModel.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A04 /* AGPCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AGPCalculator.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A05 /* ClinicReportPDFRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicReportPDFRenderer.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A06 /* ClinicReportRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicReportRootView.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A07 /* AGPChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AGPChartView.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A08 /* ClinicReportPDFPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicReportPDFPages.swift; sourceTree = "<group>"; };
+		AB0300000000000000000A09 /* ClinicReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicReportTests.swift; sourceTree = "<group>"; };
+		AB0200000000000000000A01 /* InsightsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsDataFlow.swift; sourceTree = "<group>"; };
+		AB0200000000000000000A02 /* InsightsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsProvider.swift; sourceTree = "<group>"; };
+		AB0200000000000000000A03 /* InsightsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsStateModel.swift; sourceTree = "<group>"; };
+		AB0200000000000000000A04 /* InsightsEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsEngine.swift; sourceTree = "<group>"; };
+		AB0200000000000000000A05 /* InsightsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsRootView.swift; sourceTree = "<group>"; };
+		AB0200000000000000000A06 /* InsightCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightCardView.swift; sourceTree = "<group>"; };
+		AB0200000000000000000A07 /* InsightsEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsEngineTests.swift; sourceTree = "<group>"; };
+		AB0400000000000000000A01 /* FoodLibraryDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLibraryDataFlow.swift; sourceTree = "<group>"; };
+		AB0400000000000000000A02 /* FoodLibraryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLibraryProvider.swift; sourceTree = "<group>"; };
+		AB0400000000000000000A03 /* FoodLibraryStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLibraryStateModel.swift; sourceTree = "<group>"; };
+		AB0400000000000000000A04 /* FoodLibraryRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLibraryRootView.swift; sourceTree = "<group>"; };
+		AB0400000000000000000A05 /* FoodDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodDetailView.swift; sourceTree = "<group>"; };
+		AB0400000000000000000A06 /* FoodPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodPickerView.swift; sourceTree = "<group>"; };
+		AB0400000000000000000A07 /* FoodLibraryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLibraryManager.swift; sourceTree = "<group>"; };
+		AB0400000000000000000A08 /* FoodItemStored+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FoodItemStored+CoreDataClass.swift"; sourceTree = "<group>"; };
+		AB0400000000000000000A09 /* FoodItemStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FoodItemStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		AB0400000000000000000A0A /* FoodUsageStored+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FoodUsageStored+CoreDataClass.swift"; sourceTree = "<group>"; };
+		AB0400000000000000000A0B /* FoodUsageStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FoodUsageStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		AB0400000000000000000A0C /* FoodLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLibraryTests.swift; sourceTree = "<group>"; };
+		AB0500000000000000000A01 /* SiteTrackerDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerDataFlow.swift; sourceTree = "<group>"; };
+		AB0500000000000000000A02 /* SiteTrackerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerProvider.swift; sourceTree = "<group>"; };
+		AB0500000000000000000A03 /* SiteTrackerStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerStateModel.swift; sourceTree = "<group>"; };
+		AB0500000000000000000A04 /* SiteTrackerRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerRootView.swift; sourceTree = "<group>"; };
+		AB0500000000000000000A05 /* SiteLifecycleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteLifecycleManager.swift; sourceTree = "<group>"; };
+		AB0500000000000000000A06 /* SiteChangeStored+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SiteChangeStored+CoreDataClass.swift"; sourceTree = "<group>"; };
+		AB0500000000000000000A07 /* SiteChangeStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SiteChangeStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		AB0500000000000000000A08 /* SiteTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerTests.swift; sourceTree = "<group>"; };
+		AB0100000000000000000A01 /* SleepSafetySettingsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetySettingsDataFlow.swift; sourceTree = "<group>"; };
+		AB0100000000000000000A02 /* SleepSafetySettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetySettingsProvider.swift; sourceTree = "<group>"; };
+		AB0100000000000000000A03 /* SleepSafetySettingsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetySettingsStateModel.swift; sourceTree = "<group>"; };
+		AB0100000000000000000A04 /* SleepSafetySettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetySettingsRootView.swift; sourceTree = "<group>"; };
+		AB0100000000000000000A05 /* SleepSafetyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetyManager.swift; sourceTree = "<group>"; };
+		AB0100000000000000000A06 /* SleepSafetyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetyPolicy.swift; sourceTree = "<group>"; };
+		AB0100000000000000000A07 /* SleepSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetyTests.swift; sourceTree = "<group>"; };
 		E56D25843E6F43E1E8A69D71 /* FoodSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodSearchView.swift; sourceTree = "<group>"; };
 		110AEDE02C5193D100615CC9 /* BolusIntent.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BolusIntent.swift; sourceTree = "<group>"; };
 		110AEDE12C5193D100615CC9 /* BolusIntentRequest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BolusIntentRequest.swift; sourceTree = "<group>"; };
@@ -2214,8 +2300,10 @@
 				A1A73E9B7F014A77D5CCE8EB /* CaregiverMessagingSettings */,
 				A54374AD60DB8549EDFCF036 /* TwilioConfig */,
 				F75CB57ED6971B46F8756083 /* CGMSettings */,
+				AB0300000000000000000C01 /* ClinicReport */,
 				0610F7D6D2EC00E3BA1569F0 /* ConfigEditor */,
 				E592A3762CEEC038009A472C /* ContactImage */,
+				AB0400000000000000000C01 /* FoodLibrary */,
 				9E56E3626FAD933385101B76 /* History */,
 				195D80B22AF696EE00D25097 /* DynamicSettings */,
 				C2AA6CF52E1A734A00BF6C16 /* SettingsExport */,
@@ -2224,6 +2312,7 @@
 				F90692CD274B99850037068D /* HealthKit */,
 				3811DE2725C9D49500A708ED /* Home */,
 				19E1F7E629D0828B005C8D20 /* IconConfig */,
+				AB0200000000000000000C01 /* Insights */,
 				D8F047E14D567F2B5DBEFD96 /* ISFEditor */,
 				DDF847DB2C5C28550049BB3B /* LiveActivitySettings */,
 				3811DE1A25C9D48300A708ED /* Main */,
@@ -2235,6 +2324,8 @@
 				DD9ECB6B2CA99FA400AA7C45 /* RemoteControlConfig */,
 				3811DE3825C9D4A100A708ED /* Settings */,
 				110AEDEA2C51A0AE00615CC9 /* ShortcutsConfig */,
+				AB0500000000000000000C01 /* SiteTracker */,
+				AB0100000000000000000C01 /* SleepSafetySettings */,
 				DD17451E2C55520000211FAC /* SMBSettings */,
 				29B478DF61BF8D270F7D8954 /* Snooze */,
 				19F95FF129F10F9C00314DDC /* Stat */,
@@ -2255,6 +2346,134 @@
 				38FEF3F92737E42000574A46 /* BaseStateModel.swift */,
 			);
 			path = Base;
+			sourceTree = "<group>";
+		};
+		AB0300000000000000000C01 /* ClinicReport */ = {
+			isa = PBXGroup;
+			children = (
+				AB0300000000000000000C02 /* View */,
+				AB0300000000000000000A01 /* ClinicReportDataFlow.swift */,
+				AB0300000000000000000A02 /* ClinicReportProvider.swift */,
+				AB0300000000000000000A03 /* ClinicReportStateModel.swift */,
+				AB0300000000000000000A04 /* AGPCalculator.swift */,
+				AB0300000000000000000A05 /* ClinicReportPDFRenderer.swift */,
+			);
+			path = ClinicReport;
+			sourceTree = "<group>";
+		};
+		AB0300000000000000000C02 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				AB0300000000000000000A06 /* ClinicReportRootView.swift */,
+				AB0300000000000000000A07 /* AGPChartView.swift */,
+				AB0300000000000000000A08 /* ClinicReportPDFPages.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		AB0200000000000000000C01 /* Insights */ = {
+			isa = PBXGroup;
+			children = (
+				AB0200000000000000000C02 /* View */,
+				AB0200000000000000000A01 /* InsightsDataFlow.swift */,
+				AB0200000000000000000A02 /* InsightsProvider.swift */,
+				AB0200000000000000000A03 /* InsightsStateModel.swift */,
+				AB0200000000000000000A04 /* InsightsEngine.swift */,
+			);
+			path = Insights;
+			sourceTree = "<group>";
+		};
+		AB0200000000000000000C02 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				AB0200000000000000000A05 /* InsightsRootView.swift */,
+				AB0200000000000000000A06 /* InsightCardView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		AB0400000000000000000C01 /* FoodLibrary */ = {
+			isa = PBXGroup;
+			children = (
+				AB0400000000000000000C02 /* View */,
+				AB0400000000000000000A01 /* FoodLibraryDataFlow.swift */,
+				AB0400000000000000000A02 /* FoodLibraryProvider.swift */,
+				AB0400000000000000000A03 /* FoodLibraryStateModel.swift */,
+			);
+			path = FoodLibrary;
+			sourceTree = "<group>";
+		};
+		AB0400000000000000000C02 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				AB0400000000000000000A04 /* FoodLibraryRootView.swift */,
+				AB0400000000000000000A05 /* FoodDetailView.swift */,
+				AB0400000000000000000A06 /* FoodPickerView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		AB0400000000000000000C03 /* FoodLibrary */ = {
+			isa = PBXGroup;
+			children = (
+				AB0400000000000000000A07 /* FoodLibraryManager.swift */,
+			);
+			path = FoodLibrary;
+			sourceTree = "<group>";
+		};
+		AB0500000000000000000C01 /* SiteTracker */ = {
+			isa = PBXGroup;
+			children = (
+				AB0500000000000000000C02 /* View */,
+				AB0500000000000000000A01 /* SiteTrackerDataFlow.swift */,
+				AB0500000000000000000A02 /* SiteTrackerProvider.swift */,
+				AB0500000000000000000A03 /* SiteTrackerStateModel.swift */,
+			);
+			path = SiteTracker;
+			sourceTree = "<group>";
+		};
+		AB0500000000000000000C02 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				AB0500000000000000000A04 /* SiteTrackerRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		AB0500000000000000000C03 /* SiteTracker */ = {
+			isa = PBXGroup;
+			children = (
+				AB0500000000000000000A05 /* SiteLifecycleManager.swift */,
+			);
+			path = SiteTracker;
+			sourceTree = "<group>";
+		};
+		AB0100000000000000000C01 /* SleepSafetySettings */ = {
+			isa = PBXGroup;
+			children = (
+				AB0100000000000000000C02 /* View */,
+				AB0100000000000000000A01 /* SleepSafetySettingsDataFlow.swift */,
+				AB0100000000000000000A02 /* SleepSafetySettingsProvider.swift */,
+				AB0100000000000000000A03 /* SleepSafetySettingsStateModel.swift */,
+			);
+			path = SleepSafetySettings;
+			sourceTree = "<group>";
+		};
+		AB0100000000000000000C02 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				AB0100000000000000000A04 /* SleepSafetySettingsRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		AB0100000000000000000C03 /* SleepSafety */ = {
+			isa = PBXGroup;
+			children = (
+				AB0100000000000000000A05 /* SleepSafetyManager.swift */,
+				AB0100000000000000000A06 /* SleepSafetyPolicy.swift */,
+			);
+			path = SleepSafety;
 			sourceTree = "<group>";
 		};
 		3811DE1325C9D39E00A708ED /* Sources */ = {
@@ -2371,6 +2590,7 @@
 				3862CC2C2743F9DC00BF832C /* Calendar */,
 				E3F01B1922BB2746098E3926 /* CaregiverMessaging */,
 				E592A37E2CEEC046009A472C /* ContactImage */,
+				AB0400000000000000000C03 /* FoodLibrary */,
 				F90692A8274B7A980037068D /* HealthKit */,
 				3BF85FE22E427312000D7351 /* IOB */,
 				6B1A8D2C2B156EC100E76752 /* LiveActivity */,
@@ -2380,6 +2600,8 @@
 				BD47FD112D88AA630043966B /* OnboardingManager */,
 				DD9ECB662CA99EFE00AA7C45 /* RemoteControl */,
 				38AEE75025F021F10013F05B /* SettingsManager */,
+				AB0500000000000000000C03 /* SiteTracker */,
+				AB0100000000000000000C03 /* SleepSafety */,
 				3811DE9825C9D88300A708ED /* Storage */,
 				DD7E1E30000000000000000A /* Telemetry */,
 				F3D0EB00624E17072E61BCF7 /* Twilio */,
@@ -2961,6 +3183,11 @@
 				38FCF3F125E9028E0078B0D1 /* Info.plist */,
 				CEE9A65D2BBC9F6500EB5194 /* CalibrationsTests.swift */,
 				EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */,
+				AB0300000000000000000A09 /* ClinicReportTests.swift */,
+				AB0200000000000000000A07 /* InsightsEngineTests.swift */,
+				AB0400000000000000000A0C /* FoodLibraryTests.swift */,
+				AB0500000000000000000A08 /* SiteTrackerTests.swift */,
+				AB0100000000000000000A07 /* SleepSafetyTests.swift */,
 				D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */,
 				CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */,
 				3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */,
@@ -4089,6 +4316,10 @@
 				DDB37CC32D05044D00D99BF4 /* ContactTrickEntryStored+CoreDataProperties.swift */,
 				3B56079D2ECD62A800C723C1 /* DeletedGlucoseStored+CoreDataClass.swift */,
 				3B56079F2ECD62AC00C723C1 /* DeletedGlucoseStored+CoreDataProperties.swift */,
+				AB0400000000000000000A08 /* FoodItemStored+CoreDataClass.swift */,
+				AB0400000000000000000A09 /* FoodItemStored+CoreDataProperties.swift */,
+				AB0400000000000000000A0A /* FoodUsageStored+CoreDataClass.swift */,
+				AB0400000000000000000A0B /* FoodUsageStored+CoreDataProperties.swift */,
 				DDE179422C910127003CDDB7 /* Forecast+CoreDataClass.swift */,
 				DDE179432C910127003CDDB7 /* Forecast+CoreDataProperties.swift */,
 				DDE179382C910127003CDDB7 /* ForecastValue+CoreDataClass.swift */,
@@ -4109,6 +4340,8 @@
 				DDE179512C910127003CDDB7 /* OverrideStored+CoreDataProperties.swift */,
 				DDE1793E2C910127003CDDB7 /* PumpEventStored+CoreDataClass.swift */,
 				DDE1793F2C910127003CDDB7 /* PumpEventStored+CoreDataProperties.swift */,
+				AB0500000000000000000A06 /* SiteChangeStored+CoreDataClass.swift */,
+				AB0500000000000000000A07 /* SiteChangeStored+CoreDataProperties.swift */,
 				DDE179402C910127003CDDB7 /* StatsData+CoreDataClass.swift */,
 				DDE179412C910127003CDDB7 /* StatsData+CoreDataProperties.swift */,
 				DDE179482C910127003CDDB7 /* TempBasalStored+CoreDataClass.swift */,
@@ -5271,6 +5504,44 @@
 				FE3C26AB30FDB5E166C4CBB7 /* CaregiverMessagingSettingsProvider.swift in Sources */,
 				EF5058CA95D89021A9BECB32 /* CaregiverMessagingSettingsStateModel.swift in Sources */,
 				FD4BBD33D54FB26184731B55 /* CaregiverMessagingSettingsRootView.swift in Sources */,
+				AB0300000000000000000B01 /* ClinicReportDataFlow.swift in Sources */,
+				AB0300000000000000000B02 /* ClinicReportProvider.swift in Sources */,
+				AB0300000000000000000B03 /* ClinicReportStateModel.swift in Sources */,
+				AB0300000000000000000B04 /* AGPCalculator.swift in Sources */,
+				AB0300000000000000000B05 /* ClinicReportPDFRenderer.swift in Sources */,
+				AB0300000000000000000B06 /* ClinicReportRootView.swift in Sources */,
+				AB0300000000000000000B07 /* AGPChartView.swift in Sources */,
+				AB0300000000000000000B08 /* ClinicReportPDFPages.swift in Sources */,
+				AB0200000000000000000B01 /* InsightsDataFlow.swift in Sources */,
+				AB0200000000000000000B02 /* InsightsProvider.swift in Sources */,
+				AB0200000000000000000B03 /* InsightsStateModel.swift in Sources */,
+				AB0200000000000000000B04 /* InsightsEngine.swift in Sources */,
+				AB0200000000000000000B05 /* InsightsRootView.swift in Sources */,
+				AB0400000000000000000B01 /* FoodLibraryDataFlow.swift in Sources */,
+				AB0400000000000000000B02 /* FoodLibraryProvider.swift in Sources */,
+				AB0400000000000000000B03 /* FoodLibraryStateModel.swift in Sources */,
+				AB0400000000000000000B04 /* FoodLibraryRootView.swift in Sources */,
+				AB0400000000000000000B05 /* FoodDetailView.swift in Sources */,
+				AB0400000000000000000B06 /* FoodPickerView.swift in Sources */,
+				AB0400000000000000000B07 /* FoodLibraryManager.swift in Sources */,
+				AB0400000000000000000B08 /* FoodItemStored+CoreDataClass.swift in Sources */,
+				AB0400000000000000000B09 /* FoodItemStored+CoreDataProperties.swift in Sources */,
+				AB0400000000000000000B0A /* FoodUsageStored+CoreDataClass.swift in Sources */,
+				AB0400000000000000000B0B /* FoodUsageStored+CoreDataProperties.swift in Sources */,
+				AB0500000000000000000B01 /* SiteTrackerDataFlow.swift in Sources */,
+				AB0500000000000000000B02 /* SiteTrackerProvider.swift in Sources */,
+				AB0500000000000000000B03 /* SiteTrackerStateModel.swift in Sources */,
+				AB0500000000000000000B04 /* SiteTrackerRootView.swift in Sources */,
+				AB0500000000000000000B05 /* SiteLifecycleManager.swift in Sources */,
+				AB0500000000000000000B06 /* SiteChangeStored+CoreDataClass.swift in Sources */,
+				AB0500000000000000000B07 /* SiteChangeStored+CoreDataProperties.swift in Sources */,
+				AB0100000000000000000B01 /* SleepSafetySettingsDataFlow.swift in Sources */,
+				AB0100000000000000000B02 /* SleepSafetySettingsProvider.swift in Sources */,
+				AB0100000000000000000B03 /* SleepSafetySettingsStateModel.swift in Sources */,
+				AB0100000000000000000B04 /* SleepSafetySettingsRootView.swift in Sources */,
+				AB0100000000000000000B05 /* SleepSafetyManager.swift in Sources */,
+				AB0100000000000000000B06 /* SleepSafetyPolicy.swift in Sources */,
+				AB0200000000000000000B06 /* InsightCardView.swift in Sources */,
 				E24CA2E781678C74A2552B26 /* MessageComposeView.swift in Sources */,
 				EB5DCD4A59CED904FAC81529 /* CaregiverQuickMessageView.swift in Sources */,
 				EAD9A79C03D063035BFB8081 /* CaregiverMessageIntent.swift in Sources */,
@@ -5428,6 +5699,11 @@
 				DDDD0FFB2F4E22C000F9C645 /* GlucoseSmoothingTests.swift in Sources */,
 				CEE9A65E2BBC9F6500EB5194 /* CalibrationsTests.swift in Sources */,
 				B3A991EE84DF9BD0905EBEDA /* CaregiverMessagingTests.swift in Sources */,
+				AB0300000000000000000B09 /* ClinicReportTests.swift in Sources */,
+				AB0200000000000000000B07 /* InsightsEngineTests.swift in Sources */,
+				AB0400000000000000000B0C /* FoodLibraryTests.swift in Sources */,
+				AB0500000000000000000B08 /* SiteTrackerTests.swift in Sources */,
+				AB0100000000000000000B07 /* SleepSafetyTests.swift in Sources */,
 				BBE9CD41EFF3DFF711182D23 /* TwilioMessagingTests.swift in Sources */,
 				CA02000000000000000010C2 /* DeliveryLimitsSyncTests.swift in Sources */,
 				BD8FC0622D6619E600B95AED /* OverrideStorageTests.swift in Sources */,

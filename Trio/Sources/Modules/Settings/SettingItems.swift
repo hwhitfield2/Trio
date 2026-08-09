@@ -84,6 +84,12 @@ enum SettingItems {
             view: .watch,
             searchContents: ["Display on Watch", "Watch Complication"],
             path: ["Devices", "Smart Watch", "Apple Watch", "Contact Image"]
+        ),
+        SettingItem(
+            title: "Site & Sensor Tracker",
+            view: .siteTracker,
+            searchContents: ["Site", "Sensor", "Cannula", "Rotation", "Reminder"],
+            path: ["Devices", "Site & Sensor Tracker"]
         )
     ]
 
@@ -333,6 +339,24 @@ enum SettingItems {
             view: .deliveryCapEditor,
             searchContents: ["Max Basal", "Max SMB", "Delivery Cap", "No insulin"],
             path: ["ML Engine", "Scheduled Delivery Caps"]
+        ),
+        SettingItem(
+            title: "Clinic Report (AGP)",
+            view: .clinicReport,
+            searchContents: ["AGP", "Ambulatory Glucose Profile", "PDF", "Time in Range", "GMI", "Report"],
+            path: ["Features", "Clinic Report (AGP)"]
+        ),
+        SettingItem(
+            title: "Insights",
+            view: .insights,
+            searchContents: ["Patterns", "Insights", "Lows", "Trends"],
+            path: ["Features", "Insights"]
+        ),
+        SettingItem(
+            title: "Food Library",
+            view: .foodLibrary,
+            searchContents: ["Food Library", "Foods", "Import Presets", "Meal History"],
+            path: ["Features", "Food Library"]
         )
     ]
 
@@ -388,6 +412,28 @@ enum SettingItems {
                 "Send Update Now"
             ],
             path: ["Notifications", "Caregiver Messaging"]
+        ),
+        SettingItem(
+            title: "Sleep Safety",
+            view: .sleepSafetySettings,
+            searchContents: [
+                "Enable Sleep Safety",
+                "Sleep",
+                "Overnight",
+                "Escalation",
+                "Caregiver",
+                "Sleep Window",
+                "Override Preset"
+            ],
+            scrollTargetLabels: [
+                "Sleep": "Enable Sleep Safety",
+                "Overnight": "Enable Sleep Safety",
+                "Escalation": "Enable Sleep Safety",
+                "Caregiver": "Enable Sleep Safety",
+                "Sleep Window": "Enable Sleep Safety",
+                "Override Preset": "Enable Sleep Safety"
+            ],
+            path: ["Notifications", "Sleep Safety"]
         )
     ]
 

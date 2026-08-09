@@ -104,6 +104,7 @@ extension Treatments {
 
         var showMealPhotoSheet: Bool = false
         var showFoodSearchSheet: Bool = false
+        var showFoodLibrarySheet: Bool = false
         var mealPhotoAnalysisEnabled: Bool = false
 
         var meal: [CarbsEntry]?

@@ -128,6 +128,36 @@ struct TrioSettings: JSON, Equatable, Encodable {
     /// Minimum minutes between two Twilio SMS alerts (urgent lows bypass this)
     var twilioCooldownMinutes: Decimal = 30
 
+    /// Sleep-safe overnight mode: scheduled window with low-glucose alert escalation
+    var sleepSafetyEnabled: Bool = false
+
+    /// Sleep window start, minutes since midnight (default 22:00)
+    var sleepWindowStartMinutes: Decimal = 1320
+
+    /// Sleep window end, minutes since midnight (default 07:00; crosses midnight when end < start)
+    var sleepWindowEndMinutes: Decimal = 420
+
+    /// OverrideStored.id of the override preset to activate for the sleep window ("" = none)
+    var sleepOverridePresetID: String = ""
+
+    /// Minutes between repeated overnight low escalation reminders
+    var sleepEscalationRepeatMinutes: Decimal = 10
+
+    /// Escalate an unacknowledged overnight low to a caregiver via Twilio SMS
+    var sleepCaregiverEscalationEnabled: Bool = false
+
+    /// Minutes of unacknowledged low before the caregiver SMS is sent
+    var sleepCaregiverEscalationMinutes: Decimal = 20
+
+    /// Remind when the pump site is older than the configured interval
+    var siteReminderEnabled: Bool = false
+
+    /// Pump-site age (days) after which the site change reminder fires
+    var siteReminderIntervalDays: Decimal = 3
+
+    /// Advisory notice when insulin use and glucose both climb since the site was placed
+    var siteDegradationAlertsEnabled: Bool = false
+
     /// Selected Garmin watchface (Trio or SwissAlpine)
     var garminWatchface: GarminWatchface = .trio
     var garminDatafield: GarminDatafield = .none
@@ -483,6 +513,49 @@ extension TrioSettings: Decodable {
 
         if let twilioCooldownMinutes = try? container.decode(Decimal.self, forKey: .twilioCooldownMinutes) {
             settings.twilioCooldownMinutes = twilioCooldownMinutes
+        }
+
+        if let sleepSafetyEnabled = try? container.decode(Bool.self, forKey: .sleepSafetyEnabled) {
+            settings.sleepSafetyEnabled = sleepSafetyEnabled
+        }
+
+        if let sleepWindowStartMinutes = try? container.decode(Decimal.self, forKey: .sleepWindowStartMinutes) {
+            settings.sleepWindowStartMinutes = sleepWindowStartMinutes
+        }
+
+        if let sleepWindowEndMinutes = try? container.decode(Decimal.self, forKey: .sleepWindowEndMinutes) {
+            settings.sleepWindowEndMinutes = sleepWindowEndMinutes
+        }
+
+        if let sleepOverridePresetID = try? container.decode(String.self, forKey: .sleepOverridePresetID) {
+            settings.sleepOverridePresetID = sleepOverridePresetID
+        }
+
+        if let sleepEscalationRepeatMinutes = try? container.decode(Decimal.self, forKey: .sleepEscalationRepeatMinutes) {
+            settings.sleepEscalationRepeatMinutes = sleepEscalationRepeatMinutes
+        }
+
+        if let sleepCaregiverEscalationEnabled = try? container.decode(Bool.self, forKey: .sleepCaregiverEscalationEnabled) {
+            settings.sleepCaregiverEscalationEnabled = sleepCaregiverEscalationEnabled
+        }
+
+        if let sleepCaregiverEscalationMinutes = try? container.decode(
+            Decimal.self,
+            forKey: .sleepCaregiverEscalationMinutes
+        ) {
+            settings.sleepCaregiverEscalationMinutes = sleepCaregiverEscalationMinutes
+        }
+
+        if let siteReminderEnabled = try? container.decode(Bool.self, forKey: .siteReminderEnabled) {
+            settings.siteReminderEnabled = siteReminderEnabled
+        }
+
+        if let siteReminderIntervalDays = try? container.decode(Decimal.self, forKey: .siteReminderIntervalDays) {
+            settings.siteReminderIntervalDays = siteReminderIntervalDays
+        }
+
+        if let siteDegradationAlertsEnabled = try? container.decode(Bool.self, forKey: .siteDegradationAlertsEnabled) {
+            settings.siteDegradationAlertsEnabled = siteDegradationAlertsEnabled
         }
 
         if let garminWatchface = try? container.decode(GarminWatchface.self, forKey: .garminWatchface) {
