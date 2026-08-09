@@ -1,4 +1,11 @@
 name: 4. Build Trio
+
+# Serialize TestFlight builds: concurrent runs race on
+# latest_testflight_build_number and the loser is rejected for a
+# duplicate bundle version. Queue instead of overlapping.
+concurrency:
+  group: build-trio-testflight
+  cancel-in-progress: false
 run-name: Build Trio (${{ github.ref_name }})
 on:
   workflow_dispatch:
