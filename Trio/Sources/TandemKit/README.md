@@ -105,7 +105,7 @@ TandemKit/
   UI/
     TandemUICoordinator.swift      Setup/settings navigation controller
     TandemPairingView.swift        Scan + pairing-code entry
-    TandemSettingsView.swift       Status, remote-bolus toggle, delete
+    TandemSettingsView.swift       Status, remote-bolus toggle, 0.001 U test dose, delete
 ```
 
 ## Threading
