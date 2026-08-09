@@ -83,16 +83,15 @@ struct TandemInitiateBolusRequest: TandemRequest {
     static let modifiesInsulinDelivery = true
 
     /// Smallest bolus we will command, in milliunits. The cargo is milliunits
-    /// (0.001 U), so 1 is the finest amount the wire format can express and we
-    /// allow commands all the way down to it. The pump's on-screen delivery
-    /// increment is 0.01 U and pumpx2 uses a more conservative 50-milliunit
-    /// (0.05 U) floor. Empirically (t:slim X2 firmware 7.6.0.1): a 1-milliunit
-    /// remote InitiateBolus is REJECTED at initiate with status 1, so the
-    /// firmware enforces a floor above 0.001 U; the exact floor is probed via
-    /// the settings screen's minimum-dose test. A pump nack of a small pulse
-    /// is handled gracefully (permission released, no delivery), so commanding
-    /// below the firmware's floor is safe — it just doesn't deliver.
-    static let minBolusMilliunits: UInt32 = 1
+    /// (0.001 U), but the firmware enforces a 0.05 U floor on remote boluses:
+    /// empirically confirmed on a t:slim X2 running 7.6.0.1 via the settings
+    /// minimum-dose test — 0.05 U is accepted, smaller amounts are rejected
+    /// at initiate with status 1 (matching pumpx2's 0.05 U validation floor).
+    /// Above the floor the wire still carries milliunit resolution, so
+    /// amounts like 0.053 U remain expressible. A pump nack of a too-small
+    /// pulse is handled gracefully (permission released, no delivery), so a
+    /// firmware with a different floor fails safe.
+    static let minBolusMilliunits: UInt32 = 50
 
     /// Total bolus volume in milliunits.
     let totalVolume: UInt32

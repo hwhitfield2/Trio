@@ -110,12 +110,14 @@ final class TandemSettingsViewModel: ObservableObject {
         microbolusBasalEnabled = false
     }
 
-    /// Candidate test amounts for probing the pump's true remote-bolus floor:
-    /// from the wire minimum (0.001 U) through the pump's on-screen increment
-    /// (0.01 U) up past pumpx2's conservative 0.05 U. Firmware 7.6.0.1 is
-    /// known to reject 0.001 U at initiate (status 1), so the floor is
-    /// somewhere above that — step upward until a dose is accepted.
-    static let testDoseOptions: [Double] = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1]
+    /// Candidate test amounts. The remote-bolus floor is settled — firmware
+    /// 7.6.0.1 accepts 0.05 U and rejects smaller amounts (status 1 at
+    /// initiate), and the driver's floor is pinned there (sub-floor commands
+    /// are refused locally, so they are not offered). What remains worth
+    /// probing is milliunit resolution ABOVE the floor: whether the pump
+    /// accepts and actually delivers e.g. 0.051 U, which fine-grained
+    /// microbolus dosing relies on.
+    static let testDoseOptions: [Double] = [0.05, 0.051, 0.055, 0.06, 0.1]
 
     func formatTestDose(_ units: Double) -> String {
         String(format: "%g", units)
@@ -338,7 +340,7 @@ struct TandemSettingsView: View {
         Section(
             header: Text("Minimum dose test"),
             footer: Text(
-                "Probes the smallest remote dose this pump's firmware actually accepts, before relying on fine-grained dosing. Start small and step upward until a dose is accepted — a rejection is harmless and simply means the pump refused. The pump's on-screen increment is 0.01 U and pumpx2 uses a 0.05 U floor, so the true minimum is likely one of those."
+                "The pump's remote-bolus minimum is 0.05 U (confirmed on firmware 7.6.0.1; smaller doses are rejected). Use this to verify 0.05 U works on your pump, and to probe whether milliunit amounts above the floor (like 0.051 U) are accepted and delivered exactly — check the pump's own bolus history for the delivered amount. A rejection is harmless."
             )
         ) {
             Picker(String(localized: "Test amount"), selection: $viewModel.testDoseUnits) {

@@ -11,8 +11,9 @@ import LoopKit
 /// Each loop cycle Trio calls `enactTempBasal(rate, duration)`. We integrate the
 /// previously-commanded rate over the elapsed time into an "owed" accumulator,
 /// then deliver whatever has accrued as a single microbolus (rounded down to the
-/// 0.001 U increment). Amounts below the minimum pulse keep accumulating until
-/// they cross the threshold, so even sub-minimum rates are delivered on average.
+/// 0.001 U increment, delivered once it reaches the pump's 0.05 U remote-bolus
+/// floor). Amounts below the minimum pulse keep accumulating until they cross
+/// the threshold, so even sub-minimum rates are delivered on average.
 ///
 /// Deliveries are recorded as **automatic bolus** pump events (not temp-basal):
 /// bolus and temp-basal contribute identically to IOB, and recording as bolus

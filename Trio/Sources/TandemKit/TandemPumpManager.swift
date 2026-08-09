@@ -78,18 +78,18 @@ class TandemPumpManager: DeviceManager {
 
     // MARK: - Capabilities
 
-    /// The t:slim X2 BLE bolus cargo is in milliunits (0.001 U), so we expose
-    /// volumes down to 0.001 U for boluses and the microbolus-basal engine.
-    /// The pump's on-screen delivery increment is 0.01 U and pumpx2 validates
-    /// remote InitiateBolus against a 0.05 U floor. Empirically (firmware
-    /// 7.6.0.1): a 0.001 U remote bolus is rejected at initiate (status 1),
-    /// so the firmware enforces a floor above the wire minimum; the exact
-    /// floor is probed via the settings screen's minimum-dose test. A bolus
-    /// below the pump's true minimum is nacked, which the delivery path
-    /// treats as a (non-fatal) rejection — sub-floor amounts in the
-    /// microbolus engine simply keep accruing until they clear the floor.
+    /// The t:slim X2 BLE bolus cargo is in milliunits (0.001 U). Empirically
+    /// confirmed on firmware 7.6.0.1 via the settings minimum-dose test: the
+    /// pump ACCEPTS a 0.05 U remote bolus and REJECTS smaller amounts
+    /// (status 1 at initiate), matching pumpx2's 0.05 U floor. Volumes
+    /// therefore run from that floor up to 25 U in 0.001 U steps. The first
+    /// element (0.05) also becomes Trio's `bolusIncrement` preference, so
+    /// oref never recommends an SMB the pump would refuse. The
+    /// microbolus-basal engine accrues in milliunits and delivers pulses at
+    /// or above the floor, so sub-floor amounts are not lost — they
+    /// accumulate until they clear it.
     static let onboardingSupportedBolusVolumes: [Double] =
-        (1 ... 25000).map { Double($0) / 1000 }
+        (50 ... 25000).map { Double($0) / 1000 }
 
     /// t:slim X2: basal 0-15 U/hr. 0.001 U/hr granularity so the
     /// microbolus-basal engine can honor fine-grained oref rates; the pump's
@@ -113,9 +113,12 @@ class TandemPumpManager: DeviceManager {
     // Arithmetic floor-to-milliunit instead of scanning the supported-value
     // arrays (25k/15k entries). The +1e-6 nudge keeps binary-float artifacts
     // (e.g. 0.003 * 1000 == 2.999...) from flooring one milliunit low.
+    // Amounts below the pump's 0.05 U remote-bolus floor round to 0 (not
+    // deliverable), matching the supported-volumes array.
     func roundToSupportedBolusVolume(units: Double) -> Double {
         let milliunits = (units * 1000 + 1e-6).rounded(.down)
-        return min(max(milliunits, 0), 25000) / 1000
+        guard milliunits >= Double(TandemInitiateBolusRequest.minBolusMilliunits) else { return 0 }
+        return min(milliunits, 25000) / 1000
     }
 
     func roundToSupportedBasalRate(unitsPerHour: Double) -> Double {
@@ -985,7 +988,7 @@ enum TandemUnsupportedError: LocalizedError {
         case .bolusInProgress:
             return "A bolus is already in progress."
         case .bolusTooSmall:
-            return "The requested bolus is below the pump's 0.001 U minimum increment."
+            return "The requested bolus is below the pump's 0.05 U minimum remote bolus."
         case let .bolusPermissionDenied(reason):
             return "The pump denied the bolus request (reason \(reason)). Dismiss any open screens on the pump and try again."
         case let .bolusRejected(status):

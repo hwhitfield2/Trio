@@ -32,7 +32,9 @@ by delivering **all** basal as a stream of small automatic boluses:
 - Each loop cycle, oref's requested basal rate is integrated over the elapsed
   time into an "owed" accumulator; the accrued amount is delivered as one
   microbolus (rounded down to the 0.001 U increment — the milliunit
-  resolution of the BLE bolus cargo). Sub-minimum rates
+  resolution of the BLE bolus cargo — and delivered once it reaches the
+  firmware's 0.05 U remote-bolus floor, confirmed on hardware running
+  7.6.0.1). Sub-minimum rates
   accumulate until they cross the pulse threshold, so even low rates are
   delivered on average.
 - **Hard precondition:** the pump's own basal profile must be **0 U/hr** and
@@ -105,7 +107,7 @@ TandemKit/
   UI/
     TandemUICoordinator.swift      Setup/settings navigation controller
     TandemPairingView.swift        Scan + pairing-code entry
-    TandemSettingsView.swift       Status, remote-bolus toggle, 0.001 U test dose, delete
+    TandemSettingsView.swift       Status, remote-bolus toggle, minimum-dose test, delete
 ```
 
 ## Threading
