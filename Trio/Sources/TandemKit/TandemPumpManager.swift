@@ -81,10 +81,13 @@ class TandemPumpManager: DeviceManager {
     /// The t:slim X2 BLE bolus cargo is in milliunits (0.001 U), so we expose
     /// volumes down to 0.001 U for boluses and the microbolus-basal engine.
     /// The pump's on-screen delivery increment is 0.01 U and pumpx2 validates
-    /// remote InitiateBolus against a 0.05 U floor, but that floor is uncited
-    /// and may be conservative. NOTE: sub-0.05 U *remote* delivery has NOT
-    /// been confirmed on hardware; the pump may nack a bolus below its true
-    /// minimum, which the delivery path treats as a (non-fatal) rejection.
+    /// remote InitiateBolus against a 0.05 U floor. Empirically (firmware
+    /// 7.6.0.1): a 0.001 U remote bolus is rejected at initiate (status 1),
+    /// so the firmware enforces a floor above the wire minimum; the exact
+    /// floor is probed via the settings screen's minimum-dose test. A bolus
+    /// below the pump's true minimum is nacked, which the delivery path
+    /// treats as a (non-fatal) rejection — sub-floor amounts in the
+    /// microbolus engine simply keep accruing until they clear the floor.
     static let onboardingSupportedBolusVolumes: [Double] =
         (1 ... 25000).map { Double($0) / 1000 }
 

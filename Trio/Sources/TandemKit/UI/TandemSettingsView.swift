@@ -13,6 +13,7 @@ final class TandemSettingsViewModel: ObservableObject {
     @Published var showTestDoseConfirmation = false
     @Published var testDoseInProgress = false
     @Published var testDoseResult: (success: Bool, message: String)?
+    @Published var testDoseUnits: Double = TandemSettingsViewModel.testDoseOptions[0]
 
     let pumpManager: TandemPumpManager
 
@@ -109,22 +110,32 @@ final class TandemSettingsViewModel: ObservableObject {
         microbolusBasalEnabled = false
     }
 
-    /// The smallest dose the driver can command: 1 milliunit.
-    static let testDoseUnits: Double = 0.001
+    /// Candidate test amounts for probing the pump's true remote-bolus floor:
+    /// from the wire minimum (0.001 U) through the pump's on-screen increment
+    /// (0.01 U) up past pumpx2's conservative 0.05 U. Firmware 7.6.0.1 is
+    /// known to reject 0.001 U at initiate (status 1), so the floor is
+    /// somewhere above that — step upward until a dose is accepted.
+    static let testDoseOptions: [Double] = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1]
+
+    func formatTestDose(_ units: Double) -> String {
+        String(format: "%g", units)
+    }
 
     func requestTestDose() {
         testDoseResult = nil
         showTestDoseConfirmation = true
     }
 
-    /// Deliver a single 0.001 U bolus through the normal remote-bolus path to
-    /// find out whether the pump accepts a dose this small. The regular
+    /// Deliver a single small bolus through the normal remote-bolus path to
+    /// find out whether the pump accepts a dose that small. The regular
     /// enactBolus flow is used on purpose: the test exercises the exact
     /// permission → initiate → reconcile sequence production dosing uses, and
     /// the delivered insulin is recorded in the treatment log like any bolus.
     func confirmTestDose() {
+        let units = testDoseUnits
+        let amountText = formatTestDose(units)
         testDoseInProgress = true
-        pumpManager.enactBolus(units: Self.testDoseUnits, activationType: .manualNoRecommendation) { [weak self] error in
+        pumpManager.enactBolus(units: units, activationType: .manualNoRecommendation) { [weak self] error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.testDoseInProgress = false
@@ -132,30 +143,29 @@ final class TandemSettingsViewModel: ObservableObject {
                     if case .uncertainDelivery = error {
                         // Not a rejection: communication dropped mid-command, so
                         // the pump may or may not have delivered. Says nothing
-                        // about whether 0.001 U doses are accepted.
+                        // about whether doses this small are accepted.
                         self.testDoseResult = (
                             success: false,
                             message: String(
-                                localized: "Communication was lost mid-command, so it is unknown whether the test bolus was delivered — this does not tell us whether the pump accepts 0.001 U. Check the pump's bolus history, then try again."
+                                localized: "Communication was lost mid-command, so it is unknown whether the \(amountText) U test bolus was delivered — this does not tell us whether the pump accepts it. Check the pump's bolus history, then try again."
                             )
                         )
                     } else {
                         self.testDoseResult = (
                             success: false,
-                            message: String(localized: "The pump did not accept the test bolus: \(error.localizedDescription)")
+                            message: String(localized: "The pump did not accept the \(amountText) U test bolus: \(error.localizedDescription)")
                         )
                     }
                 } else {
                     self.testDoseResult = (
                         success: true,
                         message: String(
-                            localized: "The pump accepted the 0.001 U test bolus. It is recorded in Trio's treatment log — confirm in the pump's own bolus history that 0.001 U was actually delivered."
+                            localized: "The pump accepted the \(amountText) U test bolus. It is recorded in Trio's treatment log — confirm in the pump's own bolus history that \(amountText) U was actually delivered."
                         )
                     )
-                    // A 1-milliunit bolus completes almost instantly; refresh
-                    // shortly after so the delivery reconciles and the
-                    // single-bolus gate releases without waiting for the next
-                    // heartbeat.
+                    // A tiny bolus completes almost instantly; refresh shortly
+                    // after so the delivery reconciles and the single-bolus
+                    // gate releases without waiting for the next heartbeat.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
                         self?.refresh()
                     }
@@ -213,12 +223,12 @@ struct TandemSettingsView: View {
                 "Trio will deliver ALL basal insulin as a stream of automatic microboluses. You MUST first set the pump's own basal profile to 0 U/hr and turn Control-IQ OFF — otherwise insulin will stack and you could go dangerously low. This disables the pump's built-in safety automation (Control-IQ / Basal-IQ) and relies entirely on Trio. It is experimental and unverified on hardware. Only enable if you fully understand the risk."
             )
         }
-        .alert(String(localized: "Deliver 0.001 U test bolus?"), isPresented: $viewModel.showTestDoseConfirmation) {
+        .alert(String(localized: "Deliver test bolus?"), isPresented: $viewModel.showTestDoseConfirmation) {
             Button(String(localized: "Cancel"), role: .cancel) {}
             Button(String(localized: "Deliver")) { viewModel.confirmTestDose() }
         } message: {
             Text(
-                "This sends a real 0.001 U bolus to the pump to verify it accepts the smallest possible dose. The amount is negligible, but it is real insulin and will be recorded in the treatment log."
+                "This sends a real \(viewModel.formatTestDose(viewModel.testDoseUnits)) U bolus to the pump to check whether it accepts a dose this small. It is real insulin and will be recorded in the treatment log."
             )
         }
         .alert(String(localized: "Remove pump?"), isPresented: $viewModel.showDeleteConfirmation) {
@@ -328,12 +338,18 @@ struct TandemSettingsView: View {
         Section(
             header: Text("Minimum dose test"),
             footer: Text(
-                "Verifies that the pump accepts the smallest dose Trio can command (0.001 U) before relying on fine-grained dosing. Whether the firmware allows a remote bolus below 0.05 U is unverified — a rejection here is harmless and simply means the pump refused the dose."
+                "Probes the smallest remote dose this pump's firmware actually accepts, before relying on fine-grained dosing. Start small and step upward until a dose is accepted — a rejection is harmless and simply means the pump refused. The pump's on-screen increment is 0.01 U and pumpx2 uses a 0.05 U floor, so the true minimum is likely one of those."
             )
         ) {
+            Picker(String(localized: "Test amount"), selection: $viewModel.testDoseUnits) {
+                ForEach(TandemSettingsViewModel.testDoseOptions, id: \.self) { amount in
+                    Text("\(viewModel.formatTestDose(amount)) U").tag(amount)
+                }
+            }
+            .disabled(viewModel.testDoseInProgress)
             if viewModel.testDoseInProgress {
                 HStack {
-                    Text("Testing 0.001 U delivery…")
+                    Text("Testing \(viewModel.formatTestDose(viewModel.testDoseUnits)) U delivery…")
                     Spacer()
                     ProgressView()
                 }
@@ -341,7 +357,7 @@ struct TandemSettingsView: View {
                 Button {
                     viewModel.requestTestDose()
                 } label: {
-                    Text("Deliver 0.001 U test bolus")
+                    Text("Deliver \(viewModel.formatTestDose(viewModel.testDoseUnits)) U test bolus")
                 }
             }
             if let result = viewModel.testDoseResult {
