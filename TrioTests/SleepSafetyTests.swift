@@ -174,10 +174,12 @@ import Testing
     }
 
     @Test("Caregiver disabled never notifies") func testCaregiverDisabled() {
+        // Last escalation 15 min ago satisfies the 10-min repeat spacing, so the
+        // local escalation fires; caregiver stays out of it because it is disabled.
         let state = SleepSafetyPolicy.State(
             glucose: 65,
             episodeStartDate: date(hour: 2),
-            lastEscalationDate: date(hour: 2, minute: 55)
+            lastEscalationDate: date(hour: 2, minute: 45)
         )
         #expect(
             SleepSafetyPolicy.action(state: state, config: config(caregiverEnabled: false), now: date(hour: 3)) ==
