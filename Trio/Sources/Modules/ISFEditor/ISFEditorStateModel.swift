@@ -30,9 +30,10 @@ extension ISFEditor {
 
         var rateValues: [Decimal] {
             let settingsProvider = PickerSettingsProvider.shared
-            // Max raised from 540 to 1800 mg/dL/U to support very-low-dose therapy
-            // regimens (paired with carb ratios up to 500 g/U).
-            let sensitivityPickerSetting = PickerSetting(value: 100, step: 1, min: 9, max: 1800, type: .glucose)
+            // Max raised to 3600 mg/dL/U to support very-low-dose therapy regimens,
+            // e.g. LADA/type 1.5 with substantial residual insulin production
+            // (paired with carb ratios up to 1000 g/U).
+            let sensitivityPickerSetting = PickerSetting(value: 100, step: 1, min: 9, max: 3600, type: .glucose)
             return settingsProvider.generatePickerValues(from: sensitivityPickerSetting, units: units)
         }
 

@@ -83,7 +83,7 @@ extension TherapyRatioCalculator {
         var recommendedISF: Decimal? {
             guard let tdd = effectiveTDD, tdd > 0 else { return nil }
             let isf = Self.isfRuleNumerator / tdd
-            return Self.clamp(Self.round(isf, scale: 0), min: 9, max: 1800)
+            return Self.clamp(Self.round(isf, scale: 0), min: 9, max: 3600)
         }
 
         /// Recommended carb ratio in grams per unit, clamped to the carb ratio editor's bounds.
@@ -92,7 +92,7 @@ extension TherapyRatioCalculator {
             let ratio = Self.carbRatioRuleNumerator / tdd
             // The editor grid is 0.1 g steps up to 50 g/U, whole grams above
             let rounded = ratio > 50 ? Self.round(ratio, scale: 0) : Self.round(ratio, scale: 1)
-            return Self.clamp(rounded, min: 1, max: 500)
+            return Self.clamp(rounded, min: 1, max: 1000)
         }
 
         @MainActor func loadTDDHistory() async {
