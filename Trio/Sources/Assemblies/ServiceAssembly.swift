@@ -36,6 +36,9 @@ final class ServiceAssembly: Assembly {
         container.register(FoodSearchManager.self) { r in BaseFoodSearchManager(resolver: r) }
         container.register(UnannouncedMealDetectionManager.self) { r in BaseUnannouncedMealDetectionManager(resolver: r) }
         container.register(CaregiverMessagingManager.self) { r in BaseCaregiverMessagingManager(resolver: r) }
+        container.register(FoodLibraryManager.self) { r in BaseFoodLibraryManager(resolver: r) }
         container.register(TwilioMessagingManager.self) { r in BaseTwilioMessagingManager(resolver: r) }
+        container.register(SiteLifecycleManager.self) { r in BaseSiteLifecycleManager(resolver: r) }
+        container.register(SleepSafetyManager.self) { r in BaseSleepSafetyManager(resolver: r) }
     }
 }

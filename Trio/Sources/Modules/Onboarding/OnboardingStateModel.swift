@@ -130,6 +130,8 @@ extension Onboarding {
                         defaultOption = .omni
                     } else if pumpManager is MedtrumPumpManager {
                         defaultOption = .medtrum
+                    } else if pumpManager is TandemPumpManager {
+                        defaultOption = .tandem
                     } else if pumpManager is DanaKitPumpManager {
                         defaultOption = .dana
                     } else if pumpManager is MinimedPumpManager {
@@ -181,6 +183,8 @@ extension Onboarding {
                 ) // FIXME: we need to be able to differentiate Eros here due to not allowing 0 basal rates
             case .medtrum:
                 return PickerSetting(value: 0.1, step: 0.05, min: 0.05, max: 30, type: .insulinUnitPerHour)
+            case .tandem:
+                return PickerSetting(value: 0.1, step: 0.05, min: 0, max: 15, type: .insulinUnitPerHour)
             case .none:
                 // same as dash, as that is the fallback
                 return PickerSetting(value: 0.1, step: 0.05, min: 0, max: 30, type: .insulinUnitPerHour)

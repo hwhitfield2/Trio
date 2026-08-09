@@ -158,6 +158,14 @@ extension Treatments {
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Search food")
                 }
+                Button {
+                    state.showFoodLibrarySheet = true
+                } label: {
+                    Image(systemName: "book.fill")
+                }
+                .foregroundStyle(.blue)
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Food library")
                 Spacer()
                 TextFieldWithToolBar(
                     text: $state.carbs,
@@ -466,6 +474,9 @@ extension Treatments {
             }
             .sheet(isPresented: $state.showFoodSearchSheet) {
                 FoodSearchView(state: state)
+            }
+            .sheet(isPresented: $state.showFoodLibrarySheet) {
+                FoodPickerView(state: state)
             }
             .sheet(isPresented: $showPresetSheet, onDismiss: {
                 showPresetSheet = false

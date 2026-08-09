@@ -68,6 +68,15 @@ extension PumpConfig {
                     prefersToSkipUserInteraction: false,
                     allowedInsulinTypes: [.apidra, .humalog, .novolog, .fiasp, .lyumjev]
                 )
+            case .tandem:
+                setupViewController = TandemPumpManager.setupViewController(
+                    initialSettings: initialSettings,
+                    bluetoothProvider: bluetoothManager,
+                    colorPalette: .default,
+                    allowDebugFeatures: true,
+                    prefersToSkipUserInteraction: false,
+                    allowedInsulinTypes: [.apidra, .humalog, .novolog, .fiasp, .lyumjev]
+                )
             case .simulator:
                 setupViewController = MockPumpManager.setupViewController(
                     initialSettings: initialSettings,

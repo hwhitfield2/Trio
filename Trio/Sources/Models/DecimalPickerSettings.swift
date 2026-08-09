@@ -33,7 +33,7 @@ class PickerSettingsProvider: ObservableObject {
 }
 
 struct DecimalPickerSettings {
-    var lowGlucose = PickerSetting(value: 70, step: 5, min: 40, max: 100, type: PickerSetting.PickerSettingType.glucose)
+    var lowGlucose = PickerSetting(value: 70, step: 5, min: 40, max: 150, type: PickerSetting.PickerSettingType.glucose)
     var highGlucose = PickerSetting(value: 180, step: 5, min: 100, max: 400, type: PickerSetting.PickerSettingType.glucose)
     var carbsRequiredThreshold = PickerSetting(value: 10, step: 1, min: 0, max: 100, type: PickerSetting.PickerSettingType.gram)
     var individualAdjustmentFactor = PickerSetting(
@@ -44,7 +44,7 @@ struct DecimalPickerSettings {
         type: PickerSetting.PickerSettingType.factor
     )
     var high = PickerSetting(value: 180, step: 1, min: 100, max: 400, type: PickerSetting.PickerSettingType.glucose)
-    var low = PickerSetting(value: 70, step: 1, min: 40, max: 100, type: PickerSetting.PickerSettingType.glucose)
+    var low = PickerSetting(value: 70, step: 1, min: 40, max: 150, type: PickerSetting.PickerSettingType.glucose)
     var maxCarbs = PickerSetting(value: 250, step: 5, min: 0, max: 300, type: PickerSetting.PickerSettingType.gram)
     var maxFat = PickerSetting(value: 250, step: 5, min: 0, max: 300, type: PickerSetting.PickerSettingType.gram)
     var maxProtein = PickerSetting(value: 250, step: 5, min: 0, max: 300, type: PickerSetting.PickerSettingType.gram)

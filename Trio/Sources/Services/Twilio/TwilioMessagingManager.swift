@@ -51,6 +51,9 @@ protocol TwilioMessagingManager {
     var isConfigured: Bool { get }
     /// Sends a test SMS to all configured recipients to verify the setup.
     @MainActor func sendTestMessage() async throws
+    /// Sends a sleep-safety escalation SMS to all configured recipients. This is an
+    /// explicit, once-per-episode escalation, so it bypasses the alert cooldown policy.
+    @MainActor func sendSleepEscalationMessage(_ body: String) async throws
 }
 
 final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
@@ -124,6 +127,16 @@ final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
         let failures = try await send(body: body, to: recipients)
         if let failure = failures.first {
             throw TwilioMessagingError.recipientFailed(failure.recipient, failure.error.localizedDescription)
+        }
+    }
+
+    @MainActor func sendSleepEscalationMessage(_ body: String) async throws {
+        let recipients = CaregiverMessage.recipients(from: settingsManager.settings.twilioRecipients)
+        guard !recipients.isEmpty else { throw TwilioMessagingError.missingRecipients }
+
+        let failures = try await send(body: body, to: recipients)
+        for failure in failures {
+            warning(.service, "Sleep safety SMS to \(failure.recipient) failed", error: failure.error)
         }
     }
 

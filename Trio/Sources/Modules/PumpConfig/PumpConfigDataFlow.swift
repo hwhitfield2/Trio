@@ -10,6 +10,7 @@ enum PumpConfig {
         case omni
         case dana
         case medtrum
+        case tandem
         case simulator
     }
 

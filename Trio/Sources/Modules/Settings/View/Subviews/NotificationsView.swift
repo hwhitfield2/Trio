@@ -93,6 +93,9 @@ struct NotificationsView: BaseView {
 
                     SettingsIconRow(symbol: "person.2.fill", tint: .tabBar, label: Text("Caregiver Messaging"))
                         .navigationLink(to: .caregiverMessagingSettings, from: self)
+
+                    SettingsIconRow(symbol: "moon.zzz.fill", tint: .purple, label: Text("Sleep Safety"))
+                        .navigationLink(to: .sleepSafetySettings, from: self)
                 }
             ).listRowBackground(Color.chart)
         }

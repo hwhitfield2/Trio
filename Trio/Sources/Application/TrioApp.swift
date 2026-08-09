@@ -94,6 +94,9 @@ extension Notification.Name {
         _ = resolver.resolve(CGMSilenceWatchdog.self)!
         _ = resolver.resolve(TwilioMessagingManager.self)!
         _ = resolver.resolve(UnannouncedMealDetectionManager.self)!
+        _ = resolver.resolve(FoodLibraryManager.self)!
+        _ = resolver.resolve(SiteLifecycleManager.self)!
+        _ = resolver.resolve(SleepSafetyManager.self)!
     }
 
     init() {

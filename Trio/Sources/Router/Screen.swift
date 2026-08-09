@@ -55,6 +55,11 @@ enum Screen: Identifiable, Hashable {
     case settingsExport
     case mlEngineData
     case deliveryCapEditor
+    case clinicReport
+    case insights
+    case foodLibrary
+    case siteTracker
+    case sleepSafetySettings
 
     var id: Int { String(reflecting: self).hashValue }
 }
@@ -180,6 +185,16 @@ extension Screen {
             MLEngineData.RootView(resolver: resolver)
         case .deliveryCapEditor:
             DeliveryCapEditor.RootView(resolver: resolver)
+        case .clinicReport:
+            ClinicReport.RootView(resolver: resolver)
+        case .insights:
+            Insights.RootView(resolver: resolver)
+        case .foodLibrary:
+            FoodLibrary.RootView(resolver: resolver)
+        case .siteTracker:
+            SiteTracker.RootView(resolver: resolver)
+        case .sleepSafetySettings:
+            SleepSafetySettings.RootView(resolver: resolver)
         }
     }
 

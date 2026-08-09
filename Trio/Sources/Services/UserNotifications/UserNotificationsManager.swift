@@ -364,7 +364,11 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
                 content.body = body
 
                 if notificationAlarm {
-                    content.sound = .default
+                    // Low alarms play a custom sound bundled at the app root
+                    // (Trio/Resources/cartman_low.wav); highs keep the default.
+                    content.sound = glucoseStorage.alarm == .low
+                        ? UNNotificationSound(named: UNNotificationSoundName(rawValue: "cartman_low.wav"))
+                        : .default
                     content.userInfo[NotificationAction.key] = NotificationAction.snooze.rawValue
                     content.categoryIdentifier = NotificationCategoryIdentifier.trioAlert.rawValue
                 }

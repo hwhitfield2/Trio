@@ -64,6 +64,14 @@ extension Stat {
                             .foregroundColor(.tabBar)
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        ClinicReport.RootView(resolver: resolver)
+                    } label: {
+                        Image(systemName: "doc.text")
+                            .foregroundColor(.tabBar)
+                    }
+                }
             }
         }
 

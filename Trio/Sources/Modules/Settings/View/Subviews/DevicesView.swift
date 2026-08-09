@@ -31,6 +31,8 @@ struct DevicesView: BaseView {
                     .navigationLink(to: .cgm, from: self)
                     SettingsIconRow(symbol: "applewatch", tint: Color.tabBar, label: Text("Smart Watch"))
                         .navigationLink(to: .watch, from: self)
+                    SettingsIconRow(symbol: "bandage.fill", tint: .insulin, label: Text("Site & Sensor Tracker"))
+                        .navigationLink(to: .siteTracker, from: self)
                 }
             )
             .listRowBackground(Color.chart)

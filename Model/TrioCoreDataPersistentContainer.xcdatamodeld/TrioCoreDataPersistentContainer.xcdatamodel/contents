@@ -51,6 +51,40 @@
             <fetchIndexElement property="date" type="Binary" order="ascending"/>
         </fetchIndex>
     </entity>
+    <entity name="FoodItemStored" representedClassName="FoodItemStored" syncable="YES">
+        <attribute name="carbs" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fat" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastUsedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="normalizedName" optional="YES" attributeType="String"/>
+        <attribute name="protein" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
+        <attribute name="useCount" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="usages" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="FoodUsageStored" inverseName="foodItem" inverseEntity="FoodUsageStored"/>
+        <fetchIndex name="byNormalizedName">
+            <fetchIndexElement property="normalizedName" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byLastUsedAt">
+            <fetchIndexElement property="lastUsedAt" type="Binary" order="descending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="FoodUsageStored" representedClassName="FoodUsageStored" syncable="YES">
+        <attribute name="carbs" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="endedAboveRange" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="endGlucose" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="hypoWithin4h" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="outcomeComputed" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="peakDelta" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="startGlucose" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="foodItem" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="FoodItemStored" inverseName="usages" inverseEntity="FoodItemStored"/>
+        <fetchIndex name="byDate">
+            <fetchIndexElement property="date" type="Binary" order="descending"/>
+        </fetchIndex>
+    </entity>
     <entity name="Forecast" representedClassName="Forecast" syncable="YES">
         <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
@@ -226,6 +260,17 @@
                 <constraint value="id"/>
             </uniquenessConstraint>
         </uniquenessConstraints>
+    </entity>
+    <entity name="SiteChangeStored" representedClassName="SiteChangeStored" syncable="YES">
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kind" optional="YES" attributeType="String"/>
+        <attribute name="location" optional="YES" attributeType="String"/>
+        <attribute name="note" optional="YES" attributeType="String"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
+        <fetchIndex name="byDate">
+            <fetchIndexElement property="date" type="Binary" order="descending"/>
+        </fetchIndex>
     </entity>
     <entity name="StatsData" representedClassName="StatsData" syncable="YES">
         <attribute name="lastrun" attributeType="Date" defaultDateTimeInterval="704497620" usesScalarValueType="NO"/>
