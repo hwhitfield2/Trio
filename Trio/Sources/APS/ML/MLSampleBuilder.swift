@@ -15,7 +15,8 @@ enum MLSampleBuilder {
     static let carbEntryLookback = 8
     /// Readings below the CGM reporting floor are dying-sensor artifacts
     static let minValidGlucose = 39
-    static let historyDays = 90
+    /// Matches the extended Core Data retention for training-relevant entities
+    static let historyDays = 365
 
     struct Result {
         let samples: [MLTrainer.Sample]

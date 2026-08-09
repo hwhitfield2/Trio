@@ -166,7 +166,8 @@ extension Notification.Name {
                     // Only load services after successful Core Data initialization
                     loadServices()
 
-                    // Clear the persistentHistory and the NSManagedObjects that are older than 90 days every time the app starts
+                    // Clear the persistentHistory and expired NSManagedObjects on every app start
+                    // (training-relevant entities keep 365 days; forecast curves 2 days)
                     cleanupOldData()
 
                     // Weekly on-device shadow-forecaster retrain; produces a
@@ -444,28 +445,28 @@ extension Notification.Name {
     }
 
     private func purgeOldNSManagedObjects() async throws {
-        async let glucoseDeletion: () = coreDataStack.batchDeleteOlderThan(GlucoseStored.self, dateKey: "date", days: 90)
+        async let glucoseDeletion: () = coreDataStack.batchDeleteOlderThan(GlucoseStored.self, dateKey: "date", days: 365)
         async let archivedGlucoseDeletion: () = coreDataStack
-            .batchDeleteOlderThan(DeletedGlucoseStored.self, dateKey: "date", days: 90)
-        async let pumpEventDeletion: () = coreDataStack.batchDeleteOlderThan(PumpEventStored.self, dateKey: "timestamp", days: 90)
+            .batchDeleteOlderThan(DeletedGlucoseStored.self, dateKey: "date", days: 365)
+        async let pumpEventDeletion: () = coreDataStack.batchDeleteOlderThan(PumpEventStored.self, dateKey: "timestamp", days: 365)
         async let bolusDeletion: () = coreDataStack.batchDeleteOlderThan(
             parentType: PumpEventStored.self,
             childType: BolusStored.self,
             dateKey: "timestamp",
-            days: 90,
+            days: 365,
             relationshipKey: "pumpEvent"
         )
         async let tempBasalDeletion: () = coreDataStack.batchDeleteOlderThan(
             parentType: PumpEventStored.self,
             childType: TempBasalStored.self,
             dateKey: "timestamp",
-            days: 90,
+            days: 365,
             relationshipKey: "pumpEvent"
         )
         async let determinationDeletion: () = coreDataStack
-            .batchDeleteOlderThan(OrefDetermination.self, dateKey: "deliverAt", days: 90)
+            .batchDeleteOlderThan(OrefDetermination.self, dateKey: "deliverAt", days: 365)
         async let batteryDeletion: () = coreDataStack.batchDeleteOlderThan(OpenAPS_Battery.self, dateKey: "date", days: 90)
-        async let carbEntryDeletion: () = coreDataStack.batchDeleteOlderThan(CarbEntryStored.self, dateKey: "date", days: 90)
+        async let carbEntryDeletion: () = coreDataStack.batchDeleteOlderThan(CarbEntryStored.self, dateKey: "date", days: 365)
         async let forecastDeletion: () = coreDataStack.batchDeleteOlderThan(Forecast.self, dateKey: "date", days: 2)
         async let forecastValueDeletion: () = coreDataStack.batchDeleteOlderThan(
             parentType: Forecast.self,
@@ -475,7 +476,7 @@ extension Notification.Name {
             relationshipKey: "forecast"
         )
         async let mlForecastDeletion: () = coreDataStack
-            .batchDeleteOlderThan(MLForecastStored.self, dateKey: "date", days: 90)
+            .batchDeleteOlderThan(MLForecastStored.self, dateKey: "date", days: 365)
         async let overrideDeletion: () = coreDataStack
             .batchDeleteOlderThan(OverrideStored.self, dateKey: "date", days: 3, isPresetKey: "isPreset")
         async let overrideRunDeletion: () = coreDataStack

@@ -104,6 +104,7 @@ import Testing
         let (gates, passed) = MLRetrainService.applyGates(evaluation: evaluation)
         #expect(passed == false)
         #expect(gates.contains { $0.name == "minimum_samples" && !$0.passed })
+        #expect(gates.contains { $0.name == "minimum_days" && !$0.passed })
     }
 
     /// Evaluates an ensemble the same way MLForecastModel.predict does,
