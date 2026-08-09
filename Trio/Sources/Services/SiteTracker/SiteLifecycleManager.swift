@@ -297,7 +297,7 @@ final class BaseSiteLifecycleManager: SiteLifecycleManager, Injectable {
 
         center.removeDeliveredNotifications(withIdentifiers: [Config.reminderNotificationIdentifier])
         center.removePendingNotificationRequests(withIdentifiers: [Config.reminderNotificationIdentifier])
-        center.add(UNNotificationRequest(
+        try? await center.add(UNNotificationRequest(
             identifier: Config.reminderNotificationIdentifier,
             content: content,
             trigger: nil
@@ -357,7 +357,7 @@ final class BaseSiteLifecycleManager: SiteLifecycleManager, Injectable {
 
             center.removeDeliveredNotifications(withIdentifiers: [Config.degradationNotificationIdentifier])
             center.removePendingNotificationRequests(withIdentifiers: [Config.degradationNotificationIdentifier])
-            center.add(UNNotificationRequest(
+            try await center.add(UNNotificationRequest(
                 identifier: Config.degradationNotificationIdentifier,
                 content: content,
                 trigger: nil
