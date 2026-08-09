@@ -32,9 +32,17 @@ extension ISFEditor {
             let settingsProvider = PickerSettingsProvider.shared
             // Max raised to 3600 mg/dL/U to support very-low-dose therapy regimens,
             // e.g. LADA/type 1.5 with substantial residual insulin production
-            // (paired with carb ratios up to 1000 g/U).
-            let sensitivityPickerSetting = PickerSetting(value: 100, step: 1, min: 9, max: 3600, type: .glucose)
-            return settingsProvider.generatePickerValues(from: sensitivityPickerSetting, units: units)
+            // (paired with carb ratios up to 1000 g/U). Tiered step sizes keep the
+            // picker wheel responsive across that range: fine steps where typical
+            // values live, coarser steps above, where the relative difference
+            // between neighboring steps stays small.
+            let segments: [PickerSetting] = [
+                PickerSetting(value: 100, step: 1, min: 9, max: 399, type: .glucose),
+                PickerSetting(value: 400, step: 5, min: 400, max: 795, type: .glucose),
+                PickerSetting(value: 800, step: 10, min: 800, max: 1190, type: .glucose),
+                PickerSetting(value: 1200, step: 25, min: 1200, max: 3600, type: .glucose)
+            ]
+            return segments.flatMap { settingsProvider.generatePickerValues(from: $0, units: units) }
         }
 
         var canAdd: Bool {
@@ -62,7 +70,10 @@ extension ISFEditor {
         func updateFromTherapyItems(_ therapyItems: [TherapySettingItem]) {
             items = therapyItems.map { therapyItem in
                 let timeIndex = timeValues.firstIndex(where: { abs($0 - therapyItem.time) < 1 }) ?? 0
-                let rateIndex = rateValues.firstIndex(of: therapyItem.value) ?? 0
+                // Snap to the closest picker value — a value off the tiered grid must
+                // not silently fall back to index 0 (the 9 mg/dL/U minimum)
+                let rateIndex = rateValues.firstIndex(of: therapyItem.value)
+                    ?? rateValues.findClosestIndex(to: therapyItem.value) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
         }

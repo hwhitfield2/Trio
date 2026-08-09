@@ -16,6 +16,8 @@ struct TherapySettingEditorView: View {
     }()
 
     @State private var selectedItemID: UUID?
+    @State private var typedValue: String = ""
+    @FocusState private var isValueFieldFocused: Bool
     @Namespace var bottomID
 
     var body: some View {
@@ -64,6 +66,8 @@ struct TherapySettingEditorView: View {
                         VStack(spacing: 0) {
                             Button {
                                 selectedItemID = selectedItemID == item.id ? nil : item.id
+                                typedValue = ""
+                                isValueFieldFocused = false
                                 sortTherapyItems()
                             } label: {
                                 HStack {
@@ -146,8 +150,8 @@ struct TherapySettingEditorView: View {
                 .id(bottomID)
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                // 55 for header row, item counts x 45 for every entry row + 230 for a visible picker row
-                .frame(height: 55 + CGFloat(items.count) * 45 + (items.contains(where: { $0.id == selectedItemID }) ? 230 : 0))
+                // 55 for header row, item counts x 45 for every entry row + 280 for a visible picker row incl. the direct-entry field
+                .frame(height: 55 + CGFloat(items.count) * 45 + (items.contains(where: { $0.id == selectedItemID }) ? 280 : 0))
                 .onAppear {
                     // ensure picker is closed when view appears
                     selectedItemID = nil
@@ -183,6 +187,26 @@ struct TherapySettingEditorView: View {
         }
 
         VStack(spacing: 8) {
+            // Direct entry as an alternative to scrolling the value wheel — typed
+            // values snap to the closest available picker value.
+            HStack(spacing: 8) {
+                Text("Type value").foregroundStyle(Color.secondary)
+                Spacer()
+                TextField("", text: $typedValue)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 100)
+                    .focused($isValueFieldFocused)
+                Text(unit.displayName).foregroundStyle(Color.secondary)
+                Button("Set") {
+                    applyTypedValue(to: item)
+                }
+                .buttonStyle(.bordered)
+                .disabled(parsedTypedValue == nil)
+            }
+            .padding(.horizontal)
+
             HStack {
                 Picker("Value", selection: Binding(
                     get: { Double(item.wrappedValue.value) },
@@ -222,6 +246,42 @@ struct TherapySettingEditorView: View {
             .pickerStyle(.wheel)
         }
         .padding(.vertical, 8)
+    }
+
+    /// The typed value parsed as a Decimal, tolerating a comma decimal separator.
+    private var parsedTypedValue: Decimal? {
+        let normalized = typedValue.replacingOccurrences(of: ",", with: ".")
+            .trimmingCharacters(in: .whitespaces)
+        guard !normalized.isEmpty, let value = Decimal(string: normalized) else { return nil }
+        return value
+    }
+
+    /// Applies the typed value to the entry, converting from display units where
+    /// needed and snapping to the closest available picker value so downstream
+    /// index lookups always resolve.
+    private func applyTypedValue(to item: Binding<TherapySettingItem>) {
+        guard let typed = parsedTypedValue, !valueOptions.isEmpty else { return }
+
+        // Values are stored in mg/dL; mmol-based units are display-only
+        let storedValue: Decimal
+        switch unit {
+        case .mmolL,
+             .mmolLPerUnit:
+            storedValue = typed.asMgdL
+        case .gramPerUnit,
+             .mgdL,
+             .mgdLPerUnit,
+             .unitPerHour:
+            storedValue = typed
+        }
+
+        let closest = valueOptions.min(by: {
+            abs($0 - storedValue) < abs($1 - storedValue)
+        }) ?? valueOptions[0]
+
+        item.wrappedValue.value = closest
+        typedValue = ""
+        isValueFieldFocused = false
     }
 
     /// Check if we can add more entries

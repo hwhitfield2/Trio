@@ -12,11 +12,15 @@ extension CarbRatioEditor {
 
         let timeValues = stride(from: 0.0, to: 1.days.timeInterval, by: 30.minutes.timeInterval).map { $0 }
 
-        // 1.0-50.0 g/U in 0.1 steps, then 51-1000 g/U in whole-gram steps —
-        // very-low-dose regimens (e.g. LADA/type 1.5 with residual insulin
-        // production) use ratios far above the old ceilings.
-        let rateValues = stride(from: 10.0, to: 501.0, by: 1.0).map { ($0.decimal ?? .zero) / 10 } +
-            stride(from: 51.0, to: 1001.0, by: 1.0).map { $0.decimal ?? .zero }
+        // Supports ratios up to 1000 g/U for very-low-dose regimens (e.g. LADA/
+        // type 1.5 with residual insulin production). Tiered step sizes keep the
+        // picker wheel responsive across that range: 0.1 g steps where typical
+        // ratios live, coarser steps above, where the relative difference between
+        // neighboring steps stays small.
+        let rateValues = stride(from: 10.0, to: 300.0, by: 1.0).map { ($0.decimal ?? .zero) / 10 } + // 1.0-29.9 by 0.1
+            stride(from: 300.0, to: 500.0, by: 5.0).map { ($0.decimal ?? .zero) / 10 } + // 30.0-49.5 by 0.5
+            stride(from: 50.0, to: 100.0, by: 1.0).map { $0.decimal ?? .zero } + // 50-99 by 1
+            stride(from: 100.0, to: 1001.0, by: 5.0).map { $0.decimal ?? .zero } // 100-1000 by 5
 
         var canAdd: Bool {
             guard let lastItem = items.last else { return true }
@@ -51,7 +55,10 @@ extension CarbRatioEditor {
         func updateFromTherapyItems(_ therapyItems: [TherapySettingItem]) {
             items = therapyItems.map { therapyItem in
                 let timeIndex = timeValues.firstIndex(where: { abs($0 - therapyItem.time) < 1 }) ?? 0
-                let rateIndex = rateValues.firstIndex(of: therapyItem.value) ?? 0
+                // Snap to the closest picker value — a value off the tiered grid must
+                // not silently fall back to index 0 (the 1 g/U minimum)
+                let rateIndex = rateValues.firstIndex(of: therapyItem.value)
+                    ?? rateValues.findClosestIndex(to: therapyItem.value) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
         }
@@ -59,7 +66,10 @@ extension CarbRatioEditor {
         override func subscribe() {
             items = provider.profile.schedule.map { value in
                 let timeIndex = timeValues.firstIndex(of: Double(value.offset * 60)) ?? 0
-                let rateIndex = rateValues.firstIndex(of: value.ratio) ?? 0
+                // Snap stored values that are off the tiered grid to the closest
+                // picker value instead of silently defaulting to the 1 g/U minimum
+                let rateIndex = rateValues.firstIndex(of: value.ratio)
+                    ?? rateValues.findClosestIndex(to: value.ratio) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
 
