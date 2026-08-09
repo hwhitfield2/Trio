@@ -485,12 +485,44 @@ extension Home {
 
         // MARK: - Metric tiles (IOB / COB / Basal / Eventual)
 
+        /// Formats a forecast glucose value (mg/dL) for display, clamping into the range the
+        /// non-carb forecast curves use (39–401). Out-of-range values keep an explicit
+        /// ≤/≥ marker in both directions — a predicted severe low must not silently
+        /// render as a near-normal 39.
+        private func forecastGlucoseDisplayString(for value: Int) -> String {
+            let clamped = Decimal(min(max(value, 39), 401))
+            let text = state.units == .mgdL ? clamped.description : clamped.formattedAsMmolL
+            if value < 39 { return "≤" + text }
+            if value > 401 { return "≥" + text }
+            return text
+        }
+
         private var eventualBGString: String {
             guard let eventualBG = state.enactedAndNonEnactedDeterminations.first?.eventualBG else {
                 return "--"
             }
-            let eventualGlucose = eventualBG as Decimal
-            return state.units == .mgdL ? eventualGlucose.description : eventualGlucose.formattedAsMmolL
+            return forecastGlucoseDisplayString(for: Int(truncating: eventualBG as NSNumber))
+        }
+
+        /// Detail text for the Eventual tile: what the number means, the current spread of
+        /// the forecast curves, and where to go when it is consistently off.
+        private var eventualDetailBody: String {
+            var body = String(
+                localized: "\(eventualBGString) \(state.units.rawValue) predicted once active insulin and carbs are absorbed."
+            )
+
+            if let minEnd = state.minForecast.last, let maxEnd = state.maxForecast.last, maxEnd > 0 {
+                let minString = forecastGlucoseDisplayString(for: minEnd)
+                let maxString = forecastGlucoseDisplayString(for: maxEnd)
+                body += " " + String(
+                    localized: "Trio's forecast scenarios currently end between \(minString) and \(maxString) \(state.units.rawValue); eventual glucose is deliberately the highest carb-based outcome, so it errs on the side of caution."
+                )
+            }
+
+            body += " " + String(
+                localized: "If this number is consistently far off, your insulin sensitivity or carb ratio may need tuning. See Therapy Settings → ISF & CR Calculator."
+            )
+            return body
         }
 
         /// Compact current basal rate for the metric tile; detail popover carries the
@@ -594,9 +626,7 @@ extension Home {
                     color: .tabBar,
                     detail: HomeTileDetail(
                         title: String(localized: "Eventual Glucose"),
-                        body: String(
-                            localized: "\(eventualBGString) \(state.units.rawValue) predicted once active insulin and carbs are absorbed."
-                        ),
+                        body: eventualDetailBody,
                         actions: [
                             HomeTileDetail.Action(name: String(localized: "Loop Status"), icon: "circle") {
                                 state.isLoopStatusPresented = true

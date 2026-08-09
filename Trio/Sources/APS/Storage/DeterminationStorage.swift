@@ -168,7 +168,7 @@ final class BaseDeterminationStorage: DeterminationStorage, Injectable {
                         reason: orefDetermination.reason ?? "",
                         units: orefDetermination.smbToDeliver as Decimal?,
                         insulinReq: self.decimal(from: orefDetermination.insulinReq),
-                        eventualBG: orefDetermination.eventualBG as? Int,
+                        eventualBG: orefDetermination.eventualBG.map { Int(truncating: $0) },
                         sensitivityRatio: self.decimal(from: orefDetermination.sensitivityRatio),
                         rate: self.decimal(from: orefDetermination.rate),
                         duration: self.decimal(from: orefDetermination.duration),

@@ -48,6 +48,10 @@
 		AB0100000000000000000B02 /* SleepSafetySettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A02 /* SleepSafetySettingsProvider.swift */; };
 		AB0100000000000000000B03 /* SleepSafetySettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A03 /* SleepSafetySettingsStateModel.swift */; };
 		AB0100000000000000000B04 /* SleepSafetySettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A04 /* SleepSafetySettingsRootView.swift */; };
+		AB0600000000000000000B01 /* TherapyRatioCalculatorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0600000000000000000A01 /* TherapyRatioCalculatorDataFlow.swift */; };
+		AB0600000000000000000B02 /* TherapyRatioCalculatorProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0600000000000000000A02 /* TherapyRatioCalculatorProvider.swift */; };
+		AB0600000000000000000B03 /* TherapyRatioCalculatorStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0600000000000000000A03 /* TherapyRatioCalculatorStateModel.swift */; };
+		AB0600000000000000000B04 /* TherapyRatioCalculatorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0600000000000000000A04 /* TherapyRatioCalculatorRootView.swift */; };
 		AB0100000000000000000B05 /* SleepSafetyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A05 /* SleepSafetyManager.swift */; };
 		AB0100000000000000000B06 /* SleepSafetyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A06 /* SleepSafetyPolicy.swift */; };
 		AB0100000000000000000B07 /* SleepSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0100000000000000000A07 /* SleepSafetyTests.swift */; };
@@ -1043,6 +1047,10 @@
 		AB0100000000000000000A02 /* SleepSafetySettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetySettingsProvider.swift; sourceTree = "<group>"; };
 		AB0100000000000000000A03 /* SleepSafetySettingsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetySettingsStateModel.swift; sourceTree = "<group>"; };
 		AB0100000000000000000A04 /* SleepSafetySettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetySettingsRootView.swift; sourceTree = "<group>"; };
+		AB0600000000000000000A01 /* TherapyRatioCalculatorDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TherapyRatioCalculatorDataFlow.swift; sourceTree = "<group>"; };
+		AB0600000000000000000A02 /* TherapyRatioCalculatorProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TherapyRatioCalculatorProvider.swift; sourceTree = "<group>"; };
+		AB0600000000000000000A03 /* TherapyRatioCalculatorStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TherapyRatioCalculatorStateModel.swift; sourceTree = "<group>"; };
+		AB0600000000000000000A04 /* TherapyRatioCalculatorRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TherapyRatioCalculatorRootView.swift; sourceTree = "<group>"; };
 		AB0100000000000000000A05 /* SleepSafetyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetyManager.swift; sourceTree = "<group>"; };
 		AB0100000000000000000A06 /* SleepSafetyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetyPolicy.swift; sourceTree = "<group>"; };
 		AB0100000000000000000A07 /* SleepSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSafetyTests.swift; sourceTree = "<group>"; };
@@ -2331,6 +2339,7 @@
 				19F95FF129F10F9C00314DDC /* Stat */,
 				DD17452C2C55AE3500211FAC /* TargetBehavoir */,
 				6517011F19F244F64E1FF14B /* TargetsEditor */,
+				AB0600000000000000000C01 /* TherapyRatioCalculator */,
 				C2C98283C436DB934D7E7994 /* Treatments */,
 				190EBCC229FF134900BA767D /* UserInterfaceSettings */,
 				CE94597C29E9E1CD0047C9C6 /* WatchConfig */,
@@ -2463,6 +2472,25 @@
 			isa = PBXGroup;
 			children = (
 				AB0100000000000000000A04 /* SleepSafetySettingsRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
+		AB0600000000000000000C01 /* TherapyRatioCalculator */ = {
+			isa = PBXGroup;
+			children = (
+				AB0600000000000000000C02 /* View */,
+				AB0600000000000000000A01 /* TherapyRatioCalculatorDataFlow.swift */,
+				AB0600000000000000000A02 /* TherapyRatioCalculatorProvider.swift */,
+				AB0600000000000000000A03 /* TherapyRatioCalculatorStateModel.swift */,
+			);
+			path = TherapyRatioCalculator;
+			sourceTree = "<group>";
+		};
+		AB0600000000000000000C02 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				AB0600000000000000000A04 /* TherapyRatioCalculatorRootView.swift */,
 			);
 			path = View;
 			sourceTree = "<group>";
@@ -5539,6 +5567,10 @@
 				AB0100000000000000000B02 /* SleepSafetySettingsProvider.swift in Sources */,
 				AB0100000000000000000B03 /* SleepSafetySettingsStateModel.swift in Sources */,
 				AB0100000000000000000B04 /* SleepSafetySettingsRootView.swift in Sources */,
+				AB0600000000000000000B01 /* TherapyRatioCalculatorDataFlow.swift in Sources */,
+				AB0600000000000000000B02 /* TherapyRatioCalculatorProvider.swift in Sources */,
+				AB0600000000000000000B03 /* TherapyRatioCalculatorStateModel.swift in Sources */,
+				AB0600000000000000000B04 /* TherapyRatioCalculatorRootView.swift in Sources */,
 				AB0100000000000000000B05 /* SleepSafetyManager.swift in Sources */,
 				AB0100000000000000000B06 /* SleepSafetyPolicy.swift in Sources */,
 				AB0200000000000000000B06 /* InsightCardView.swift in Sources */,

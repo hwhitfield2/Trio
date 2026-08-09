@@ -312,6 +312,7 @@ final class LiveActivityData: ObservableObject {
                                 cob: 0,
                                 iob: 0,
                                 tdd: 0,
+                                eventualBG: nil,
                                 isOverrideActive: false,
                                 overrideName: "",
                                 overrideDate: Date.now,

@@ -60,6 +60,7 @@ enum Screen: Identifiable, Hashable {
     case foodLibrary
     case siteTracker
     case sleepSafetySettings
+    case therapyRatioCalculator
 
     var id: Int { String(reflecting: self).hashValue }
 }
@@ -195,6 +196,8 @@ extension Screen {
             SiteTracker.RootView(resolver: resolver)
         case .sleepSafetySettings:
             SleepSafetySettings.RootView(resolver: resolver)
+        case .therapyRatioCalculator:
+            TherapyRatioCalculator.RootView(resolver: resolver)
         }
     }
 

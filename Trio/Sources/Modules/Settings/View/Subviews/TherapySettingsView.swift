@@ -45,6 +45,19 @@ struct TherapySettingsView: BaseView {
                 }
             )
             .listRowBackground(Color.chart)
+
+            Section(
+                header: Text("Guidance").glassCaption(),
+                content: {
+                    SettingsIconRow(
+                        symbol: "function",
+                        tint: .purple,
+                        label: Text("ISF & CR Calculator")
+                    )
+                    .navigationLink(to: .therapyRatioCalculator, from: self)
+                }
+            )
+            .listRowBackground(Color.chart)
         }
         .scrollContentBackground(.hidden)
         .background(appState.trioBackgroundColor(for: colorScheme))

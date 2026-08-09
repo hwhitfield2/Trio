@@ -9,6 +9,7 @@ struct LiveActivityAttributes: ActivityAttributes {
         case cob
         case updatedLabel
         case totalDailyDose
+        case eventualGlucose
         case empty
 
         static let defaultItems: [Self] = [.currentGlucoseLarge, .iob, .cob, .updatedLabel]
@@ -38,6 +39,8 @@ struct LiveActivityAttributes: ActivityAttributes {
         let cob: Decimal
         let iob: Decimal
         let tdd: Decimal
+        /// Predicted eventual glucose in mg/dL; nil when the last determination carried no forecast
+        let eventualBG: Decimal?
         let isOverrideActive: Bool
         let overrideName: String
         let overrideDate: Date

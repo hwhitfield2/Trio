@@ -119,7 +119,13 @@ enum SettingItems {
         SettingItem(title: "ISF", view: .isfEditor, path: ["Therapy Settings"]),
         SettingItem(title: "Carb Ratios", view: .crEditor, path: ["Therapy Settings"]),
         SettingItem(title: "CR", view: .crEditor, path: ["Therapy Settings"]),
-        SettingItem(title: "Glucose Targets", view: .targetsEditor, path: ["Therapy Settings"])
+        SettingItem(title: "Glucose Targets", view: .targetsEditor, path: ["Therapy Settings"]),
+        SettingItem(
+            title: "ISF & CR Calculator",
+            view: .therapyRatioCalculator,
+            searchContents: ["ISF Calculator", "Carb Ratio Calculator", "Insulin Sensitivity Calculator", "1800 Rule", "500 Rule", "TDD"],
+            path: ["Therapy Settings", "ISF & CR Calculator"]
+        )
     ]
 
     static let algorithmItems = [
