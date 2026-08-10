@@ -874,6 +874,56 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     // duration (hours) = duration (5m) * 5 / 60 * 2 (to account for linear decay)
     console.error("Carb Impact:" + ci + "mg/dL per 5m; CI Duration:" + round(cid*5/60*2,1) + "hours; remaining CI (" + remainingCATime/2 + "h peak):" + round(remainingCIpeak,1) + "mg/dL per 5m");
 
+    // --- UAM+ : unannounced meal detection ---------------------------------
+    // Detect glucose impact that the logged carbs cannot plausibly explain
+    // (e.g. an unlogged drink alongside a logged meal). Signals:
+    //   1. sustained positive deviations over the last ~30-45m
+    //   2. deviations at or near their recent max (absorption not tapering)
+    //   3. remaining logged COB too small to sustain the observed impact,
+    //      or most of the logged carbs already absorbed
+    // When all three hold (and BG is above target), UAM predictions hold the
+    // observed impact flat for 30m before decaying, and the COB-based cap on
+    // minPredBG is lifted, since the COB line is known to be incomplete.
+    var uamBoostActive = false;
+    var uamDevsSustained = false;
+    var uamNegDevsSustained = false;
+    var uamAvgDev = 0;
+    var uamExcessCarbs = 0;
+    var uamHoldIntervals = 0;
+    var uamReason = "";
+    if (meal_data.allDeviations && meal_data.allDeviations.length >= 4) {
+        var uamDevs = meal_data.allDeviations.slice(0, 9); // most recent first, up to ~45m
+        var uamPosCount = 0;
+        var uamNegCount = 0;
+        var uamDevSum = 0;
+        for (var di = 0; di < uamDevs.length; di++) {
+            if (uamDevs[di] > 0) { uamPosCount++; }
+            if (uamDevs[di] < 0) { uamNegCount++; }
+            uamDevSum += uamDevs[di];
+        }
+        uamAvgDev = round(uamDevSum / uamDevs.length, 1);
+        uamDevsSustained = uamPosCount >= 0.75 * uamDevs.length;
+        uamNegDevsSustained = uamNegCount >= 0.75 * uamDevs.length;
+
+        var uamMinAvgDev = Math.max(3, (profile.min_5m_carbimpact || 8) / 2);
+        if (enableUAM && uamDevsSustained && uamAvgDev >= uamMinAvgDev && bg > target_bg) {
+            var uamNotTapering = meal_data.maxDeviation > 0 && meal_data.currentDeviation >= 0.85 * meal_data.maxDeviation;
+            // the largest 5m impact the remaining logged carbs could sustain,
+            // assuming (generously) they all absorb within the next 30m
+            var maxCOBci = round(meal_data.mealCOB * csf / 6, 1);
+            var fractionCarbsAbsorbed = meal_data.carbs > 0 ? (meal_data.carbs - meal_data.mealCOB) / meal_data.carbs : 1;
+            var cobCannotExplain = meal_data.mealCOB === 0 || ci > maxCOBci || fractionCarbsAbsorbed >= 0.7;
+            if (uamNotTapering && cobCannotExplain) {
+                uamBoostActive = true;
+                uamHoldIntervals = 6; // hold UAM carb impact flat for 30m before decaying
+                var unexplainedCI = Math.max(0, ci - maxCOBci);
+                uamExcessCarbs = Math.max(0, round(unexplainedCI * 9 / csf));
+                uamReason = ", UAM+: unannounced carbs detected (~" + uamExcessCarbs + "g unlogged)";
+                console.error("UAM+ active: sustained avg deviation " + uamAvgDev + " mg/dL/5m over " + (uamDevs.length * 5) + "m; ci " + ci + " vs COB-explainable " + maxCOBci + "; " + round(fractionCarbsAbsorbed * 100) + "% of logged carbs absorbed");
+            }
+        }
+    }
+
     var minIOBPredBG = 999;
     var minCOBPredBG = 999;
     var minUAMPredBG = 999;
@@ -938,10 +988,14 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
             COBpredBG = COBpredBGs[COBpredBGs.length-1] + predBGI + Math.min(0,predDev) + predCI + remainingCI;
             // for UAMpredBGs, predicted carb impact drops at slopeFromDeviations
             // calculate predicted CI from UAM based on slopeFromDeviations
-            var predUCIslope = Math.max(0, uci + ( UAMpredBGs.length*slopeFromDeviations ) );
+            // when UAM+ has detected unannounced carbs, hold the observed impact
+            // flat for uamHoldIntervals before decaying: unlogged carbs are
+            // still absorbing, so an immediate decay understates the impact
+            var uamElapsed = Math.max(0, UAMpredBGs.length - uamHoldIntervals);
+            var predUCIslope = Math.max(0, uci + ( uamElapsed*slopeFromDeviations ) );
             // if slopeFromDeviations is too flat, predicted deviation impact drops linearly from
             // current deviation down to zero over 3h (data points every 5m)
-            var predUCImax = Math.max(0, uci * ( 1 - UAMpredBGs.length/Math.max(3*60/5,1) ) );
+            var predUCImax = Math.max(0, uci * ( 1 - uamElapsed/Math.max(3*60/5,1) ) );
             //console.error(predUCIslope, predUCImax);
             // predicted CI from UAM is the lesser of CI based on deviationSlope or DIA
             var predUCI = Math.min(predUCIslope, predUCImax);
@@ -1149,10 +1203,43 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     }
     console.error(" avgPredBG:" + avgPredBG + " COB/Carbs:" + meal_data.mealCOB + "/" + meal_data.carbs);
     // But if the COB line falls off a cliff, don't trust UAM too much:
-    // use maxCOBPredBG if it's been set and lower than minPredBG
+    // use maxCOBPredBG if it's been set and lower than minPredBG.
+    // When UAM+ has detected unannounced carbs, the COB line is known to be
+    // incomplete, so don't let it cap the UAM-driven minPredBG.
     if ( maxCOBPredBG > bg ) {
-        minPredBG = Math.min(minPredBG, maxCOBPredBG);
+        if ( uamBoostActive ) {
+            console.error("UAM+: not capping minPredBG at maxCOBPredBG " + round(maxCOBPredBG) + " (logged carbs incomplete)");
+        } else {
+            minPredBG = Math.min(minPredBG, maxCOBPredBG);
+        }
     }
+
+    // --- UAM+ : trend-aware eventual BG ------------------------------------
+    // oref assumes observed deviations decay to zero within the hour, which
+    // understates the destination whenever the recent run rate is sustained
+    // (and overstates it when BG is steadily dropping). Project an alternative
+    // destination from the data instead: the insulin-only landing point
+    // (naive_eventualBG) plus the observed average run rate carried forward
+    // in a triangular decay over 60m — 90m when unannounced carbs were
+    // detected — and prefer it when it is worse (further from target in the
+    // direction of the trend) than the model's eventualBG.
+    var trendEventualBG;
+    if (uamDevsSustained && uamAvgDev >= 2) {
+        trendEventualBG = round(naive_eventualBG + uamAvgDev * (uamBoostActive ? 9 : 6));
+        if (trendEventualBG > eventualBG) {
+            uamReason += ", trend eventualBG " + convert_bg(trendEventualBG, profile) + " (run rate +" + uamAvgDev + " mg/dL/5m)";
+            console.error("Trend-aware eventualBG " + trendEventualBG + " > model eventualBG " + eventualBG + "; using trend");
+            eventualBG = trendEventualBG;
+        }
+    } else if (uamNegDevsSustained && uamAvgDev <= -2) {
+        trendEventualBG = round(naive_eventualBG + uamAvgDev * 6);
+        if (trendEventualBG < eventualBG) {
+            uamReason += ", trend eventualBG " + convert_bg(trendEventualBG, profile) + " (run rate " + uamAvgDev + " mg/dL/5m)";
+            console.error("Trend-aware eventualBG " + trendEventualBG + " < model eventualBG " + eventualBG + "; using trend");
+            eventualBG = trendEventualBG;
+        }
+    }
+    rT.eventualBG = eventualBG;
 
     rT.COB=meal_data.mealCOB;
     rT.IOB=iob_data.iob;
@@ -1170,6 +1257,9 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
         rT.reason += ", UAMpredBG " + convert_bg(lastUAMpredBG, profile);
     }
     rT.reason += tddReason;
+    if (uamReason) {
+        rT.reason += uamReason;
+    }
 
     rT.reason += "; "; // reason.conclusion started
 // Use minGuardBG to prevent overdosing in hypo-risk situations
