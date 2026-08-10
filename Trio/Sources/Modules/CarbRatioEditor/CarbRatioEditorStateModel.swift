@@ -12,7 +12,7 @@ extension CarbRatioEditor {
 
         let timeValues = stride(from: 0.0, to: 1.days.timeInterval, by: 30.minutes.timeInterval).map { $0 }
 
-        // Supports ratios up to 1000 g/U for very-low-dose regimens (e.g. LADA/
+        // Supports ratios up to 2000 g/U for very-low-dose regimens (e.g. LADA/
         // type 1.5 with residual insulin production). Tiered step sizes keep the
         // picker wheel responsive across that range: 0.1 g steps where typical
         // ratios live, coarser steps above, where the relative difference between
@@ -26,9 +26,11 @@ extension CarbRatioEditor {
             .map { $0.decimal ?? .zero } // 50-99 by 1
         private static let veryCoarseRatios: [Decimal] = stride(from: 100.0, to: 1001.0, by: 5.0)
             .map { $0.decimal ?? .zero } // 100-1000 by 5
+        private static let ultraCoarseRatios: [Decimal] = stride(from: 1010.0, to: 2001.0, by: 10.0)
+            .map { $0.decimal ?? .zero } // 1010-2000 by 10
 
         let rateValues: [Decimal] = StateModel.fineRatios + StateModel.mediumRatios +
-            StateModel.coarseRatios + StateModel.veryCoarseRatios
+            StateModel.coarseRatios + StateModel.veryCoarseRatios + StateModel.ultraCoarseRatios
 
         var canAdd: Bool {
             guard let lastItem = items.last else { return true }

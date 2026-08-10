@@ -30,9 +30,9 @@ extension ISFEditor {
 
         var rateValues: [Decimal] {
             let settingsProvider = PickerSettingsProvider.shared
-            // Max raised to 3600 mg/dL/U to support very-low-dose therapy regimens,
+            // Max raised to 7200 mg/dL/U to support very-low-dose therapy regimens,
             // e.g. LADA/type 1.5 with substantial residual insulin production
-            // (paired with carb ratios up to 1000 g/U). Tiered step sizes keep the
+            // (paired with carb ratios up to 2000 g/U). Tiered step sizes keep the
             // picker wheel responsive across that range: fine steps where typical
             // values live, coarser steps above, where the relative difference
             // between neighboring steps stays small.
@@ -40,7 +40,8 @@ extension ISFEditor {
                 PickerSetting(value: 100, step: 1, min: 9, max: 399, type: .glucose),
                 PickerSetting(value: 400, step: 5, min: 400, max: 795, type: .glucose),
                 PickerSetting(value: 800, step: 10, min: 800, max: 1190, type: .glucose),
-                PickerSetting(value: 1200, step: 25, min: 1200, max: 3600, type: .glucose)
+                PickerSetting(value: 1200, step: 25, min: 1200, max: 3575, type: .glucose),
+                PickerSetting(value: 3600, step: 50, min: 3600, max: 7200, type: .glucose)
             ]
             return segments.flatMap { settingsProvider.generatePickerValues(from: $0, units: units) }
         }
