@@ -67,15 +67,26 @@ extension TherapyRatioCalculator {
                 tddSpanHours >= Double(Self.minimumSampleDays - 1) * 24.0
         }
 
-        /// The TDD driving the recommendations, per the selected source.
+        /// The TDD driving the recommendations, per the selected source. Insufficient
+        /// history still yields a preliminary estimate — it only blocks applying.
         var effectiveTDD: Decimal? {
             switch tddSource {
             case .pumpHistory:
-                guard hasSufficientHistory else { return nil }
                 return averageTDD
             case .bodyWeight:
                 guard bodyWeightKg > 0 else { return nil }
                 return bodyWeightKg * Self.unitsPerKg
+            }
+        }
+
+        /// Whether the current recommendations may be written to the profile.
+        /// Preliminary pump-history estimates (fewer than 3 full days) are view-only.
+        var canApplyRecommendations: Bool {
+            switch tddSource {
+            case .pumpHistory:
+                return hasSufficientHistory
+            case .bodyWeight:
+                return bodyWeightKg > 0
             }
         }
 
@@ -172,7 +183,7 @@ extension TherapyRatioCalculator {
 
         /// Replaces the entire ISF schedule with a single full-day entry at the recommended value.
         func applyRecommendedISF() {
-            guard let isf = recommendedISF else { return }
+            guard canApplyRecommendations, let isf = recommendedISF else { return }
 
             let profile = InsulinSensitivities(
                 units: .mgdL,
@@ -192,7 +203,7 @@ extension TherapyRatioCalculator {
 
         /// Replaces the entire carb ratio schedule with a single full-day entry at the recommended value.
         func applyRecommendedCarbRatio() {
-            guard let ratio = recommendedCarbRatio else { return }
+            guard canApplyRecommendations, let ratio = recommendedCarbRatio else { return }
 
             let profile = CarbRatios(
                 units: .grams,

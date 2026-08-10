@@ -132,7 +132,7 @@ extension TherapyRatioCalculator {
                             ProgressView()
                             Text("Loading insulin history…").foregroundStyle(.secondary)
                         }
-                    } else if state.hasSufficientHistory, let tdd = state.averageTDD {
+                    } else if let tdd = state.averageTDD {
                         HStack {
                             Text("7-Day Average TDD")
                             Spacer()
@@ -141,11 +141,20 @@ extension TherapyRatioCalculator {
                         Text("Based on \(state.tddSampleDays) days of recorded insulin delivery.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                        if !state.hasSufficientHistory {
+                            HStack(alignment: .top, spacing: 6) {
+                                Image(systemName: "hourglass").foregroundStyle(.orange)
+                                Text(
+                                    "Fewer than \(StateModel.minimumSampleDays) full days of insulin history — the estimates below are preliminary and cannot be applied yet. Check back once more data has accumulated, or use the body weight estimate."
+                                )
+                                .font(.footnote)
+                            }
+                        }
                     } else {
                         HStack(alignment: .top, spacing: 6) {
                             Image(systemName: "hourglass").foregroundStyle(.orange)
                             Text(
-                                "Not enough insulin history yet — Trio needs at least \(StateModel.minimumSampleDays) days of pump data. Until then, use the body weight estimate."
+                                "No insulin history recorded yet. Until Trio has pump data, use the body weight estimate."
                             )
                             .font(.footnote)
                         }
@@ -189,7 +198,11 @@ extension TherapyRatioCalculator {
 
         private var recommendationSection: some View {
             Section(
-                header: Text("Recommendations").glassCaption()
+                header: Text(
+                    state.canApplyRecommendations
+                        ? String(localized: "Recommendations")
+                        : String(localized: "Preliminary Recommendations")
+                ).glassCaption()
             ) {
                 recommendationRow(
                     title: String(localized: "Insulin Sensitivity (ISF)"),
@@ -230,11 +243,16 @@ extension TherapyRatioCalculator {
                     }
                 }
                 Button(action: applyAction) {
-                    Text("Apply as All-Day Value")
-                        .frame(maxWidth: .infinity)
+                    Text(
+                        state.canApplyRecommendations
+                            ? String(localized: "Apply as All-Day Value")
+                            : String(localized: "Preview Only — Needs More Data")
+                    )
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .tint(.accentColor)
+                .disabled(!state.canApplyRecommendations)
             }
             .padding(.vertical, 4)
         }
