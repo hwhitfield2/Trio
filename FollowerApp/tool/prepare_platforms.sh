@@ -110,22 +110,26 @@ if os.path.exists(kts):
         content += '''
 // Force plugin subprojects to a modern compileSdk (some plugins still pin an
 // old one that current AndroidX libraries no longer accept).
-subprojects {
-    afterEvaluate {
-        extensions.findByName("android")?.let { androidExt ->
-            val methods = androidExt.javaClass.methods
-            val setCompileSdk = methods.firstOrNull { it.name == "setCompileSdk" }
-            val compileSdkVersion = methods.firstOrNull {
-                it.name == "compileSdkVersion" && it.parameterTypes.size == 1 &&
-                    it.parameterTypes[0] == Int::class.javaPrimitiveType
-            }
-            if (setCompileSdk != null) {
-                setCompileSdk.invoke(androidExt, 36)
-            } else {
-                compileSdkVersion?.invoke(androidExt, 36)
-            }
+fun forceCompileSdk(project: org.gradle.api.Project) {
+    project.extensions.findByName("android")?.let { androidExt ->
+        val methods = androidExt.javaClass.methods
+        val setCompileSdk = methods.firstOrNull { it.name == "setCompileSdk" }
+        val compileSdkVersion = methods.firstOrNull {
+            it.name == "compileSdkVersion" && it.parameterTypes.size == 1 &&
+                it.parameterTypes[0] == Int::class.javaPrimitiveType
+        }
+        if (setCompileSdk != null) {
+            setCompileSdk.invoke(androidExt, 36)
+        } else {
+            compileSdkVersion?.invoke(androidExt, 36)
         }
     }
+}
+subprojects {
+    // The Flutter template forces early evaluation of :app, so afterEvaluate
+    // would throw "project is already evaluated" there — apply immediately in
+    // that case.
+    if (state.executed) forceCompileSdk(this) else afterEvaluate { forceCompileSdk(this) }
 }
 '''
         with open(kts, 'w') as f:
@@ -138,13 +142,16 @@ elif os.path.exists(groovy):
         content += '''
 // Force plugin subprojects to a modern compileSdk (some plugins still pin an
 // old one that current AndroidX libraries no longer accept).
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty("android")) {
-            project.android {
-                compileSdkVersion 36
-            }
-        }
+def forceCompileSdk = { project ->
+    if (project.hasProperty("android")) {
+        project.android.compileSdkVersion 36
+    }
+}
+subprojects { project ->
+    if (project.state.executed) {
+        forceCompileSdk(project)
+    } else {
+        project.afterEvaluate { forceCompileSdk(it) }
     }
 }
 '''
