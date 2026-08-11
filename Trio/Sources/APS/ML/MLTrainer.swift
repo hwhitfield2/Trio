@@ -159,7 +159,7 @@ enum MLTrainer {
                     // SSE reduction is equivalent to maximizing sum^2/n over children
                     let gain = leftSum * leftSum / leftCount + rightSum * rightSum / rightCount
                         - total * total / count
-                    if gain > (best?.gain ?? 1e-12) {
+                    if gain > (best?.gain ?? 1E-12) {
                         let cut = (features[index][f] + features[sorted[position + 1]][f]) / 2
                         best = Split(feature: f, threshold: cut, gain: gain)
                     }

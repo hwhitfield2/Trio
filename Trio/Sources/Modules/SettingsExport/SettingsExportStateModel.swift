@@ -1577,10 +1577,8 @@ extension SettingsExport.StateModel {
             return
         }
 
-        // The profile is actual insulin units; the pump schedule is volume.
-        let concentration = settingsManager.settings.insulinConcentrationFactor
         let syncValues = profile.map {
-            RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate) / concentration)
+            RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate))
         }
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in

@@ -248,8 +248,7 @@ final class TandemPumpSession {
     }
 
     /// Refresh the pump time reference used for signing.
-    @discardableResult
-    func refreshTimeSinceReset() -> Result<TandemTimeSinceResetResponse, TandemSessionError> {
+    @discardableResult func refreshTimeSinceReset() -> Result<TandemTimeSinceResetResponse, TandemSessionError> {
         let result = send(TandemTimeSinceResetRequest())
         if case let .success(response) = result {
             lock.perform {

@@ -123,7 +123,14 @@ enum SettingItems {
         SettingItem(
             title: "ISF & CR Calculator",
             view: .therapyRatioCalculator,
-            searchContents: ["ISF Calculator", "Carb Ratio Calculator", "Insulin Sensitivity Calculator", "1800 Rule", "500 Rule", "TDD"],
+            searchContents: [
+                "ISF Calculator",
+                "Carb Ratio Calculator",
+                "Insulin Sensitivity Calculator",
+                "1800 Rule",
+                "500 Rule",
+                "TDD"
+            ],
             path: ["Therapy Settings", "ISF & CR Calculator"]
         )
     ]

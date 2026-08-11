@@ -36,7 +36,7 @@ struct InsightsConfig: Sendable {
     var minOccurrences: Int = 3
     var analysisWindowDays: Int = 30
     /// Formats an mg/dL value (or delta) for display in card text.
-    var glucoseFormatter: @Sendable (Int) -> String = { "\($0) mg/dL" }
+    var glucoseFormatter: @Sendable(Int) -> String = { "\($0) mg/dL" }
 }
 
 // MARK: - Output

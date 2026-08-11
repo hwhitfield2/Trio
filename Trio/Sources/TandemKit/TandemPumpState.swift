@@ -73,6 +73,7 @@ final class TandemPumpState: RawRepresentable {
     var audioFeedbackForAutomaticDoses: Bool
 
     // MARK: Runtime-only microbolus-basal accumulator (NOT persisted)
+
     //
     // These are deliberately reset to zero on every manager construction
     // (including app restart). Persisting them would risk dumping stale accrued

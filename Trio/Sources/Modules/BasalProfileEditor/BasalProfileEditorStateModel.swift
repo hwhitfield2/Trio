@@ -48,11 +48,16 @@ extension BasalProfileEditor {
         }
 
         override func subscribe() {
-            rateValues = provider.supportedBasalRates ?? stride(from: 5.0, to: 1001.0, by: 5.0)
+            // The editor displays actual insulin units; storage and the pump
+            // stay in pumped volume units (see InsulinConcentration.swift).
+            let settings = settingsManager.settings
+            let supportedVolumeRates = provider.supportedBasalRates ?? stride(from: 5.0, to: 1001.0, by: 5.0)
                 .map { ($0.decimal ?? .zero) / 100 }
+            rateValues = supportedVolumeRates.map { settings.realInsulinAmount(fromVolume: $0) }
             items = provider.profile.map { value in
                 let timeIndex = timeValues.firstIndex(of: Double(value.minutes * 60)) ?? 0
-                let rateIndex = rateValues.firstIndex(of: value.rate) ?? 0
+                let realRate = settings.realInsulinAmount(fromVolume: value.rate)
+                let rateIndex = rateValues.firstIndex(of: realRate) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
 
@@ -96,13 +101,15 @@ extension BasalProfileEditor {
             guard hasChanges else { return }
 
             syncInProgress = true
+            let settings = settingsManager.settings
             let profile = items.map { item -> BasalProfileEntry in
                 let formatter = DateFormatter()
                 formatter.timeZone = TimeZone(secondsFromGMT: 0)
                 formatter.dateFormat = "HH:mm:ss"
                 let date = Date(timeIntervalSince1970: self.timeValues[item.timeIndex])
                 let minutes = Int(date.timeIntervalSince1970 / 60)
-                let rate = self.rateValues[item.rateIndex]
+                // Displayed rates are actual insulin; store/push pump volume units.
+                let rate = settings.volumeInsulinAmount(fromReal: self.rateValues[item.rateIndex])
                 return BasalProfileEntry(start: formatter.string(from: date), minutes: minutes, rate: rate)
             }
             provider.saveProfile(profile)

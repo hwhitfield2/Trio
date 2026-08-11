@@ -31,21 +31,89 @@ extension UnitsLimitsSettings {
                 )
 
                 Text(
-                    "With this setting enabled, everything you enter and see in Trio — basal rates, ISF, carb ratio, boluses, IOB, TDD, Maximum Bolus and Maximum Basal Rate — stays in actual insulin units. Trio automatically commands the pump with the larger fluid volume and scales the pump's records back to actual insulin."
+                    "With this setting enabled, you still enter your therapy settings — basal rates, ISF, carb ratio, and the maximum bolus, basal, and IOB limits — in actual insulin units, and Trio scales them for the dilution automatically. Everything the pump delivers — boluses, basal rates, IOB, TDD, and history — is shown in pumped volume units, matching the pump's own screens 1:1."
                 )
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Practical effects with U-10:")
-                    Text("• Dosing resolution improves 10×: a pump with 0.05 U steps can deliver 0.005 U of insulin.")
-                    Text("• The pump's maximum deliverable amounts shrink 10×: a pump limited to 30 U/hr of volume can deliver at most 3 U/hr of actual insulin.")
-                    Text("• The reservoir display and the pump's own screens still show fluid volume, not actual insulin units.")
+                    Text("• A bolus of 5 U shown in Trio is 5 U of pumped fluid = 0.5 U of actual insulin.")
+                    Text("• Dosing resolution improves 10×: a pump with 0.05 U steps can deliver 0.005 U of actual insulin.")
+                    Text(
+                        "• The pump's maximum deliverable amounts shrink 10×: a pump limited to 30 U/hr of volume can deliver at most 3 U/hr of actual insulin."
+                    )
+                    Text("• Nightscout, Tidepool, and Apple Health also receive pumped volume units.")
                 }
 
                 Text(
-                    "When you change this setting, Trio re-programs the pump's basal schedule, delivery limits, and bolus increment for the new concentration. Fill a fresh reservoir or pod with the diluted insulin at the same time."
+                    "When you change this setting, Trio rescales your stored basal profile, ISF, carb ratio, delivery caps, and limits for the new concentration and re-programs the pump's basal schedule and delivery limits. Fill a fresh reservoir or pod with the diluted insulin at the same time — insulin delivered before the switch is tracked in the old units, so switch when IOB is near zero."
                 )
             }
             .fixedSize(horizontal: false, vertical: true)
+        }
+
+        private var dilutionSection: some View {
+            Section(
+                header: Text("Insulin Dilution"),
+                content: {
+                    VStack {
+                        Toggle(isOn: $state.allowDilution) {
+                            Text("Use Diluted Insulin")
+                        }.padding(.top)
+
+                        if state.allowDilution {
+                            Picker("Concentration", selection: $state.insulinConcentrationOption) {
+                                ForEach(InsulinConcentrationOption.allCases.filter { $0 != .u100 }) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .padding(.top, 4)
+
+                            if let recipe = state.insulinConcentrationOption.dilutionRecipe {
+                                HStack {
+                                    Text(recipe)
+                                        .font(.footnote)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                }
+                                .padding(.top, 2)
+                            }
+                        }
+
+                        if let syncMessage = state.concentrationSyncMessage {
+                            HStack {
+                                Text(syncMessage)
+                                    .font(.footnote)
+                                    .foregroundColor(.red)
+                                Spacer()
+                            }
+                            .padding(.top, 2)
+                        }
+
+                        HStack(alignment: .center) {
+                            Text(
+                                "Tell Trio the reservoir holds diluted insulin, e.g. U-10 = 1 part insulin + 9 parts diluent. Therapy settings stay in actual insulin units; deliveries are shown in pumped units."
+                            )
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .lineLimit(nil)
+                            Spacer()
+                            Button(
+                                action: {
+                                    shouldDisplayHint.toggle()
+                                    selectedVerboseHint = shouldDisplayHint ? AnyView(dilutionVerboseHint) : nil
+                                    hintLabel = String(localized: "Use Diluted Insulin")
+                                },
+                                label: {
+                                    HStack {
+                                        Image(systemName: "questionmark.circle")
+                                    }
+                                }
+                            ).buttonStyle(BorderlessButtonStyle())
+                        }.padding(.vertical)
+                    }
+                }
+            ).listRowBackground(Color.chart)
         }
 
         var body: some View {
@@ -111,7 +179,8 @@ extension UnitsLimitsSettings {
                             Text("• Manual temporary basal rates you set yourself")
                         }
                     }
-                    .fixedSize(horizontal: false, vertical: true)
+                    .fixedSize(horizontal: false, vertical: true),
+                    pickerSettingOverride: state.maxIOBPickerSetting
                 )
 
                 SettingInputSection(
@@ -137,7 +206,8 @@ extension UnitsLimitsSettings {
                         )
                         Text("Most set this to their largest meal bolus. Then, adjust if needed.")
                         Text("If you attempt to request a bolus larger than this, the bolus will not be accepted.")
-                    }
+                    },
+                    pickerSettingOverride: state.maxBolusPickerSetting
                 )
 
                 SettingInputSection(
@@ -161,71 +231,9 @@ extension UnitsLimitsSettings {
                         Text(
                             "This is the maximum basal rate allowed to be set or scheduled. This applies to both automatic and manual basal rates."
                         )
-                    }
+                    },
+                    pickerSettingOverride: state.maxBasalPickerSetting
                 )
-
-                Section(
-                    header: Text("Insulin Dilution"),
-                    content: {
-                        VStack {
-                            Toggle(isOn: $state.allowDilution) {
-                                Text("Use Diluted Insulin")
-                            }.padding(.top)
-
-                            if state.allowDilution {
-                                Picker("Concentration", selection: $state.insulinConcentrationOption) {
-                                    ForEach(InsulinConcentrationOption.allCases.filter { $0 != .u100 }) { option in
-                                        Text(option.displayName).tag(option)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
-                                .padding(.top, 4)
-
-                                if let recipe = state.insulinConcentrationOption.dilutionRecipe {
-                                    HStack {
-                                        Text(recipe)
-                                            .font(.footnote)
-                                            .foregroundColor(.secondary)
-                                        Spacer()
-                                    }
-                                    .padding(.top, 2)
-                                }
-                            }
-
-                            if let syncMessage = state.concentrationSyncMessage {
-                                HStack {
-                                    Text(syncMessage)
-                                        .font(.footnote)
-                                        .foregroundColor(.red)
-                                    Spacer()
-                                }
-                                .padding(.top, 2)
-                            }
-
-                            HStack(alignment: .center) {
-                                Text(
-                                    "Tell Trio the reservoir holds diluted insulin, e.g. U-10 = 1 part insulin + 9 parts diluent."
-                                )
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
-                                .lineLimit(nil)
-                                Spacer()
-                                Button(
-                                    action: {
-                                        shouldDisplayHint.toggle()
-                                        selectedVerboseHint = shouldDisplayHint ? AnyView(dilutionVerboseHint) : nil
-                                        hintLabel = String(localized: "Use Diluted Insulin")
-                                    },
-                                    label: {
-                                        HStack {
-                                            Image(systemName: "questionmark.circle")
-                                        }
-                                    }
-                                ).buttonStyle(BorderlessButtonStyle())
-                            }.padding(.vertical)
-                        }
-                    }
-                ).listRowBackground(Color.chart)
 
                 SettingInputSection(
                     decimalValue: $state.maxCOB,
@@ -301,6 +309,8 @@ extension UnitsLimitsSettings {
                         }
                     }
                 )
+
+                dilutionSection
             }
             .listSectionSpacing(sectionSpacing)
             .sheet(isPresented: $shouldDisplayHint) {

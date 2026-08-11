@@ -146,7 +146,9 @@ struct TandemPairingView: View {
             Section(header: Text("Before you start")) {
                 Text("1. On the pump, open Options → Device Settings → Bluetooth Settings and enable Mobile Connection.")
                 Text("2. Choose \"Pair Device\" so the pump shows its pairing code.")
-                Text("3. Pumps with software 7.1–7.6 show a 16-character code, which Trio supports. A 6-digit code means unsupported newer software.")
+                Text(
+                    "3. Pumps with software 7.1–7.6 show a 16-character code, which Trio supports. A 6-digit code means unsupported newer software."
+                )
             }
             .font(.footnote)
             Section {

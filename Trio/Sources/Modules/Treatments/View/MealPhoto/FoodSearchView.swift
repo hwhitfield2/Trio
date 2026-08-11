@@ -215,7 +215,7 @@ struct FoodSearchResultView: View {
     /// Quantity multiplier per component (keyed by component id). 0 = excluded.
     @State private var quantities: [String: Decimal] = [:]
 
-    private static let quantityStep: Decimal = Decimal(string: "0.5")!
+    private static let quantityStep = Decimal(string: "0.5")!
     private static let maxQuantity: Decimal = 10
 
     private var gramsFormatter: NumberFormatter {

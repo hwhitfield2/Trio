@@ -50,7 +50,7 @@ import Testing
     @Test("Overlapping windows combine to the most restrictive cap") func testOverlapMostRestrictive() {
         let windows = [
             window(start: 0, end: 12 * 60, maxBasalRate: 2, maxSMB: 0.5),
-            window(start: 8 * 60, end: 10 * 60, maxBasalRate: 0.5, maxSMB: 1),
+            window(start: 8 * 60, end: 10 * 60, maxBasalRate: 0.5, maxSMB: 1)
         ]
         let cap = DeliveryCaps.activeCap(in: windows, at: date(hour: 9, minute: 0))
         #expect(cap == DeliveryCaps.ActiveCap(maxBasalRate: 0.5, maxSMB: 0.5))

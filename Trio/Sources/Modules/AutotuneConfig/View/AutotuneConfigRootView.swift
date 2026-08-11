@@ -28,7 +28,8 @@ extension AutotuneConfig {
         private var rateFormatter: NumberFormatter {
             let formatter = NumberFormatter()
             formatter.numberStyle = .decimal
-            formatter.maximumFractionDigits = 2
+            // Real-insulin steps with diluted insulin can be as fine as 0.005 U/hr
+            formatter.maximumFractionDigits = 3
             return formatter
         }
 
@@ -109,16 +110,19 @@ extension AutotuneConfig {
                             HStack {
                                 Text("Carb ratio")
                                 Spacer()
-                                Text(isfFormatter.string(from: autotune.carbRatio as NSNumber) ?? "0")
+                                Text(isfFormatter.string(from: state.realRatio(autotune.carbRatio) as NSNumber) ?? "0")
                                 Text("g/U").foregroundColor(.secondary)
                             }
                             HStack {
                                 Text("Sensitivity")
                                 Spacer()
                                 if state.units == .mmolL {
-                                    Text(isfFormatter.string(from: autotune.sensitivity.asMmolL as NSNumber) ?? "0")
+                                    Text(
+                                        isfFormatter
+                                            .string(from: state.realRatio(autotune.sensitivity).asMmolL as NSNumber) ?? "0"
+                                    )
                                 } else {
-                                    Text(isfFormatter.string(from: autotune.sensitivity as NSNumber) ?? "0")
+                                    Text(isfFormatter.string(from: state.realRatio(autotune.sensitivity) as NSNumber) ?? "0")
                                 }
                                 Text(state.units.rawValue + "/U").foregroundColor(.secondary)
                             }
@@ -131,7 +135,10 @@ extension AutotuneConfig {
                             HStack {
                                 Text(autotune.basalProfile[index].start).foregroundColor(.secondary)
                                 Spacer()
-                                Text(rateFormatter.string(from: autotune.basalProfile[index].rate as NSNumber) ?? "0")
+                                Text(
+                                    rateFormatter
+                                        .string(from: state.realAmount(autotune.basalProfile[index].rate) as NSNumber) ?? "0"
+                                )
                                 Text("U/hr").foregroundColor(.secondary)
                             }
                         }
@@ -140,10 +147,17 @@ extension AutotuneConfig {
                                 .bold()
                                 .foregroundColor(.primary)
                             Spacer()
-                            Text(rateFormatter.string(from: autotune.basalProfile.reduce(0) { $0 + $1.rate } as NSNumber) ?? "0")
-                                .foregroundColor(.primary) +
-                                Text(" U/day")
-                                .foregroundColor(.secondary)
+                            Text(
+                                rateFormatter
+                                    .string(
+                                        from: state
+                                            .realAmount(autotune.basalProfile.reduce(0) { $0 + $1.rate }) as NSNumber
+                                    ) ??
+                                    "0"
+                            )
+                            .foregroundColor(.primary) +
+                            Text(" U/day")
+                            .foregroundColor(.secondary)
                         }
                     }
                     .listRowBackground(Color.chart)

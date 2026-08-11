@@ -35,6 +35,9 @@ struct SettingInputSection<VerboseHint: View>: View {
     var footerText: String?
     var isToggleDisabled: Bool = false
     var miniHintColor: Color = .secondary
+    /// Overrides the picker grid looked up by key — used by the insulin-limit
+    /// settings, whose real-unit grids scale with the insulin concentration.
+    var pickerSettingOverride: PickerSetting? = nil
 
     @ObservedObject private var pickerSettingsProvider = PickerSettingsProvider.shared
     @State private var displayPicker: Bool = false
@@ -89,6 +92,9 @@ struct SettingInputSection<VerboseHint: View>: View {
 
     // Helper function to retrieve PickerSetting based on key
     private func getPickerSetting(for key: String) -> PickerSetting? {
+        if let pickerSettingOverride = pickerSettingOverride {
+            return pickerSettingOverride
+        }
         switch key {
         case "lowGlucose":
             return pickerSettingsProvider.settings.lowGlucose

@@ -62,9 +62,11 @@ struct MLModelReviewSection: View {
                     Text(actionError).font(.footnote).foregroundStyle(.red)
                 }
 
-                Text("Candidates are trained on this device from your own data and only ever produce the shadow forecasts shown in Statistics. Promotion never affects insulin dosing.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Candidates are trained on this device from your own data and only ever produce the shadow forecasts shown in Statistics. Promotion never affects insulin dosing."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
         )
         .listRowBackground(Color.chart)
@@ -105,7 +107,7 @@ struct MLModelReviewSection: View {
                         eval.persistenceMAE,
                         eval.championMAE.map { String(format: " · champ %.1f", $0) } ?? ""
                     ))
-                    .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .font(.footnote.monospacedDigit())
             }
@@ -117,9 +119,11 @@ struct MLModelReviewSection: View {
             }
 
             if report.invalidReadingsDropped > 0 || report.skippedGap > 0 {
-                Text("Data quality: \(report.invalidReadingsDropped) invalid readings dropped, \(report.skippedGap) gap-skipped samples — review the CGM Gaps chart before promoting.")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
+                Text(
+                    "Data quality: \(report.invalidReadingsDropped) invalid readings dropped, \(report.skippedGap) gap-skipped samples — review the CGM Gaps chart before promoting."
+                )
+                .font(.caption2)
+                .foregroundStyle(.orange)
             }
 
             HStack {

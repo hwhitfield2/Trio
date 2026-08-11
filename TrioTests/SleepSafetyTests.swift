@@ -33,27 +33,45 @@ import Testing
     @Test("Same-day window: [08:00, 12:00)") func testSameDayWindow() {
         let start = 8 * 60
         let end = 12 * 60
-        #expect(!SleepSafetyPolicy.isInWindow(now: date(hour: 7, minute: 59), startMinutes: start, endMinutes: end, calendar: calendar))
+        #expect(
+            !SleepSafetyPolicy
+                .isInWindow(now: date(hour: 7, minute: 59), startMinutes: start, endMinutes: end, calendar: calendar)
+        )
         #expect(SleepSafetyPolicy.isInWindow(now: date(hour: 8), startMinutes: start, endMinutes: end, calendar: calendar))
-        #expect(SleepSafetyPolicy.isInWindow(now: date(hour: 11, minute: 59), startMinutes: start, endMinutes: end, calendar: calendar))
+        #expect(
+            SleepSafetyPolicy
+                .isInWindow(now: date(hour: 11, minute: 59), startMinutes: start, endMinutes: end, calendar: calendar)
+        )
         #expect(!SleepSafetyPolicy.isInWindow(now: date(hour: 12), startMinutes: start, endMinutes: end, calendar: calendar))
     }
 
     @Test("Midnight-crossing window: [22:00, 07:00)") func testMidnightCrossingWindow() {
         let start = 22 * 60
         let end = 7 * 60
-        #expect(!SleepSafetyPolicy.isInWindow(now: date(hour: 21, minute: 59), startMinutes: start, endMinutes: end, calendar: calendar))
+        #expect(
+            !SleepSafetyPolicy
+                .isInWindow(now: date(hour: 21, minute: 59), startMinutes: start, endMinutes: end, calendar: calendar)
+        )
         #expect(SleepSafetyPolicy.isInWindow(now: date(hour: 22), startMinutes: start, endMinutes: end, calendar: calendar))
-        #expect(SleepSafetyPolicy.isInWindow(now: date(hour: 23, minute: 30), startMinutes: start, endMinutes: end, calendar: calendar))
+        #expect(
+            SleepSafetyPolicy
+                .isInWindow(now: date(hour: 23, minute: 30), startMinutes: start, endMinutes: end, calendar: calendar)
+        )
         #expect(SleepSafetyPolicy.isInWindow(now: date(hour: 0), startMinutes: start, endMinutes: end, calendar: calendar))
-        #expect(SleepSafetyPolicy.isInWindow(now: date(hour: 6, minute: 59), startMinutes: start, endMinutes: end, calendar: calendar))
+        #expect(
+            SleepSafetyPolicy
+                .isInWindow(now: date(hour: 6, minute: 59), startMinutes: start, endMinutes: end, calendar: calendar)
+        )
         #expect(!SleepSafetyPolicy.isInWindow(now: date(hour: 7), startMinutes: start, endMinutes: end, calendar: calendar))
         #expect(!SleepSafetyPolicy.isInWindow(now: date(hour: 12), startMinutes: start, endMinutes: end, calendar: calendar))
     }
 
     @Test("start == end is a zero-length window that is never active") func testZeroLengthWindow() {
         let minutes = 22 * 60
-        #expect(!SleepSafetyPolicy.isInWindow(now: date(hour: 22), startMinutes: minutes, endMinutes: minutes, calendar: calendar))
+        #expect(
+            !SleepSafetyPolicy
+                .isInWindow(now: date(hour: 22), startMinutes: minutes, endMinutes: minutes, calendar: calendar)
+        )
         #expect(!SleepSafetyPolicy.isInWindow(now: date(hour: 3), startMinutes: minutes, endMinutes: minutes, calendar: calendar))
     }
 
@@ -62,7 +80,12 @@ import Testing
         let end = 7 * 60
         #expect(
             SleepSafetyPolicy
-                .minutesSinceWindowStart(now: date(hour: 22, minute: 3), startMinutes: start, endMinutes: end, calendar: calendar) ==
+                .minutesSinceWindowStart(
+                    now: date(hour: 22, minute: 3),
+                    startMinutes: start,
+                    endMinutes: end,
+                    calendar: calendar
+                ) ==
                 3
         )
         #expect(
@@ -149,7 +172,10 @@ import Testing
             lastEscalationDate: date(hour: 2, minute: 10)
         )
         let cfg = config(caregiverEnabled: true, caregiverMinutes: 20)
-        #expect(SleepSafetyPolicy.action(state: state, config: cfg, now: date(hour: 2, minute: 20)) == .escalateAndNotifyCaregiver)
+        #expect(
+            SleepSafetyPolicy
+                .action(state: state, config: cfg, now: date(hour: 2, minute: 20)) == .escalateAndNotifyCaregiver
+        )
     }
 
     @Test("Caregiver stage alone when escalation spacing is not yet met") func testCaregiverAlone() {

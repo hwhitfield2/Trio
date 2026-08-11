@@ -38,8 +38,8 @@ extension DeliveryCapEditor {
                                 }
                                 Stepper(
                                     value: doubleBinding($window.maxBasalRate),
-                                    in: 0 ... 10,
-                                    step: 0.05
+                                    in: 0 ... state.maxBasalUpperBound,
+                                    step: state.stepSize
                                 ) {
                                     HStack {
                                         Text("Max Basal")
@@ -50,8 +50,8 @@ extension DeliveryCapEditor {
                                 }
                                 Stepper(
                                     value: doubleBinding($window.maxSMB),
-                                    in: 0 ... 5,
-                                    step: 0.05
+                                    in: 0 ... state.maxSMBUpperBound,
+                                    step: state.stepSize
                                 ) {
                                     HStack {
                                         Text("Max SMB")
@@ -98,14 +98,15 @@ extension DeliveryCapEditor {
         private func doubleBinding(_ value: Binding<Decimal>) -> Binding<Double> {
             Binding(
                 get: { Double(truncating: value.wrappedValue as NSDecimalNumber) },
-                set: { value.wrappedValue = Decimal(Int(($0 * 100).rounded())) / 100 }
+                // 3 decimals: real-insulin steps with diluted insulin are as fine as 0.005
+                set: { value.wrappedValue = Decimal(Int(($0 * 1000).rounded())) / 1000 }
             )
         }
 
         private func formatted(_ value: Decimal) -> String {
             let formatter = NumberFormatter()
             formatter.minimumFractionDigits = 0
-            formatter.maximumFractionDigits = 2
+            formatter.maximumFractionDigits = 3
             return formatter.string(from: value as NSDecimalNumber) ?? "\(value)"
         }
     }

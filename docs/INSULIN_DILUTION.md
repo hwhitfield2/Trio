@@ -1,85 +1,90 @@
-# Diluted Insulin (U-10 / U-20 / U-50) Support
+# Running Diluted Insulin (U-10/U-20/U-50)
 
-## What this feature does
+## The convention
 
-Trio can drive a pump whose reservoir contains **diluted insulin** — e.g. U-10,
-which is 1 part U-100 insulin mixed with 9 parts diluent (a 300 U reservoir
-filled with 30 U of insulin and 270 U of saline). Dilution is used for very
-small insulin needs (typically young children), and also improves dosing
-resolution: a pump that meters 0.05 U volume steps delivers 0.005 U of actual
-insulin per step with U-10.
+This fork supports pumping diluted insulin (e.g. U-10: 1 part U-100 insulin +
+9 parts diluent, so a 300 U reservoir holds 30 U of actual insulin) with a
+hybrid convention:
 
-Enable it in **Settings → Units and Limits → Insulin Dilution**. The setting is
-`TrioSettings.allowDilution` plus `TrioSettings.insulinConcentration`
-(1 = U-100, 0.5 = U-50, 0.2 = U-20, 0.1 = U-10). The effective factor is
-exposed as `TrioSettings.insulinConcentrationFactor` (and
-`...FactorDecimal`) in `Trio/Sources/Helpers/InsulinConcentration.swift`;
-it is always 1 unless dilution is explicitly enabled and the stored value is
-sane.
+1. **Runtime is pumped volume units.** Every stored and runtime insulin
+   quantity — boluses, SMBs, basal rates, IOB, TDD, pump history, oref inputs
+   and outputs, delivery limits and caps, and the Nightscout/Tidepool/
+   HealthKit uploads — is denominated in units of fluid the pump meters. If
+   the pump pushes 5 U of volume, Trio (and everything downstream) shows 5 U.
+   Every number matches the pump's own screens 1:1, so correct behavior is
+   verifiable at a glance, and the loop's math contains **no conversion
+   anywhere** — oref is unit-agnostic when all quantities share one unit.
 
-## The core convention — read this before touching dosing code
+2. **Therapy settings are entered and read in actual insulin units.** The
+   basal profile, ISF, and carb ratio editors, the Max Bolus / Max Basal /
+   Max IOB limits, the scheduled delivery caps, the therapy ratio calculator,
+   and the Autotune results screen display real-insulin values and convert at
+   the UI boundary (`InsulinConcentration.swift`):
 
-**Every insulin quantity inside Trio is in actual insulin units (U-100
-equivalents).** Basal profiles, ISF, carb ratio, boluses, SMBs, temp basal
-rates, IOB, TDD, max bolus / max basal, oref inputs and outputs, Core Data
-pump history, Nightscout/Tidepool/HealthKit uploads — all actual insulin.
+   - amounts and rates: `displayed real = stored volume × factor`
+   - per-unit ratios (ISF, CR): `displayed real = stored volume ÷ factor`
 
-**The pump meters fluid volume and always believes it is delivering U-100.**
-Conversion happens only at the pump boundary:
+   where `factor` is the concentration fraction (U-10 → 0.1). You enter your
+   prescription as your care team states it (ISF 500 mg/dL/U, basal
+   0.05 U/hr) and Trio scales it for the dilution automatically.
 
-| Direction | Conversion | Where |
+The setting lives in **Settings → Units and Limits → Insulin Dilution**
+(`TrioSettings.allowDilution` + `insulinConcentration`).
+
+## What changing the setting does
+
+Flipping the concentration (including toggling dilution on/off) rescales every
+stored volume-unit therapy setting in place so its *real* meaning is
+preserved, then re-programs the pump:
+
+- basal profile ×, ISF ÷, carb ratio ÷, Max Bolus/Basal/IOB ×, delivery caps ×
+  (by the ratio of old to new factor, with basal rates snapped to the pump's
+  supported volume rates),
+- the pump's fallback basal schedule and delivery limits are re-synced (a
+  failure surfaces a warning to re-save the basal profile with the pump
+  connected),
+- stored Autotune output is discarded — it was derived from history recorded
+  in the old volume units — and regenerates from fresh data,
+- profiles are re-uploaded to Nightscout/Tidepool.
+
+## Example: U-10 with a real basal of 0.05 U/hr, ISF 500, CR 100
+
+| Value | You enter/see in editors (real) | Stored/pump/loop (volume) |
 | --- | --- | --- |
-| Commands → pump (bolus, temp basal) | ÷ factor | `APSManager.enactBolus`, `enactTempBasal`, `performBolus`, `performBasal` |
-| Rounding to pump-supported steps | round in volume space | `PumpManager.roundToSupportedBolusVolume(units:insulinConcentration:)` / `roundToSupportedBasalRate(unitsPerHour:insulinConcentration:)` |
-| Delivery limits → pump | ÷ factor | `PumpSettings.pumpDeliveryLimits(insulinConcentration:)` (DeviceDataManager, UnitsLimits/Nightscout/AlgorithmAdvanced providers) |
-| Limits reported by pump → storage | × factor | `PumpSettings.applyingPumpReported(limits:insulinConcentration:)` |
-| Basal schedule → pump | ÷ factor | BasalProfileEditor / AutotuneConfig / SettingsExport sync, PumpConfig & Home `PumpInitialSettings` |
-| Pump history events → Core Data | × factor | `PumpHistoryStorage.storePumpEvents` |
-| Active temp basal state → oref | × factor | `APSManager.fetchCurrentTempBasal` |
-| Supported increments → preferences/UI | × factor | `bolusIncrement` (DeviceDataManager, Onboarding), `supportedBasalRates` (BasalProfileEditor) |
+| Basal rate | 0.05 U/hr | 0.5 U/hr |
+| ISF | 500 mg/dL per U | 50 mg/dL per U |
+| Carb ratio | 100 g per U | 10 g per U |
+| Max bolus | 1 U | 10 U |
+| Meal bolus for 30 g | — | shown/delivered as 3.0 U |
+| IOB after that bolus | — | 3.0 U |
 
-**Deliberately *not* converted:** reservoir readings. They describe the fluid
-physically present in the reservoir and match the pump's own UI and
-low-reservoir alerts, so they stay in volume units everywhere (Home header,
-Nightscout status).
+Deliveries, IOB, TDD, history, and all uploads read in pumped units — divide
+by 10 to discuss actual insulin with a care team.
 
-Also not converted: anything inside the pump-manager libraries themselves
-(OmnipodKit, DanaKit, MedtrumKit, MinimedKit, TandemKit). Their own settings
-screens, progress reporters and alerts all speak volume units.
+## Why dilution helps small-dose therapy
 
-## Changing the concentration re-programs the pump
+The pump's mechanical increments are unchanged (0.05 U volume per pulse), but
+each pulse carries 1/10 the insulin with U-10. A real basal of 0.05 U/hr runs
+as 0.5 U/hr of volume — ten pulses spread across the hour instead of one.
+Effective dosing resolution improves 10×; the editors accordingly display
+real-unit steps as fine as 0.005 U.
 
-When the user toggles dilution or picks a different concentration,
-`UnitsLimitsSettings.StateModel.handleConcentrationChange` calls
-`Provider.resyncPumpInsulinConcentration()`, which rescales on the pump:
+The pump's hardware maxima shrink correspondingly in real terms: a 30 U/hr
+volume cap can deliver at most 3 U/hr of actual insulin.
 
-1. the `bolusIncrement` preference (actual insulin units),
-2. the pump's delivery limits,
-3. **the pump's programmed basal schedule** — critical, because the pump falls
-   back to its internal schedule whenever the loop is not running; without the
-   rescale it would deliver a factor of 2–10 too little (or too much) insulin.
+## Safety notes
 
-If that sync fails, the settings screen shows a red warning telling the user
-not to rely on automated dosing until profile and limits are re-saved with the
-pump connected.
-
-## Practical consequences (worth repeating to users)
-
-- With U-10, the pump's *maximum* deliverable amounts shrink 10×: an Omnipod
-  capped at 30 U/hr of volume can deliver at most 3 U/hr of actual insulin;
-  its 30 U max bolus becomes 3 U.
-- Dosing resolution improves by the same factor (0.05 U volume step → 0.005 U
-  insulin).
-- The reservoir display shows fluid volume, not insulin. A 200 U pod filled
-  with U-10 holds 20 U of actual insulin.
-- The setting must match the reservoir contents. Enabling U-10 while the
-  reservoir still holds U-100 causes 10× overdelivery the moment the pump is
-  re-programmed; the UI warns about this and the change should coincide with a
-  reservoir/pod change.
-
-## Tests
-
-`TrioTests/InsulinConcentrationTests.swift` pins the factor semantics, the
-option ↔ factor mapping, and the delivery-limit conversions.
-`TrioTests/DeliveryLimitsSyncTests.swift` exercises the shared
-`pumpDeliveryLimits` helper at factor 1.
+- **The reservoir contents and the concentration setting must agree.** Change
+  the setting at the same time as you fill a fresh reservoir/pod with the
+  diluted insulin. A mismatch causes dosing that is 2–10× off.
+- **Switch with IOB near zero.** Pump history recorded before the switch is
+  denominated in the old volume units; IOB spanning the switch is
+  misinterpreted by the factor ratio for up to DIA hours. The same applies to
+  TDD statistics and dynamic-ISF/Autotune inputs for ~24 h.
+- Exported settings embed the concentration alongside the volume-unit
+  profiles, so export/import round-trips consistently.
+- History: an earlier implementation instead kept everything in actual
+  insulin units and converted at the pump boundary (commit `880cd73`,
+  reverted) — rejected because runtime numbers no longer matched the pump's
+  screens. See that commit and its revert for the full boundary map a
+  pump-boundary conversion requires.

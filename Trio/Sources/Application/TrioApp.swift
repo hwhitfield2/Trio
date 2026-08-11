@@ -451,7 +451,8 @@ extension Notification.Name {
         async let glucoseDeletion: () = coreDataStack.batchDeleteOlderThan(GlucoseStored.self, dateKey: "date", days: 365)
         async let archivedGlucoseDeletion: () = coreDataStack
             .batchDeleteOlderThan(DeletedGlucoseStored.self, dateKey: "date", days: 365)
-        async let pumpEventDeletion: () = coreDataStack.batchDeleteOlderThan(PumpEventStored.self, dateKey: "timestamp", days: 365)
+        async let pumpEventDeletion: () = coreDataStack
+            .batchDeleteOlderThan(PumpEventStored.self, dateKey: "timestamp", days: 365)
         async let bolusDeletion: () = coreDataStack.batchDeleteOlderThan(
             parentType: PumpEventStored.self,
             childType: BolusStored.self,

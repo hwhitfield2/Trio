@@ -89,7 +89,11 @@ extension Stat.StateModel {
                 let (points, gaps) = try await calculateForecastStats()
                 await MainActor.run {
                     self.forecastAccuracyPoints = points
-                    self.forecastAccuracyStats = Self.aggregate(points: points, lowLimit: self.lowLimit, highLimit: self.highLimit)
+                    self.forecastAccuracyStats = Self.aggregate(
+                        points: points,
+                        lowLimit: self.lowLimit,
+                        highLimit: self.highLimit
+                    )
                     self.cgmGapStats = gaps
                 }
             } catch {

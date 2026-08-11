@@ -117,10 +117,12 @@ extension SiteTracker {
 
         @ViewBuilder private func historyRow(_ change: SiteChangeStored) -> some View {
             HStack {
-                Image(systemName: change.kind == SiteChangeKind.sensor.rawValue
-                    ? "sensor.tag.radiowaves.forward.fill"
-                    : "bandage.fill")
-                    .foregroundStyle(change.kind == SiteChangeKind.sensor.rawValue ? Color.loopGreen : Color.insulin)
+                Image(
+                    systemName: change.kind == SiteChangeKind.sensor.rawValue
+                        ? "sensor.tag.radiowaves.forward.fill"
+                        : "bandage.fill"
+                )
+                .foregroundStyle(change.kind == SiteChangeKind.sensor.rawValue ? Color.loopGreen : Color.insulin)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(change.date?.formatted(date: .abbreviated, time: .shortened) ?? "—")
                     HStack(spacing: 4) {

@@ -1,13 +1,11 @@
 import Foundation
-import HealthKit
-import LoopKit
 import Testing
 
 @testable import Trio
 
-/// Pins the diluted-insulin (e.g. U-10) conversion semantics: Trio keeps every
-/// insulin quantity in actual insulin units and converts to/from pump volume
-/// units only at the pump boundary.
+/// Trio stores and runs everything in pumped volume units; the concentration
+/// setting only drives the real-insulin display/entry conversion in the
+/// therapy-settings editors and the in-place rescale when the setting changes.
 @Suite("Insulin Concentration Tests") struct InsulinConcentrationTests {
     private func settings(allowDilution: Bool, concentration: Decimal) -> TrioSettings {
         var settings = TrioSettings()
@@ -16,92 +14,112 @@ import Testing
         return settings
     }
 
-    // MARK: - Effective factor
+    // MARK: - Factor resolution
 
-    @Test("Dilution disabled always yields factor 1") func testDisabled() {
-        #expect(settings(allowDilution: false, concentration: 0.1).insulinConcentrationFactor == 1)
+    @Test("disabled dilution always resolves to factor 1") func testDisabledFactor() {
         #expect(settings(allowDilution: false, concentration: 0.1).insulinConcentrationFactorDecimal == 1)
     }
 
-    @Test("U-10 yields factor 0.1") func testU10() {
-        let s = settings(allowDilution: true, concentration: 0.1)
-        #expect(s.insulinConcentrationFactorDecimal == Decimal(string: "0.1")!)
-        #expect(abs(s.insulinConcentrationFactor - 0.1) < 1e-12)
+    @Test("enabled dilution resolves the stored factor") func testEnabledFactor() {
+        #expect(settings(allowDilution: true, concentration: 0.1).insulinConcentrationFactorDecimal == 0.1)
+        #expect(settings(allowDilution: true, concentration: 0.2).insulinConcentrationFactorDecimal == 0.2)
+        #expect(settings(allowDilution: true, concentration: 0.5).insulinConcentrationFactorDecimal == 0.5)
     }
 
-    @Test("Insane stored concentrations fall back to 1") func testInsaneValues() {
-        #expect(settings(allowDilution: true, concentration: 0).insulinConcentrationFactor == 1)
-        #expect(settings(allowDilution: true, concentration: -0.5).insulinConcentrationFactor == 1)
-        #expect(settings(allowDilution: true, concentration: 2).insulinConcentrationFactor == 1)
+    @Test("insane stored factors fall back to 1") func testInsaneFactors() {
+        #expect(settings(allowDilution: true, concentration: 0).insulinConcentrationFactorDecimal == 1)
+        #expect(settings(allowDilution: true, concentration: -1).insulinConcentrationFactorDecimal == 1)
+        #expect(settings(allowDilution: true, concentration: 2).insulinConcentrationFactorDecimal == 1)
     }
 
-    @Test("Default settings are standard U-100") func testDefaults() {
-        #expect(TrioSettings().insulinConcentrationFactor == 1)
+    @Test("option enum maps factors both ways") func testOptionMapping() {
+        #expect(InsulinConcentrationOption.u10.factor == 0.1)
+        #expect(InsulinConcentrationOption(factor: 0.1) == .u10)
+        #expect(InsulinConcentrationOption(factor: 0.42) == .u100) // unknown → U-100
     }
 
-    // MARK: - Concentration options
+    // MARK: - Editor display conversions (U-10)
 
-    @Test("Option factors match their labels") func testOptionFactors() {
-        #expect(InsulinConcentrationOption.u100.factor == 1)
-        #expect(InsulinConcentrationOption.u50.factor == Decimal(string: "0.5")!)
-        #expect(InsulinConcentrationOption.u20.factor == Decimal(string: "0.2")!)
-        #expect(InsulinConcentrationOption.u10.factor == Decimal(string: "0.1")!)
-    }
-
-    @Test("Option round-trips through its factor") func testOptionRoundTrip() {
-        for option in InsulinConcentrationOption.allCases {
-            #expect(InsulinConcentrationOption(factor: option.factor) == option)
+    @Test("amounts: stored volume displays as real insulin and round-trips") func testAmountConversion() {
+        let u10 = settings(allowDilution: true, concentration: 0.1)
+        // A stored 0.5 U/hr volume basal is 0.05 U/hr of actual insulin.
+        #expect(u10.realInsulinAmount(fromVolume: 0.5) == 0.05)
+        #expect(u10.volumeInsulinAmount(fromReal: 0.05) == 0.5)
+        // Pump-supported volume rates survive the display round trip exactly.
+        for volume in [Decimal(0.05), 0.1, 0.15, 1.25, 30] {
+            #expect(u10.volumeInsulinAmount(fromReal: u10.realInsulinAmount(fromVolume: volume)) == volume)
         }
     }
 
-    @Test("Unknown factors fall back to U-100") func testOptionFallback() {
-        #expect(InsulinConcentrationOption(factor: 0.25) == .u100)
+    @Test("ratios: stored volume ISF/CR display as real insulin and round-trip") func testRatioConversion() {
+        let u10 = settings(allowDilution: true, concentration: 0.1)
+        // Stored ISF of 50 mg/dL per pumped unit = 500 mg/dL per real unit.
+        #expect(u10.realInsulinRatio(fromVolume: 50) == 500)
+        #expect(u10.volumeInsulinRatio(fromReal: 500) == 50)
+        // Stored CR of 10 g per pumped unit = 100 g per real unit.
+        #expect(u10.realInsulinRatio(fromVolume: 10) == 100)
+        for volume in [Decimal(0.1), 5, 36.5, 720] {
+            #expect(u10.volumeInsulinRatio(fromReal: u10.realInsulinRatio(fromVolume: volume)) == volume)
+        }
     }
 
-    // MARK: - Delivery limits
-
-    private let basalUnit = HKUnit.internationalUnitsPerHour
-    private let bolusUnit = HKUnit.internationalUnit()
-
-    @Test("U-10 delivery limits are pushed as 10× volume") func testLimitsToPump() {
-        let pumpSettings = PumpSettings(insulinActionCurve: 6, maxBolus: 3, maxBasal: 1.5)
-
-        let limits = pumpSettings.pumpDeliveryLimits(insulinConcentration: 0.1)
-
-        #expect(abs((limits.maximumBasalRate?.doubleValue(for: basalUnit) ?? 0) - 15.0) < 1e-9)
-        #expect(abs((limits.maximumBolus?.doubleValue(for: bolusUnit) ?? 0) - 30.0) < 1e-9)
+    @Test("U-100 conversions are the identity") func testIdentityConversion() {
+        let u100 = settings(allowDilution: false, concentration: 1)
+        #expect(u100.realInsulinAmount(fromVolume: 1.25) == 1.25)
+        #expect(u100.realInsulinRatio(fromVolume: 45) == 45)
     }
 
-    @Test("Pump-reported limits are stored back as actual insulin units") func testLimitsFromPump() {
-        let pumpSettings = PumpSettings(insulinActionCurve: 6, maxBolus: 3, maxBasal: 1.5)
-        let reported = DeliveryLimits(
-            maximumBasalRate: HKQuantity(unit: basalUnit, doubleValue: 30.0),
-            maximumBolus: HKQuantity(unit: bolusUnit, doubleValue: 30.0)
-        )
+    // MARK: - Rescale on concentration change
 
-        let stored = pumpSettings.applyingPumpReported(limits: reported, insulinConcentration: 0.1)
-
-        #expect(abs(Double(stored.maxBasal) - 3.0) < 1e-9)
-        #expect(abs(Double(stored.maxBolus) - 3.0) < 1e-9)
-        #expect(stored.insulinActionCurve == 6)
+    @Test("U-100 to U-10 multiplies amounts by 10 and divides ratios by 10") func testRescaleToU10() {
+        let rescale = InsulinConcentrationRescale(from: 1, to: 0.1)
+        #expect(rescale.amountScale == 10)
+        #expect(rescale.ratioScale == 0.1)
+        #expect(!rescale.isIdentity)
     }
 
-    @Test("Missing pump-reported limits keep the user's values") func testLimitsFromPumpPartial() {
-        let pumpSettings = PumpSettings(insulinActionCurve: 6, maxBolus: 3, maxBasal: 1.5)
-        let reported = DeliveryLimits(maximumBasalRate: nil, maximumBolus: nil)
-
-        let stored = pumpSettings.applyingPumpReported(limits: reported, insulinConcentration: 0.1)
-
-        #expect(stored.maxBasal == 1.5)
-        #expect(stored.maxBolus == 3)
+    @Test("U-10 back to U-100 inverts the scales") func testRescaleBackToU100() {
+        let rescale = InsulinConcentrationRescale(from: 0.1, to: 1)
+        #expect(rescale.amountScale == 0.1)
+        #expect(rescale.ratioScale == 10)
     }
 
-    @Test("Limits round-trip is the identity for standard U-100") func testLimitsIdentityU100() {
-        let pumpSettings = PumpSettings(insulinActionCurve: 6, maxBolus: 10, maxBasal: 2)
+    @Test("unchanged concentration is the identity rescale") func testIdentityRescale() {
+        #expect(InsulinConcentrationRescale(from: 0.1, to: 0.1).isIdentity)
+        #expect(InsulinConcentrationRescale(from: 1, to: 1).isIdentity)
+    }
 
-        let limits = pumpSettings.pumpDeliveryLimits(insulinConcentration: 1)
+    @Test("rescaling preserves the real-insulin meaning of stored values") func testRescalePreservesRealMeaning() {
+        let factors: [Decimal] = [1, 0.5, 0.2, 0.1]
+        for oldFactor in factors {
+            for newFactor in factors {
+                let old = settings(allowDilution: true, concentration: oldFactor)
+                let new = settings(allowDilution: true, concentration: newFactor)
+                let rescale = InsulinConcentrationRescale(from: oldFactor, to: newFactor)
 
-        #expect(limits.maximumBasalRate?.doubleValue(for: basalUnit) == 2.0)
-        #expect(limits.maximumBolus?.doubleValue(for: bolusUnit) == 10.0)
+                // A basal rate keeps delivering the same actual insulin…
+                let storedRate: Decimal = 0.6
+                #expect(
+                    new.realInsulinAmount(fromVolume: storedRate * rescale.amountScale) ==
+                        old.realInsulinAmount(fromVolume: storedRate)
+                )
+
+                // …and ISF/CR keep the same real-unit strength.
+                let storedISF: Decimal = 48
+                #expect(
+                    new.realInsulinRatio(fromVolume: storedISF * rescale.ratioScale) ==
+                        old.realInsulinRatio(fromVolume: storedISF)
+                )
+            }
+        }
+    }
+
+    @Test("chained rescales compose (U-100 → U-10 → U-50)") func testChainedRescales() {
+        let first = InsulinConcentrationRescale(from: 1, to: 0.1)
+        let second = InsulinConcentrationRescale(from: 0.1, to: 0.5)
+        let direct = InsulinConcentrationRescale(from: 1, to: 0.5)
+        let stored: Decimal = 1.5
+        #expect(stored * first.amountScale * second.amountScale == stored * direct.amountScale)
+        #expect(stored * first.ratioScale * second.ratioScale == stored * direct.ratioScale)
     }
 }

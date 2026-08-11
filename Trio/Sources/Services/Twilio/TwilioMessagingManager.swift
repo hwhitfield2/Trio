@@ -221,8 +221,8 @@ final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
         switch kind {
         case .urgentLow:
             return String(localized: "URGENT —", comment: "Twilio urgent low SMS prefix") + " " + status
-        case .low,
-             .high:
+        case .high,
+             .low:
             return status
         case .loopFailure:
             return String(
@@ -238,8 +238,10 @@ final class BaseTwilioMessagingManager: TwilioMessagingManager, Injectable {
     /// Sends the message to every recipient, collecting per-recipient failures. Throws only when
     /// the configuration is unusable or no recipient could be reached — one bad number must not
     /// block delivery to (or trigger endless re-sends for) the others.
-    @discardableResult
-    private func send(body: String, to recipients: [String]) async throws -> [(recipient: String, error: Error)] {
+    @discardableResult private func send(
+        body: String,
+        to recipients: [String]
+    ) async throws -> [(recipient: String, error: Error)] {
         guard let accountSID = keychain.getValue(String.self, forKey: TwilioMessaging.Config.accountSIDKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             let authToken = keychain.getValue(String.self, forKey: TwilioMessaging.Config.authTokenKey)?

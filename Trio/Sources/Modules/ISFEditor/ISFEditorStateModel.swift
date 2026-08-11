@@ -84,14 +84,18 @@ extension ISFEditor {
 
             let profile = provider.profile
 
+            // Stored sensitivities are mg/dL per *pumped* unit; the editor
+            // displays mg/dL per unit of actual insulin.
+            let settings = settingsManager.settings
             items = profile.sensitivities.map { value in
                 let timeIndex = timeValues.firstIndex(of: Double(value.offset * 60)) ?? 0
-                var rateIndex = rateValues.firstIndex(of: value.sensitivity)
+                let realSensitivity = settings.realInsulinRatio(fromVolume: value.sensitivity)
+                var rateIndex = rateValues.firstIndex(of: realSensitivity)
                 if rateIndex == nil {
                     // try to look up the closest value
                     if let min = rateValues.first, let max = rateValues.last {
-                        if value.sensitivity >= (min - 1), value.sensitivity <= (max + 1) {
-                            rateIndex = rateValues.findClosestIndex(to: value.sensitivity)
+                        if realSensitivity >= (min - 1), realSensitivity <= (max + 1) {
+                            rateIndex = rateValues.findClosestIndex(to: realSensitivity)
                         }
                     }
                 }
@@ -118,13 +122,15 @@ extension ISFEditor {
             guard hasChanges else { return }
             shouldDisplaySaving.toggle()
 
+            let settings = settingsManager.settings
             let sensitivities = items.map { item -> InsulinSensitivityEntry in
                 let fotmatter = DateFormatter()
                 fotmatter.timeZone = TimeZone(secondsFromGMT: 0)
                 fotmatter.dateFormat = "HH:mm:ss"
                 let date = Date(timeIntervalSince1970: self.timeValues[item.timeIndex])
                 let minutes = Int(date.timeIntervalSince1970 / 60)
-                let rate = self.rateValues[item.rateIndex]
+                // Displayed values are per actual insulin unit; store per pumped unit.
+                let rate = settings.volumeInsulinRatio(fromReal: self.rateValues[item.rateIndex])
                 return InsulinSensitivityEntry(sensitivity: rate, offset: minutes, start: fotmatter.string(from: date))
             }
             let profile = InsulinSensitivities(

@@ -19,6 +19,16 @@ extension AutotuneConfig {
             }
         }
 
+        /// Autotune output is stored in pumped volume units; this screen shows
+        /// therapy values in actual insulin units, like the editors.
+        func realAmount(_ volume: Decimal) -> Decimal {
+            settingsManager.settings.realInsulinAmount(fromVolume: volume)
+        }
+
+        func realRatio(_ volume: Decimal) -> Decimal {
+            settingsManager.settings.realInsulinRatio(fromVolume: volume)
+        }
+
         override func subscribe() {
             autotune = provider.autotune
             units = settingsManager.settings.units
@@ -89,10 +99,8 @@ extension AutotuneConfig {
                     debug(.service, "Basals have been replaced with Autotuned Basals by user.")
                     return
                 }
-                // Autotuned rates are actual insulin units; the pump schedule is volume.
-                let concentration = settingsManager.settings.insulinConcentrationFactor
                 let syncValues = basals.map {
-                    RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate) / concentration)
+                    RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate))
                 }
                 pump.syncBasalRateSchedule(items: syncValues) { result in
                     switch result {

@@ -25,7 +25,9 @@ enum FoodSearchError: LocalizedError {
         case .refused:
             return String(localized: "The AI declined to look up this food. Please try a different description.")
         case .noFoodFound:
-            return String(localized: "No food could be identified from this description. Try adding the restaurant and dish name.")
+            return String(
+                localized: "No food could be identified from this description. Try adding the restaurant and dish name."
+            )
         case .invalidResponse:
             return String(localized: "The AI returned an unexpected response. Please try again.")
         }

@@ -116,13 +116,13 @@ class TandemPumpManager: DeviceManager {
     // Amounts below the pump's 0.05 U remote-bolus floor round to 0 (not
     // deliverable), matching the supported-volumes array.
     func roundToSupportedBolusVolume(units: Double) -> Double {
-        let milliunits = (units * 1000 + 1e-6).rounded(.down)
+        let milliunits = (units * 1000 + 1E-6).rounded(.down)
         guard milliunits >= Double(TandemInitiateBolusRequest.minBolusMilliunits) else { return 0 }
         return min(milliunits, 25000) / 1000
     }
 
     func roundToSupportedBasalRate(unitsPerHour: Double) -> Double {
-        let milliunitsPerHour = (unitsPerHour * 1000 + 1e-6).rounded(.down)
+        let milliunitsPerHour = (unitsPerHour * 1000 + 1E-6).rounded(.down)
         return min(max(milliunitsPerHour, 0), 15000) / 1000
     }
 
@@ -555,17 +555,17 @@ extension TandemPumpManager {
     /// disconnect, unparseable reply) is treated as uncertain delivery.
     private static func isDefiniteNonDelivery(_ error: TandemSessionError) -> Bool {
         switch error {
-        case .notAuthenticated,
-             .staleTimeSinceReset,
+        case .insulinDeliveryActionsDisabled,
+             .notAuthenticated,
+             .pumpRejected,
              .requestInFlight,
-             .insulinDeliveryActionsDisabled,
-             .pumpRejected:
+             .staleTimeSinceReset:
             return true
-        case .notConnected,
+        case .invalidResponse,
+             .notConnected,
+             .pairingFailed,
              .timeout,
-             .transport,
-             .invalidResponse,
-             .pairingFailed:
+             .transport:
             return false
         }
     }

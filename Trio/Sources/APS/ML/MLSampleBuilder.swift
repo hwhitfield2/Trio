@@ -81,7 +81,10 @@ enum MLSampleBuilder {
             guard readings.count > 20 else { return result }
             let readingTimes = readings.map(\.date.timeIntervalSince1970)
 
-            struct Det { let ts: TimeInterval; let iob: Double; let cob: Double; let sens: Double }
+            struct Det { let ts: TimeInterval
+                let iob: Double
+                let cob: Double
+                let sens: Double }
             let dets: [Det] = (detDicts as? [[String: Any]] ?? []).compactMap { dict in
                 guard let date = dict["deliverAt"] as? Date else { return nil }
                 return Det(
@@ -176,11 +179,13 @@ enum MLSampleBuilder {
                 guard let bg5 = nearestReading(to: t - 5 * 60, tolerance: cgmTolerance),
                       let bg15 = nearestReading(to: t - 15 * 60, tolerance: cgmTolerance),
                       let bg30 = nearestReading(to: t - 30 * 60, tolerance: cgmTolerance)
-                else { result.skippedGap += 1; continue }
+                else { result.skippedGap += 1
+                    continue }
 
                 let detIndex = Self.bisectRight(detTimes, t) - 1
                 guard detIndex >= 0, t - dets[detIndex].ts <= determinationMaxAge
-                else { result.skippedNoDetermination += 1; continue }
+                else { result.skippedNoDetermination += 1
+                    continue }
                 let det = dets[detIndex]
 
                 var targets: [Int: Double] = [:]
@@ -191,7 +196,8 @@ enum MLSampleBuilder {
                     else { continue }
                     targets[horizon] = actual
                 }
-                guard !targets.isEmpty else { result.skippedNoTarget += 1; continue }
+                guard !targets.isEmpty else { result.skippedNoTarget += 1
+                    continue }
 
                 let carbIndex = Self.bisectLeft(carbTimes, t)
                 let recentCarbs = carbs[max(0, carbIndex - carbEntryLookback) ..< carbIndex]

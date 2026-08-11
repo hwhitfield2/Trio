@@ -1,24 +1,28 @@
 import Foundation
-import HealthKit
-import LoopKit
 
-/// Support for diluted insulin (e.g. U-10: 1 part U-100 insulin + 9 parts diluent).
+/// Support for diluted insulin (e.g. U-10: 1 part U-100 insulin + 9 parts
+/// diluent, so a 300 U reservoir holds 30 U of actual insulin).
 ///
-/// Trio stores and computes every insulin quantity — boluses, basal rates, IOB,
-/// TDD, delivery limits, the basal profile — in *actual* insulin units (U-100
-/// equivalents). The pump, however, meters fluid volume and always believes it
-/// is delivering U-100. With diluted insulin the pump must move
-/// `1 / concentration` volume units to deliver one actual insulin unit, so all
-/// conversions happen at the pump boundary and nowhere else:
+/// Trio runs entirely in *pumped volume units*: every stored and runtime
+/// insulin quantity — basal profiles, ISF, CR, boluses, SMBs, IOB, TDD,
+/// delivery limits and caps, oref inputs and outputs, pump history, and the
+/// HealthKit/Nightscout/Tidepool uploads — is denominated in units of fluid
+/// the pump meters. Every number on screen therefore matches the pump's own
+/// screens 1:1 and the loop's math needs no conversion anywhere: oref is
+/// unit-agnostic as long as all quantities share one unit.
 ///
-/// - Commands sent to the pump (boluses, temp basal rates, delivery limits,
-///   basal schedules) are divided by the concentration factor.
-/// - Feedback read from the pump (history events, active temp basal state,
-///   supported increments) is multiplied by the concentration factor.
+/// The concentration setting exists only so therapy settings can be *entered
+/// and read* in actual insulin units. The settings editors convert at the UI
+/// boundary:
 ///
-/// Reservoir readings deliberately stay in volume units: they describe the
-/// fluid physically present in the reservoir and match the pump's own UI and
-/// low-reservoir alerts.
+/// - Amounts and rates (basal rates, Max Bolus, Max Basal, Max IOB, delivery
+///   caps): displayed real = stored volume × factor.
+/// - Per-unit ratios (ISF, carb ratio): displayed real = stored volume ÷ factor.
+///
+/// When the concentration setting changes, the stored (volume-unit) therapy
+/// settings are rescaled in place so their *real* meaning is preserved, and
+/// the pump is re-programmed (basal schedule, delivery limits). Nothing else
+/// in the app reads the concentration.
 enum InsulinConcentrationOption: Int, CaseIterable, Identifiable {
     case u100 = 100
     case u50 = 50
@@ -67,48 +71,46 @@ extension TrioSettings {
     var insulinConcentrationFactor: Double {
         Double(truncating: insulinConcentrationFactorDecimal as NSNumber)
     }
-}
 
-extension PumpSettings {
-    /// The user's delivery limits (actual insulin units) expressed in pump
-    /// volume units, ready to sync to the pump.
-    func pumpDeliveryLimits(insulinConcentration factor: Double) -> DeliveryLimits {
-        DeliveryLimits(
-            maximumBasalRate: HKQuantity(
-                unit: .internationalUnitsPerHour,
-                doubleValue: Double(maxBasal) / factor
-            ),
-            maximumBolus: HKQuantity(
-                unit: .internationalUnit(),
-                doubleValue: Double(maxBolus) / factor
-            )
-        )
+    /// A stored pump-volume amount or rate (bolus, basal U/hr, IOB) as actual
+    /// insulin, for display in the therapy-settings editors.
+    func realInsulinAmount(fromVolume volume: Decimal) -> Decimal {
+        volume * insulinConcentrationFactorDecimal
     }
 
-    /// These settings with the limits the pump actually accepted (reported in
-    /// volume units) converted back to actual insulin units.
-    func applyingPumpReported(limits: DeliveryLimits, insulinConcentration factor: Double) -> PumpSettings {
-        PumpSettings(
-            insulinActionCurve: insulinActionCurve,
-            maxBolus: limits.maximumBolus
-                .map { Decimal($0.doubleValue(for: .internationalUnit()) * factor) } ?? maxBolus,
-            maxBasal: limits.maximumBasalRate
-                .map { Decimal($0.doubleValue(for: .internationalUnitsPerHour) * factor) } ?? maxBasal
-        )
+    /// An actual-insulin amount or rate entered in a settings editor as the
+    /// pump-volume value Trio stores and the pump runs.
+    func volumeInsulinAmount(fromReal real: Decimal) -> Decimal {
+        real / insulinConcentrationFactorDecimal
+    }
+
+    /// A stored per-pumped-unit ratio (ISF mg/dL per U, CR g per U) as its
+    /// per-actual-unit equivalent, for display in the therapy-settings editors.
+    func realInsulinRatio(fromVolume volume: Decimal) -> Decimal {
+        volume / insulinConcentrationFactorDecimal
+    }
+
+    /// A per-actual-unit ratio entered in a settings editor as the
+    /// per-pumped-unit value Trio stores and the loop uses.
+    func volumeInsulinRatio(fromReal real: Decimal) -> Decimal {
+        real * insulinConcentrationFactorDecimal
     }
 }
 
-extension PumpManager {
-    /// Rounds actual insulin units to the nearest bolus volume the pump can
-    /// deliver, expressed in actual insulin units again. With U-10 a pump that
-    /// meters 0.05 U of volume can deliver increments of 0.005 U of insulin.
-    func roundToSupportedBolusVolume(units: Double, insulinConcentration factor: Double) -> Double {
-        roundToSupportedBolusVolume(units: units / factor) * factor
+/// Scale factors that re-express stored volume-unit therapy settings for a new
+/// concentration while preserving their real-insulin meaning.
+struct InsulinConcentrationRescale {
+    /// Multiplier for amounts and rates (basal, max bolus/basal, max IOB, caps).
+    let amountScale: Decimal
+    /// Multiplier for per-unit ratios (ISF, carb ratio).
+    let ratioScale: Decimal
+
+    init(from oldFactor: Decimal, to newFactor: Decimal) {
+        amountScale = oldFactor / newFactor
+        ratioScale = newFactor / oldFactor
     }
 
-    /// Rounds an actual-insulin basal rate to the nearest rate the pump can
-    /// deliver, expressed in actual insulin units again.
-    func roundToSupportedBasalRate(unitsPerHour: Double, insulinConcentration factor: Double) -> Double {
-        roundToSupportedBasalRate(unitsPerHour: unitsPerHour / factor) * factor
+    var isIdentity: Bool {
+        amountScale == 1
     }
 }

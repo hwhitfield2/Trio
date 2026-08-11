@@ -61,8 +61,11 @@ struct MealPhotoResultView: View {
                     Text(result.mealName).font(.headline)
 
                     HStack(spacing: 4) {
-                        Image(systemName: result.scaleReferenceDetected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(result.scaleReferenceDetected ? .green : .orange)
+                        Image(
+                            systemName: result
+                                .scaleReferenceDetected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                        )
+                        .foregroundStyle(result.scaleReferenceDetected ? .green : .orange)
                         Text(
                             result.scaleReferenceDetected
                                 ? String(localized: "Scale reference found")

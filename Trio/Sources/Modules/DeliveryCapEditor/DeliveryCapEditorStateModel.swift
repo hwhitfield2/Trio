@@ -6,18 +6,48 @@ extension DeliveryCapEditor {
     @Observable final class StateModel: BaseStateModel<Provider> {
         @ObservationIgnored @Injected() private var storage: FileStorage!
 
+        /// Displayed in actual insulin units; stored in pumped volume units
+        /// (the loop enforces the caps against pumped quantities).
         var windows: [DeliveryCapWindow] = []
+
+        /// Stepper increment in actual insulin units — the pump's 0.05 U volume
+        /// step carries proportionally less insulin when diluted (0.005 U at U-10).
+        var stepSize: Double {
+            0.05 * settingsManager.settings.insulinConcentrationFactor
+        }
+
+        var maxBasalUpperBound: Double {
+            10 * settingsManager.settings.insulinConcentrationFactor
+        }
+
+        var maxSMBUpperBound: Double {
+            5 * settingsManager.settings.insulinConcentrationFactor
+        }
 
         override func subscribe() {
             load()
         }
 
         func load() {
-            windows = storage.retrieve(OpenAPS.Settings.deliveryCaps, as: [DeliveryCapWindow].self) ?? []
+            let settings = settingsManager.settings
+            windows = (storage.retrieve(OpenAPS.Settings.deliveryCaps, as: [DeliveryCapWindow].self) ?? [])
+                .map { window in
+                    var window = window
+                    window.maxBasalRate = settings.realInsulinAmount(fromVolume: window.maxBasalRate)
+                    window.maxSMB = settings.realInsulinAmount(fromVolume: window.maxSMB)
+                    return window
+                }
         }
 
         func save() {
-            storage.save(windows, as: OpenAPS.Settings.deliveryCaps)
+            let settings = settingsManager.settings
+            let stored = windows.map { window -> DeliveryCapWindow in
+                var window = window
+                window.maxBasalRate = settings.volumeInsulinAmount(fromReal: window.maxBasalRate)
+                window.maxSMB = settings.volumeInsulinAmount(fromReal: window.maxSMB)
+                return window
+            }
+            storage.save(stored, as: OpenAPS.Settings.deliveryCaps)
         }
 
         func addWindow() {

@@ -152,13 +152,6 @@ final class BaseAPSManager: APSManager, Injectable {
         set { settingsManager.settings = newValue }
     }
 
-    /// Fraction of insulin in the reservoir fluid (1 = U-100, 0.1 = U-10).
-    /// All amounts handled by this manager are actual insulin units; they are
-    /// converted to pump volume units only when commanding the pump.
-    private var insulinConcentration: Double {
-        settingsManager.settings.insulinConcentrationFactor
-    }
-
     init(resolver: Resolver) {
         injectServices(resolver)
         openAPS = OpenAPS(storage: storage, tddStorage: tddStorage)
@@ -600,12 +593,8 @@ final class BaseAPSManager: APSManager, Injectable {
 
     func roundBolus(amount: Decimal) -> Decimal {
         guard let pump = pumpManager else { return amount }
-        let concentration = insulinConcentration
-        let rounded = Decimal(pump.roundToSupportedBolusVolume(units: Double(amount), insulinConcentration: concentration))
-        let maxBolus = Decimal(pump.roundToSupportedBolusVolume(
-            units: Double(settingsManager.pumpSettings.maxBolus),
-            insulinConcentration: concentration
-        ))
+        let rounded = Decimal(pump.roundToSupportedBolusVolume(units: Double(amount)))
+        let maxBolus = Decimal(pump.roundToSupportedBolusVolume(units: Double(settingsManager.pumpSettings.maxBolus)))
         return min(rounded, maxBolus)
     }
 
@@ -634,16 +623,12 @@ final class BaseAPSManager: APSManager, Injectable {
             return
         }
 
-        // `amount` is actual insulin units; the pump meters volume and assumes
-        // U-100, so command it with the equivalent volume for diluted insulin.
-        let concentration = insulinConcentration
-        let pumpVolume = pump.roundToSupportedBolusVolume(units: amount / concentration)
-        let roundedAmount = pumpVolume * concentration
+        let roundedAmount = pump.roundToSupportedBolusVolume(units: amount)
 
-        debug(.apsManager, "Enact bolus \(roundedAmount) U (pump volume \(pumpVolume)), manual \(!isSMB)")
+        debug(.apsManager, "Enact bolus \(roundedAmount), manual \(!isSMB)")
 
         do {
-            try await pump.enactBolus(units: pumpVolume, automatic: isSMB)
+            try await pump.enactBolus(units: roundedAmount, automatic: isSMB)
             debug(.apsManager, "Bolus succeeded")
             bolusProgress.send(0)
             callback?(true, String(localized: "Bolus enacted successfully.", comment: "Success message for enacting a bolus"))
@@ -725,14 +710,10 @@ final class BaseAPSManager: APSManager, Injectable {
 
         debug(.apsManager, "Enact temp basal \(rate) - \(duration)")
 
-        // `rate` is actual insulin units per hour; the pump meters volume and
-        // assumes U-100, so command it with the equivalent volume rate.
-        let concentration = insulinConcentration
-        let pumpVolumeRate = pump.roundToSupportedBasalRate(unitsPerHour: rate / concentration)
-        let roundedAmout = pumpVolumeRate * concentration
+        let roundedAmout = pump.roundToSupportedBasalRate(unitsPerHour: rate)
 
         do {
-            try await pump.enactTempBasal(unitsPerHour: pumpVolumeRate, for: duration)
+            try await pump.enactTempBasal(unitsPerHour: roundedAmout, for: duration)
             debug(.apsManager, "Temp Basal succeeded")
             callback?(
                 true,
@@ -829,8 +810,7 @@ final class BaseAPSManager: APSManager, Injectable {
         case .active:
             return TempBasal(duration: 0, rate: 0, temp: .absolute, timestamp: date)
         case let .tempBasal(dose):
-            // The pump reports volume units; convert to actual insulin units.
-            let rate = Decimal(dose.unitsPerHour) * settingsManager.settings.insulinConcentrationFactorDecimal
+            let rate = Decimal(dose.unitsPerHour)
             let durationMin = max(0, Int((dose.endDate.timeIntervalSince1970 - date.timeIntervalSince1970) / 60))
             return TempBasal(duration: durationMin, rate: rate, temp: .absolute, timestamp: date)
         default:
@@ -921,13 +901,11 @@ final class BaseAPSManager: APSManager, Injectable {
     }
 
     private func performBasal(pump: PumpManager, rate: NSDecimalNumber, duration: TimeInterval) async throws {
-        // Determination rates are actual insulin units; convert to pump volume.
-        try await pump.enactTempBasal(unitsPerHour: Double(truncating: rate) / insulinConcentration, for: duration)
+        try await pump.enactTempBasal(unitsPerHour: Double(truncating: rate), for: duration)
     }
 
     private func performBolus(pump: PumpManager, smbToDeliver: NSDecimalNumber) async throws {
-        // Determination SMBs are actual insulin units; convert to pump volume.
-        try await pump.enactBolus(units: Double(truncating: smbToDeliver) / insulinConcentration, automatic: true)
+        try await pump.enactBolus(units: Double(truncating: smbToDeliver), automatic: true)
         bolusProgress.send(0)
     }
 

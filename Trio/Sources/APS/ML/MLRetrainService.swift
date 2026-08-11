@@ -21,8 +21,8 @@ final class MLRetrainService {
     /// Compute bounds so year-scale history stays phone-friendly: folds test the
     /// most recent eligible days and training sets are capped to the newest samples
     static let maxWalkForwardTestDays = 14
-    static let maxFoldTrainingSamples = 10_000
-    static let maxTrainingSamples = 25_000
+    static let maxFoldTrainingSamples = 10000
+    static let maxTrainingSamples = 25000
     static let minPriorSamplesPerDay = 80
     static let minLowRegionSamples = 20
     static let minChampionComparisonSamples = 48
@@ -44,13 +44,14 @@ final class MLRetrainService {
 
     /// Builds a candidate and its gate report. Fire-and-forget; the outcome
     /// lands in MLModelStore (report always, candidate only if gates pass).
-    func retrainNow(completion: (@Sendable (MLEvalReport?) -> Void)? = nil) {
+    func retrainNow(completion: (@Sendable(MLEvalReport?) -> Void)? = nil) {
         let shouldRun = stateQueue.sync { () -> Bool in
             guard !isRunning else { return false }
             isRunning = true
             return true
         }
-        guard shouldRun else { completion?(nil); return }
+        guard shouldRun else { completion?(nil)
+            return }
 
         Task(priority: .utility) {
             defer { self.stateQueue.sync { self.isRunning = false } }
@@ -191,7 +192,8 @@ final class MLRetrainService {
 
         func mae<S: Sequence>(_ pairs: S) -> Double? where S.Element == (Double, Double) {
             var total = 0.0, n = 0
-            for (a, b) in pairs { total += abs(a - b); n += 1 }
+            for (a, b) in pairs { total += abs(a - b)
+                n += 1 }
             return n > 0 ? total / Double(n) : nil
         }
 

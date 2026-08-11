@@ -32,7 +32,7 @@ extension TandemPumpManager {
     static let maxIntegrationInterval: TimeInterval = .minutes(15)
 
     /// Handle a temp-basal request as an accumulated microbolus. commandQueue only.
-    func enactMicrobolusBasal(unitsPerHour: Double, duration: TimeInterval, completion: @escaping (PumpManagerError?) -> Void) {
+    func enactMicrobolusBasal(unitsPerHour: Double, duration _: TimeInterval, completion: @escaping (PumpManagerError?) -> Void) {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         let now = Date()
 
@@ -69,7 +69,10 @@ extension TandemPumpManager {
         if let last = state.lastBasalUpdate {
             let elapsed = now.timeIntervalSince(last)
             if elapsed > Self.maxIntegrationInterval {
-                log.error("Basal integration gap of \(Int(elapsed))s exceeds cap; resetting accrual (was \(state.owedBasalInsulin) U)")
+                log
+                    .error(
+                        "Basal integration gap of \(Int(elapsed))s exceeds cap; resetting accrual (was \(state.owedBasalInsulin) U)"
+                    )
                 state.owedBasalInsulin = 0
             } else if elapsed > 0 {
                 state.owedBasalInsulin += max(0, state.lastBasalRate) * elapsed / 3600
@@ -96,7 +99,7 @@ extension TandemPumpManager {
         // Round owed down to a deliverable 0.001 U (1 milliunit) pulse, capped.
         // The +1e-6 nudge keeps binary-float artifacts from flooring one
         // milliunit low.
-        var deliverable = (state.owedBasalInsulin * 1000 + 1e-6).rounded(.down) / 1000
+        var deliverable = (state.owedBasalInsulin * 1000 + 1E-6).rounded(.down) / 1000
         deliverable = min(deliverable, Self.maxSingleMicrobolusUnits)
         let milliunits = UInt32((deliverable * 1000).rounded())
 
@@ -203,7 +206,10 @@ extension TandemPumpManager {
         let now = Date()
         let dose = DoseEntry(type: .suspend, startDate: now, value: 0, unit: .units)
         let raw = withUnsafeBytes(of: UInt32(now.timeIntervalSince1970).littleEndian) { Data($0) } + Data([0x5B])
-        emitPumpEvents([NewPumpEvent(date: now, dose: dose, raw: raw, title: "Suspend", type: .suspend)], replacePendingEvents: false)
+        emitPumpEvents(
+            [NewPumpEvent(date: now, dose: dose, raw: raw, title: "Suspend", type: .suspend)],
+            replacePendingEvents: false
+        )
         playFeedbackTone(.stateChange)
         notifyStateDidChange()
         completion(nil)
@@ -219,7 +225,10 @@ extension TandemPumpManager {
         let now = Date()
         let dose = DoseEntry(type: .resume, startDate: now, value: 0, unit: .units)
         let raw = withUnsafeBytes(of: UInt32(now.timeIntervalSince1970).littleEndian) { Data($0) } + Data([0x5C])
-        emitPumpEvents([NewPumpEvent(date: now, dose: dose, raw: raw, title: "Resume", type: .resume)], replacePendingEvents: false)
+        emitPumpEvents(
+            [NewPumpEvent(date: now, dose: dose, raw: raw, title: "Resume", type: .resume)],
+            replacePendingEvents: false
+        )
         playFeedbackTone(.stateChange)
         notifyStateDidChange()
         completion(nil)

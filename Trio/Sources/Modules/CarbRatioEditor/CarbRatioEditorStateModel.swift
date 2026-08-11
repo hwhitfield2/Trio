@@ -74,12 +74,16 @@ extension CarbRatioEditor {
         }
 
         override func subscribe() {
+            // Stored ratios are grams per *pumped* unit; the editor displays
+            // grams per unit of actual insulin.
+            let settings = settingsManager.settings
             items = provider.profile.schedule.map { value in
                 let timeIndex = timeValues.firstIndex(of: Double(value.offset * 60)) ?? 0
+                let realRatio = settings.realInsulinRatio(fromVolume: value.ratio)
                 // Snap stored values that are off the tiered grid to the closest
                 // picker value instead of silently defaulting to the 1 g/U minimum
-                let rateIndex = rateValues.firstIndex(of: value.ratio)
-                    ?? rateValues.findClosestIndex(to: value.ratio) ?? 0
+                let rateIndex = rateValues.firstIndex(of: realRatio)
+                    ?? rateValues.findClosestIndex(to: realRatio) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
 
@@ -103,13 +107,15 @@ extension CarbRatioEditor {
             guard hasChanges else { return }
             shouldDisplaySaving = true
 
+            let settings = settingsManager.settings
             let schedule = items.enumerated().map { _, item -> CarbRatioEntry in
                 let fotmatter = DateFormatter()
                 fotmatter.timeZone = TimeZone(secondsFromGMT: 0)
                 fotmatter.dateFormat = "HH:mm:ss"
                 let date = Date(timeIntervalSince1970: self.timeValues[item.timeIndex])
                 let minutes = Int(date.timeIntervalSince1970 / 60)
-                let rate = self.rateValues[item.rateIndex]
+                // Displayed values are per actual insulin unit; store per pumped unit.
+                let rate = settings.volumeInsulinRatio(fromReal: self.rateValues[item.rateIndex])
                 return CarbRatioEntry(start: fotmatter.string(from: date), offset: minutes, ratio: rate)
             }
             let profile = CarbRatios(units: .grams, schedule: schedule)

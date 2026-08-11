@@ -155,7 +155,9 @@ final class TandemSettingsViewModel: ObservableObject {
                     } else {
                         self.testDoseResult = (
                             success: false,
-                            message: String(localized: "The pump did not accept the \(amountText) U test bolus: \(error.localizedDescription)")
+                            message: String(
+                                localized: "The pump did not accept the \(amountText) U test bolus: \(error.localizedDescription)"
+                            )
                         )
                     }
                 } else {
@@ -269,9 +271,12 @@ struct TandemSettingsView: View {
 
     private var statusSection: some View {
         Section(header: Text("Status")) {
-            row(String(localized: "Reservoir"), viewModel.state.reservoir > 0
-                ? "\(Int(viewModel.state.reservoir))\(viewModel.state.reservoirIsEstimate ? "+" : "") U"
-                : "-")
+            row(
+                String(localized: "Reservoir"),
+                viewModel.state.reservoir > 0
+                    ? "\(Int(viewModel.state.reservoir))\(viewModel.state.reservoirIsEstimate ? "+" : "") U"
+                    : "-"
+            )
             row(String(localized: "Battery"), viewModel.state.batteryPercent.map { "\($0)%" } ?? "-")
             row(String(localized: "Last sync"), viewModel.lastSyncText)
             HStack {
@@ -295,8 +300,10 @@ struct TandemSettingsView: View {
             header: Text("Delivery"),
             footer: Text(
                 viewModel.microbolusBasalEnabled
-                    ? "Microbolus-basal looping is on: Trio delivers all basal as automatic microboluses, driven by the basal rates in Trio's therapy settings. The pump's own basal profile must stay at 0 U/hr with Control-IQ off."
-                    : "Basal delivery is managed entirely by the pump\(viewModel.state.controlIQEnabled ? " (Control-IQ is on)" : ""). Trio records what the pump reports but cannot adjust basal on the t:slim X2, so closed loop is unavailable unless microbolus-basal looping is enabled below."
+                    ?
+                    "Microbolus-basal looping is on: Trio delivers all basal as automatic microboluses, driven by the basal rates in Trio's therapy settings. The pump's own basal profile must stay at 0 U/hr with Control-IQ off."
+                    :
+                    "Basal delivery is managed entirely by the pump\(viewModel.state.controlIQEnabled ? " (Control-IQ is on)" : ""). Trio records what the pump reports but cannot adjust basal on the t:slim X2, so closed loop is unavailable unless microbolus-basal looping is enabled below."
             )
         ) {
             row(
@@ -309,9 +316,12 @@ struct TandemSettingsView: View {
                 viewModel.state.lastSync == .distantPast ? "-" :
                     String(format: "%.2f U/hr", viewModel.state.profileBasalRate)
             )
-            row(String(localized: "Control-IQ"), viewModel.state.controlIQEnabled
-                ? String(localized: "On")
-                : String(localized: "Off"))
+            row(
+                String(localized: "Control-IQ"),
+                viewModel.state.controlIQEnabled
+                    ? String(localized: "On")
+                    : String(localized: "Off")
+            )
             if viewModel.state.suspended {
                 row(String(localized: "Delivery"), String(localized: "Suspended"))
             }
@@ -323,7 +333,10 @@ struct TandemSettingsView: View {
             header: Text("Remote bolus"),
             footer: viewModel.state.supportsRemoteBolus || viewModel.state.apiVersionMajor == 0
                 ? Text("Allows delivering manually confirmed boluses from Trio using the pump's mobile bolus feature.")
-                : Text("This pump's software (API \(viewModel.apiVersionText)) does not support remote bolus; software 7.6 is required.")
+                :
+                Text(
+                    "This pump's software (API \(viewModel.apiVersionText)) does not support remote bolus; software 7.6 is required."
+                )
         ) {
             Toggle(
                 String(localized: "Allow remote bolus"),
@@ -392,10 +405,12 @@ struct TandemSettingsView: View {
 
             if viewModel.microbolusBasalEnabled {
                 HStack(alignment: .top) {
-                    Image(systemName: viewModel.microbolusPreconditionsMet
-                        ? "checkmark.circle.fill"
-                        : "exclamationmark.triangle.fill")
-                        .foregroundColor(viewModel.microbolusPreconditionsMet ? .green : .orange)
+                    Image(
+                        systemName: viewModel.microbolusPreconditionsMet
+                            ? "checkmark.circle.fill"
+                            : "exclamationmark.triangle.fill"
+                    )
+                    .foregroundColor(viewModel.microbolusPreconditionsMet ? .green : .orange)
                     Text(viewModel.preconditionDetail)
                         .font(.footnote)
                         .foregroundColor(viewModel.microbolusPreconditionsMet ? .secondary : .orange)
