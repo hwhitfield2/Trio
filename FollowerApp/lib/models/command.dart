@@ -12,6 +12,10 @@ class TrioCommand {
     this.fat,
     this.overrideName,
     this.scheduledTime,
+    this.pushToken,
+    this.pushTransport,
+    this.pushBundleId,
+    this.pushEnvironment,
   });
 
   final String commandType;
@@ -27,6 +31,10 @@ class TrioCommand {
   final int? fat;
   final String? overrideName;
   final double? scheduledTime;
+  final String? pushToken;
+  final String? pushTransport;
+  final String? pushBundleId;
+  final String? pushEnvironment;
 
   factory TrioCommand.bolus(double units) => TrioCommand._(commandType: 'bolus', bolusAmount: units);
 
@@ -56,6 +64,24 @@ class TrioCommand {
 
   factory TrioCommand.cancelOverride() => TrioCommand._(commandType: 'cancel_override');
 
+  /// Asks the host to push a fresh status snapshot to this follower.
+  factory TrioCommand.statusRequest() => TrioCommand._(commandType: 'status_request');
+
+  /// Tells the host where to deliver encrypted status pushes.
+  factory TrioCommand.registerFollower({
+    required String pushToken,
+    required String pushTransport,
+    String? pushBundleId,
+    String? pushEnvironment,
+  }) =>
+      TrioCommand._(
+        commandType: 'register_follower',
+        pushToken: pushToken,
+        pushTransport: pushTransport,
+        pushBundleId: pushBundleId,
+        pushEnvironment: pushEnvironment,
+      );
+
   /// Builds the payload that gets encrypted. `user` identifies this follower
   /// in Trio's logs and notifications; `sequence` provides replay protection.
   Map<String, dynamic> toPayload({
@@ -77,6 +103,10 @@ class TrioCommand {
       if (fat != null) 'fat': fat,
       if (overrideName != null) 'overrideName': overrideName,
       if (scheduledTime != null) 'scheduled_time': scheduledTime,
+      if (pushToken != null) 'push_token': pushToken,
+      if (pushTransport != null) 'push_transport': pushTransport,
+      if (pushBundleId != null) 'push_bundle_id': pushBundleId,
+      if (pushEnvironment != null) 'push_environment': pushEnvironment,
     };
   }
 
@@ -98,6 +128,10 @@ class TrioCommand {
         return 'Start override "$overrideName"';
       case 'cancel_override':
         return 'Cancel override';
+      case 'status_request':
+        return 'Status refresh';
+      case 'register_follower':
+        return 'Push registration';
       default:
         return commandType;
     }
@@ -116,8 +150,8 @@ class CommandRecord {
   final String description;
   final DateTime sentAt;
 
-  /// Whether APNS accepted the push. Delivery to and execution on the host is
-  /// confirmed separately (host notifications / Nightscout).
+  /// Whether APNS accepted the push. Execution on the host is confirmed by
+  /// the status snapshot the host pushes back after handling the command.
   final bool accepted;
   final String? detail;
 

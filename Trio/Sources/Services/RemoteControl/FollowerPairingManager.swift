@@ -19,6 +19,18 @@ struct PairedFollower: Codable, Identifiable, Equatable {
     var lastSequence: Int
     var lastSeenAt: Date?
 
+    // Push address registered by the follower (register_follower command);
+    // used to deliver encrypted status snapshots from the host.
+    var pushToken: String?
+    /// "apns" (iOS follower) or "fcm" (Android follower).
+    var pushTransport: String?
+    /// APNS topic for iOS followers.
+    var pushBundleId: String?
+    /// "production" or "sandbox" for iOS followers.
+    var pushEnvironment: String?
+
+    var isPushRegistered: Bool { !(pushToken ?? "").isEmpty }
+
     /// Six-digit verification code derived from the secret. Shown on the host
     /// after creating a pairing and on the follower after scanning the QR code
     /// so the user can confirm both devices hold the same secret.
@@ -55,16 +67,6 @@ struct FollowerPairingBundle: Codable {
         }
     }
 
-    struct NightscoutInfo: Codable {
-        let url: String
-        let apiSecret: String?
-
-        enum CodingKeys: String, CodingKey {
-            case url
-            case apiSecret = "api_secret"
-        }
-    }
-
     struct Limits: Codable {
         let maxBolus: Decimal
         let maxCarbs: Decimal
@@ -84,8 +86,11 @@ struct FollowerPairingBundle: Codable {
     let hostName: String
     let secret: String
     let apns: APNSInfo
-    let nightscout: NightscoutInfo?
     let limits: Limits
+    /// Whether the host has an FCM service account configured. Android
+    /// followers need this for the status display; without it they can still
+    /// send commands but receive no data pushes.
+    let fcmAvailable: Bool
 
     enum CodingKeys: String, CodingKey {
         case version = "v"
@@ -95,8 +100,8 @@ struct FollowerPairingBundle: Codable {
         case hostName = "host_name"
         case secret
         case apns
-        case nightscout
         case limits
+        case fcmAvailable = "fcm_available"
     }
 
     static let pairingType = "trio-follower-pairing"
@@ -130,6 +135,7 @@ final class FollowerPairingManager: Injectable {
         static let apnsTeamId = "followerPairing.apnsTeamId"
         static let apnsKeyId = "followerPairing.apnsKeyId"
         static let apnsKey = "followerPairing.apnsKey"
+        static let fcmServiceAccount = "followerPairing.fcmServiceAccount"
     }
 
     @Injected() private var keychain: Keychain!
@@ -172,6 +178,26 @@ final class FollowerPairingManager: Injectable {
         queue.sync {
             var all = loadFollowers()
             all.removeAll { $0.id == id }
+            saveFollowers(all)
+        }
+    }
+
+    /// Stores the push address a follower registered so the host can deliver
+    /// encrypted status snapshots to it.
+    func updatePushRegistration(
+        followerId: String,
+        token: String,
+        transport: String,
+        bundleId: String?,
+        environment: String?
+    ) {
+        queue.sync {
+            var all = loadFollowers()
+            guard let index = all.firstIndex(where: { $0.id == followerId }) else { return }
+            all[index].pushToken = token
+            all[index].pushTransport = transport
+            all[index].pushBundleId = bundleId
+            all[index].pushEnvironment = environment
             saveFollowers(all)
         }
     }
@@ -220,6 +246,17 @@ final class FollowerPairingManager: Injectable {
         !apnsTeamId.isEmpty && !apnsKeyId.isEmpty && !apnsKey.isEmpty
     }
 
+    /// Raw Firebase service-account JSON used to push status to Android
+    /// followers over FCM. Optional — iOS followers use APNS.
+    var fcmServiceAccountJSON: String {
+        get { stringValue(forKey: StorageKeys.fcmServiceAccount) }
+        set { keychain.setValue(newValue, forKey: StorageKeys.fcmServiceAccount) }
+    }
+
+    var hasFCMCredentials: Bool {
+        FCMServiceAccount(json: fcmServiceAccountJSON) != nil
+    }
+
     // MARK: - Pairing bundle
 
     /// Builds the JSON string encoded into the pairing QR code for a follower.
@@ -229,14 +266,6 @@ final class FollowerPairingManager: Injectable {
         }
         guard hasAPNSCredentials else {
             throw FollowerPairingError.missingAPNSCredentials
-        }
-
-        var nightscout: FollowerPairingBundle.NightscoutInfo?
-        if let url = try? keychain.getValue(String.self, forKey: NightscoutConfig.Config.urlKey).get(),
-           let url = url, !url.isEmpty
-        {
-            let secret = (try? keychain.getValue(String.self, forKey: NightscoutConfig.Config.secretKey).get()) ?? nil
-            nightscout = FollowerPairingBundle.NightscoutInfo(url: url, apiSecret: secret)
         }
 
         let bundle = FollowerPairingBundle(
@@ -254,12 +283,12 @@ final class FollowerPairingManager: Injectable {
                 apnsKey: apnsKey,
                 production: UserDefaults.standard.bool(forKey: "isAPNSProduction")
             ),
-            nightscout: nightscout,
             limits: FollowerPairingBundle.Limits(
                 maxBolus: settings.pumpSettings.maxBolus,
                 maxCarbs: settings.settings.maxCarbs,
                 units: settings.settings.units.rawValue
-            )
+            ),
+            fcmAvailable: hasFCMCredentials
         )
 
         let encoder = JSONEncoder()

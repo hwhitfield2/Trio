@@ -10,19 +10,24 @@ therapy actions from anywhere:
 - **Temporary targets** (start and cancel)
 - **Overrides** (start and cancel presets defined on the host)
 
-It also shows live glucose, IOB and COB from the host's Nightscout site when
-one is configured.
+It also shows live glucose, IOB, COB, loop state and active targets/overrides
+— **pushed end-to-end encrypted straight from the host device**. There is no
+Nightscout and no other third-party data service anywhere in the loop.
 
 ## How it works
 
 ```
 Follower app ──(AES-256-GCM encrypted command over APNS HTTP/2)──▶ Apple ──▶ Trio host
-     │                                                                        │
-     └──────────────(read-only status via Nightscout REST)◀───────────────────┘
+     ▲                                                                        │
+     └──(AES-256-GCM encrypted status pushed via APNS (iOS) / FCM (Android))──┘
 ```
 
 - Commands are **end-to-end encrypted** with a per-follower secret created
   during pairing. Apple only relays an opaque blob.
+- The host pushes an encrypted **status snapshot** to every paired follower
+  on each glucose/loop update, right after every command (so you see the
+  effect immediately), and on demand via pull-to-refresh. Data exists only on
+  the host and paired followers — the push services carry ciphertext.
 - The host identifies the sender via `follower_id`, decrypts with that
   follower's key, checks the command timestamp (±10 min) **and** a strictly
   increasing sequence number, so captured pushes can never be replayed.
@@ -43,8 +48,8 @@ Follower app ──(AES-256-GCM encrypted command over APNS HTTP/2)──▶ App
    follower only if they match.
 
 The QR code carries the per-follower secret, the host's push address (APNS
-device token, bundle ID, environment), the APNS key, optional Nightscout
-credentials, and the host's safety limits — one scan, no manual secrets.
+device token, bundle ID, environment), the APNS key, and the host's safety
+limits — one scan, no manual secrets.
 Treat it like a password; never screenshot or share it. On the follower it is
 stored in the iOS Keychain / Android Keystore.
 
@@ -76,6 +81,12 @@ Then add the required platform permissions:
 <string>Confirm remote commands before they are sent.</string>
 ```
 
+Also enable, in Xcode → Runner target → Signing & Capabilities:
+
+- **Push Notifications**
+- **Background Modes → Remote notifications** (delivers the host's status
+  pushes while the app is in the background)
+
 **Android — `android/app/src/main/AndroidManifest.xml`** (mobile_scanner adds
 the camera permission automatically; biometric confirmation needs):
 
@@ -83,8 +94,10 @@ the camera permission automatically; biometric confirmation needs):
 <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 ```
 
-and `local_auth` requires `MainActivity` to extend `FlutterFragmentActivity`
-instead of `FlutterActivity`.
+`local_auth` requires `MainActivity` to extend `FlutterFragmentActivity`
+instead of `FlutterActivity`. For live status on Android, add your Firebase
+project's `google-services.json` to `android/app/` (see "Status pushes"
+below).
 
 Run on a device:
 
@@ -104,13 +117,32 @@ The command wire format is byte-compatible with Trio's
 root for the full protocol specification). If you change either side, change
 both and bump the pairing-bundle version.
 
+## Status pushes
+
+After pairing, the app automatically registers its push address with the host
+(`register_follower` command). From then on the host pushes encrypted status:
+
+- **iOS followers** receive background APNS pushes — no Firebase, no extra
+  setup. The host uses the same `.p8` key it already has for commands.
+- **Android followers** receive FCM data messages. This requires a one-time
+  setup: create a (free) Firebase project, add its `google-services.json` to
+  `android/app/` before building, and paste the project's *service-account
+  JSON* into the Trio host under Settings → Remote Control → Android
+  Followers. Without it, commands still work but no live status arrives.
+
+The home screen shows how fresh the host data is; pull to refresh sends a
+`status_request` and waits for the answering push.
+
 ## Limitations
 
-- Command *delivery* is confirmed (APNS accepted the push), but command
-  *execution* feedback comes from the host: Trio posts result notifications
-  and treatments to Nightscout, which this app surfaces on the status screen.
+- Command *delivery* is confirmed (APNS accepted the push); command
+  *execution* feedback arrives moments later in the status snapshot the host
+  pushes after handling every command.
 - Pump management, CGM setup, and settings changes are deliberately not
   remote-controllable — those require physical access to the host device.
 - The host must be online (the push wakes Trio in the background). Scheduled
   commands survive short offline windows via APNS storage, subject to the
   host's ±10 minute command freshness window.
+- iOS may throttle background status pushes when the follower app hasn't been
+  opened for a long time; opening the app and pulling to refresh always
+  fetches the current state.

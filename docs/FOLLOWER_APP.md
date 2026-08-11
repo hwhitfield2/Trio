@@ -14,6 +14,8 @@ command protocol shared between the host (Swift) and the follower (Dart).
 | Command payload | `Trio/Sources/Models/CommandPayload.swift` | `FollowerApp/lib/models/command.dart` |
 | Encryption | `Trio/Sources/Services/RemoteControl/SecureMessenger.swift` | `FollowerApp/lib/services/secure_messenger.dart` |
 | Command handling | `Trio/Sources/Services/RemoteControl/TrioRemoteControl.swift` | `FollowerApp/lib/services/command_service.dart` |
+| Status snapshot | `Trio/Sources/Services/RemoteControl/FollowerStatusPublisher.swift` | `FollowerApp/lib/models/status_snapshot.dart` |
+| Status delivery | `Trio/Sources/Services/RemoteControl/FollowerPushSender.swift` | `FollowerApp/lib/services/push_service.dart` / `status_service.dart` |
 
 ## Design goals
 
@@ -29,24 +31,32 @@ command protocol shared between the host (Swift) and the follower (Dart).
    LoopFollow-style shared secret.
 4. **Replay protection.** A strictly increasing per-follower sequence number
    on top of the existing ±10-minute timestamp window.
-5. **No new server infrastructure.** Commands ride the existing APNS path;
-   status display uses the existing Nightscout site. Android followers talk
-   to APNS directly (plain HTTPS/2) — no Firebase needed.
+5. **The host device is the data source.** Status (glucose, IOB, COB, loop
+   state, active targets/overrides) is read from the host's own storage and
+   pushed to followers end-to-end encrypted. No Nightscout or any other
+   third-party data service is involved.
+6. **No new server infrastructure.** Commands ride the existing APNS path;
+   status rides push services in the opposite direction (APNS for iOS
+   followers, FCM for Android followers). Android followers *send* commands
+   to APNS directly (plain HTTPS/2).
 
 ## Transport
 
 ```
-┌──────────────┐  E2E-encrypted command    ┌───────┐  background push   ┌──────────┐
-│ Follower app │ ─────────────────────────▶│ APNS  │ ──────────────────▶│ Trio host│
-│ (iOS/Android)│      (HTTPS/2, ES256 JWT) └───────┘  (encrypted blob)  │          │
-└──────┬───────┘                                                        └────┬─────┘
-       │                     glucose / IOB / COB / treatments                │
-       └────────────────────────◀── Nightscout ──◀───────────────────────────┘
+             commands: E2E-encrypted, HTTPS/2 + ES256 JWT
+┌──────────────┐ ──────────────────────────▶ ┌───────────┐ ─────▶ ┌──────────┐
+│ Follower app │                             │   APNS    │        │ Trio host│
+│ (iOS/Android)│ ◀───────────────────────────│ APNS/FCM  │ ◀───── │  device  │
+└──────────────┘   status snapshots:         └───────────┘        └──────────┘
+                   E2E-encrypted, pushed by the host on every
+                   glucose/loop update and on demand
 ```
 
-The follower authenticates to APNS with the developer account's `.p8` key
-(entered once on the host, delivered during pairing). Apple never sees
-plaintext commands — the payload is an opaque AES-GCM blob.
+Both directions carry only opaque AES-256-GCM blobs; Apple/Google relay
+ciphertext. The follower authenticates to APNS with the developer account's
+`.p8` key (entered once on the host, delivered during pairing). The host
+pushes status to iOS followers over APNS with that same key, and to Android
+followers over FCM using an optional Firebase service-account credential.
 
 ## Pairing
 
@@ -84,15 +94,16 @@ the code is only rendered on the host's screen during pairing.
     "apns_key": "<contents of the .p8 file>",
     "production": true
   },
-  "nightscout": { "url": "https://...", "api_secret": "<optional>" },
-  "limits": { "max_bolus": 6.5, "max_carbs": 120, "units": "mg/dL" }
+  "limits": { "max_bolus": 6.5, "max_carbs": 120, "units": "mg/dL" },
+  "fcm_available": false
 }
 ```
 
-`nightscout` is omitted when the host has no Nightscout configured; the
-follower then works command-only. `limits` mirrors the host's settings at
-pairing time and is enforced in the follower UI as a first gate — the host
-remains the authority and re-validates every command.
+`limits` mirrors the host's settings at pairing time and is enforced in the
+follower UI as a first gate — the host remains the authority and re-validates
+every command; every status snapshot carries the live limits, which take
+precedence on the follower. `fcm_available` tells Android followers whether
+the host can push status to them (see Status channel below).
 
 ### Verification code
 
@@ -131,9 +142,13 @@ Trio's existing `CommandPayload` JSON with one addition:
 | --- | --- | --- |
 | `user` | string | Follower's name; appears in host logs/notifications |
 | `timestamp` | number | Unix seconds; host accepts ±600 s |
-| `command_type` | string | `bolus`, `meal`, `temp_target`, `cancel_temp_target`, `start_override`, `cancel_override` |
+| `command_type` | string | `bolus`, `meal`, `temp_target`, `cancel_temp_target`, `start_override`, `cancel_override`, `status_request`, `register_follower` |
 | `sequence` | int | **New.** Required on the follower path; strictly increasing per follower |
 | `bolus_amount`, `carbs`, `fat`, `protein`, `target`, `duration`, `overrideName`, `scheduled_time` | | As before (`target` in mg/dL, `duration` minutes) |
+| `push_token`, `push_transport`, `push_bundle_id`, `push_environment` | string | `register_follower` only: where the host should deliver status pushes (`push_transport`: `apns` or `fcm`) |
+
+`status_request` and `register_follower` are follower-path only (they require
+a `follower_id` envelope) and are rejected on the legacy shared-secret path.
 
 ### Replay protection
 
@@ -146,9 +161,60 @@ store was destroyed.
 
 ### Execution feedback
 
-APNS acceptance only proves hand-off to Apple. Actual results surface as
-Trio's existing return notifications and as Nightscout treatments, which the
-follower shows on its status screen.
+APNS acceptance only proves hand-off to Apple. After every follower command
+the host pushes a fresh status snapshot to that follower, so the effect
+(updated IOB/COB, active target/override) is visible within seconds.
+
+## Status channel (host → follower)
+
+The follower's only data source is the host device itself.
+
+1. After pairing (and whenever the OS rotates its push token), the follower
+   sends `register_follower` with its push address. The host stores it on the
+   `PairedFollower` record.
+2. The host observes its own glucose and loop-determination updates
+   (`GlucoseObserver` / `DeterminationObserver`) and pushes an encrypted
+   status snapshot to every registered follower, throttled to at most one per
+   minute. It also pushes immediately after handling a follower command and
+   in answer to `status_request` (the follower's pull-to-refresh).
+3. Delivery: iOS followers receive a background APNS push sent with the same
+   `.p8` key used for commands (with an automatic one-shot sandbox/production
+   retry, since debug follower builds register sandbox tokens); Android
+   followers receive an FCM data message, authenticated with a Firebase
+   service-account JSON the host user can paste in Settings → Remote Control.
+   Without that credential Android followers still send commands but get no
+   status pushes (`fcm_available: false` in the pairing bundle warns them).
+
+### Status envelope
+
+APNS: `{"aps": {"content-available": 1}, "encrypted_status": "...", "follower_id": "..."}`
+(background push, priority 5). FCM: a data-only message with the same
+`encrypted_status` / `follower_id` keys.
+
+### Status snapshot (encrypted plaintext)
+
+Encrypted exactly like commands, with the same per-follower key:
+
+```json
+{
+  "type": "status",
+  "timestamp": 1723400000,
+  "units": "mg/dL",
+  "readings": [ {"sgv": 104, "date": 1723399700, "direction": "Flat"}, ... ],
+  "iob": 1.25,
+  "cob": 15,
+  "last_loop": 1723399900,
+  "eventual_bg": 120,
+  "temp_target": { "target": 140, "name": "Exercise", "started_at": 1723398000, "duration": 120 },
+  "override": { "name": "Sports", "started_at": 1723398000, "duration": 60 },
+  "max_bolus": 6.5,
+  "max_carbs": 120
+}
+```
+
+`readings` is newest-first, up to 6 hours, always mg/dL. The follower ignores
+snapshots older than the one it already has (out-of-order pushes) and marks
+data stale in the UI when the newest snapshot is older than 15 minutes.
 
 ## Revocation
 
@@ -167,9 +233,11 @@ follower shows on its status screen.
   in the follower app; the host user can revoke at any time; all commands are
   bounded by host-side safety limits.
 - **Push capture/replay**: defeated by AES-GCM (confidentiality/integrity)
-  plus sequence numbers (replay).
-- **Apple/network**: sees only ciphertext, sender metadata, and the target
-  device token.
-- **Nightscout credentials** in the bundle grant the same read/write access
-  the host already delegates to any follow setup; omit Nightscout on the host
-  if that is not acceptable.
+  plus sequence numbers (replay). Status snapshots are read-only; the
+  follower still rejects stale and out-of-order snapshots by timestamp.
+- **Apple/Google/network**: see only ciphertext, sender metadata, and the
+  target push token. There is no third-party data store — status exists only
+  on the host, in transit as ciphertext, and on the paired follower.
+- **Push-registration hijack** would require a valid follower secret and a
+  fresh sequence number (registration is an authenticated command); revoking
+  the follower kills both commands and status pushes at once.

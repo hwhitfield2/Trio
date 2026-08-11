@@ -29,6 +29,16 @@ struct CommandPayload: Decodable, Sendable {
     var sequence: Int?
     var returnNotification: ReturnNotificationInfo?
 
+    // Follower push registration (register_follower command). The follower
+    // tells the host where to deliver encrypted status pushes.
+    var pushToken: String?
+    /// "apns" (iOS follower) or "fcm" (Android follower).
+    var pushTransport: String?
+    /// Bundle identifier of the follower app (APNS topic; iOS followers only).
+    var pushBundleId: String?
+    /// "production" or "sandbox" (iOS followers only).
+    var pushEnvironment: String?
+
     struct ReturnNotificationInfo: Decodable, Sendable {
         let productionEnvironment: Bool
         let deviceToken: String
@@ -61,6 +71,10 @@ struct CommandPayload: Decodable, Sendable {
         case scheduledTime = "scheduled_time"
         case sequence
         case returnNotification = "return_notification"
+        case pushToken = "push_token"
+        case pushTransport = "push_transport"
+        case pushBundleId = "push_bundle_id"
+        case pushEnvironment = "push_environment"
     }
 
     func humanReadableDescription() -> String {
@@ -96,6 +110,10 @@ struct CommandPayload: Decodable, Sendable {
             }
         case .cancelOverride:
             description += "Cancel Override command."
+        case .statusRequest:
+            description += "Status request."
+        case .registerFollower:
+            description += "Follower push registration (\(pushTransport ?? "unknown transport"))."
         }
 
         if let scheduledTime = scheduledTime {
@@ -119,6 +137,8 @@ extension TrioRemoteControl {
         case meal
         case startOverride = "start_override"
         case cancelOverride = "cancel_override"
+        case statusRequest = "status_request"
+        case registerFollower = "register_follower"
 
         var description: String {
             switch self {
@@ -134,6 +154,10 @@ extension TrioRemoteControl {
                 return "Start Override"
             case .cancelOverride:
                 return "Cancel Override"
+            case .statusRequest:
+                return "Status Request"
+            case .registerFollower:
+                return "Register Follower"
             }
         }
     }

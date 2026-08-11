@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../services/nightscout_service.dart';
+import '../models/status_snapshot.dart';
 
-/// Minimal dependency-free glucose sparkline for the last few hours.
+/// Minimal dependency-free glucose sparkline for the readings pushed by the
+/// host (last few hours).
 class GlucoseChart extends StatelessWidget {
-  const GlucoseChart({super.key, required this.entries, this.mmol = false});
+  const GlucoseChart({super.key, required this.readings});
 
-  final List<GlucoseEntry> entries;
-  final bool mmol;
+  final List<GlucoseReading> readings;
 
   @override
   Widget build(BuildContext context) {
@@ -15,8 +15,7 @@ class GlucoseChart extends StatelessWidget {
       height: 140,
       child: CustomPaint(
         painter: _GlucosePainter(
-          entries: entries,
-          lineColor: Theme.of(context).colorScheme.primary,
+          readings: readings,
           gridColor: Theme.of(context).colorScheme.outlineVariant,
           inRangeColor: Colors.green,
           lowColor: Colors.red,
@@ -30,16 +29,14 @@ class GlucoseChart extends StatelessWidget {
 
 class _GlucosePainter extends CustomPainter {
   _GlucosePainter({
-    required this.entries,
-    required this.lineColor,
+    required this.readings,
     required this.gridColor,
     required this.inRangeColor,
     required this.lowColor,
     required this.highColor,
   });
 
-  final List<GlucoseEntry> entries;
-  final Color lineColor;
+  final List<GlucoseReading> readings;
   final Color gridColor;
   final Color inRangeColor;
   final Color lowColor;
@@ -52,14 +49,14 @@ class _GlucosePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (entries.isEmpty) return;
+    if (readings.isEmpty) return;
 
-    final sorted = [...entries]..sort((a, b) => a.date.compareTo(b.date));
+    final sorted = [...readings]..sort((a, b) => a.date.compareTo(b.date));
     final start = sorted.first.date.millisecondsSinceEpoch.toDouble();
     final end = sorted.last.date.millisecondsSinceEpoch.toDouble();
     final span = (end - start).clamp(1.0, double.infinity);
 
-    double x(GlucoseEntry e) => (e.date.millisecondsSinceEpoch - start) / span * size.width;
+    double x(GlucoseReading e) => (e.date.millisecondsSinceEpoch - start) / span * size.width;
     double y(double sgv) =>
         size.height - ((sgv.clamp(_minSgv, _maxSgv) - _minSgv) / (_maxSgv - _minSgv) * size.height);
 
@@ -70,15 +67,15 @@ class _GlucosePainter extends CustomPainter {
       canvas.drawLine(Offset(0, y(line)), Offset(size.width, y(line)), gridPaint);
     }
 
-    for (final entry in sorted) {
-      final sgv = entry.sgv.toDouble();
+    for (final reading in sorted) {
+      final sgv = reading.sgv.toDouble();
       final color = sgv < _lowLine
           ? lowColor
           : sgv > _highLine
               ? highColor
               : inRangeColor;
       canvas.drawCircle(
-        Offset(x(entry), y(sgv)),
+        Offset(x(reading), y(sgv)),
         2.5,
         Paint()..color = color,
       );
@@ -86,5 +83,5 @@ class _GlucosePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GlucosePainter oldDelegate) => oldDelegate.entries != entries;
+  bool shouldRepaint(covariant _GlucosePainter oldDelegate) => oldDelegate.readings != readings;
 }

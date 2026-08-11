@@ -33,17 +33,27 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: const Text('Pairing verification code'),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.cloud),
-                  title: Text(bundle.nightscout?.url ?? 'Not configured'),
-                  subtitle: const Text('Nightscout (status display)'),
+                  leading: const Icon(Icons.podcasts),
+                  title: Text(
+                    state.snapshot != null
+                        ? 'Receiving encrypted status from the host'
+                        : 'Waiting for the first status push from the host',
+                  ),
+                  subtitle: const Text('Data source: the Trio host device (no Nightscout)'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.speed),
                   title: Text(
-                    'Max bolus ${bundle.limits.maxBolus.toStringAsFixed(1)} U · '
-                    'Max carbs ${bundle.limits.maxCarbs.toStringAsFixed(0)} g',
+                    'Max bolus ${state.maxBolus.toStringAsFixed(1)} U · '
+                    'Max carbs ${state.maxCarbs.toStringAsFixed(0)} g',
                   ),
                   subtitle: const Text('Limits received from the host'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.notifications_active),
+                  title: const Text('Re-register for status pushes'),
+                  subtitle: const Text('Use this if the status stopped updating'),
+                  onTap: () => state.registerPush(force: true),
                 ),
                 const Divider(),
                 ListTile(

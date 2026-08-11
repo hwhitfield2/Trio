@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../models/command.dart';
+import '../state/app_state.dart';
 import '../widgets/confirm_command.dart';
 
 class BolusScreen extends StatefulWidget {
-  const BolusScreen({super.key, required this.maxBolus});
-
-  final double maxBolus;
+  const BolusScreen({super.key});
 
   @override
   State<BolusScreen> createState() => _BolusScreenState();
@@ -24,15 +24,17 @@ class _BolusScreenState extends State<BolusScreen> {
     super.dispose();
   }
 
+  double get _maxBolus => context.read<AppState>().maxBolus;
+
   Future<void> _send() async {
     final value = double.tryParse(_controller.text.replaceAll(',', '.'));
     if (value == null || value <= 0) {
       setState(() => _error = 'Enter a bolus amount in units.');
       return;
     }
-    if (value > widget.maxBolus) {
+    if (value > _maxBolus) {
       setState(() => _error =
-          'The host allows at most ${widget.maxBolus.toStringAsFixed(1)} U per bolus.');
+          'The host allows at most ${_maxBolus.toStringAsFixed(1)} U per bolus.');
       return;
     }
     setState(() {
@@ -66,7 +68,7 @@ class _BolusScreenState extends State<BolusScreen> {
               decoration: InputDecoration(
                 labelText: 'Bolus amount (U)',
                 helperText:
-                    'Host limit: ${widget.maxBolus.toStringAsFixed(1)} U. The host re-checks '
+                    'Host limit: ${_maxBolus.toStringAsFixed(1)} U. The host re-checks '
                     'this and all other safety limits before delivering.',
                 errorText: _error,
                 border: const OutlineInputBorder(),
@@ -76,8 +78,8 @@ class _BolusScreenState extends State<BolusScreen> {
             const SizedBox(height: 16),
             Text(
               'The bolus is only delivered after Trio\'s own safety validation '
-              '(max bolus, max IOB, recent boluses). You will see the result in '
-              'Nightscout and on the host.',
+              '(max bolus, max IOB, recent boluses). The host pushes an updated '
+              'status right after, so the result appears here within seconds.',
               style: theme.textTheme.bodySmall,
             ),
             const Spacer(),

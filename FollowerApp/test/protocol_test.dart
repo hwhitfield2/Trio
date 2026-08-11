@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trio_follower/models/command.dart';
 import 'package:trio_follower/models/pairing_bundle.dart';
+import 'package:trio_follower/models/status_snapshot.dart';
 import 'package:trio_follower/services/secure_messenger.dart';
 
 const _sampleBundle = '''
@@ -21,8 +22,8 @@ const _sampleBundle = '''
     "apns_key": "-----BEGIN PRIVATE KEY-----\\nMIG...\\n-----END PRIVATE KEY-----",
     "production": true
   },
-  "nightscout": {"url": "https://ns.example.com", "api_secret": "hunter2hunter2"},
-  "limits": {"max_bolus": 6.5, "max_carbs": 120, "units": "mg/dL"}
+  "limits": {"max_bolus": 6.5, "max_carbs": 120, "units": "mg/dL"},
+  "fcm_available": true
 }
 ''';
 
@@ -35,7 +36,7 @@ void main() {
       expect(bundle.hostName, "Kid's iPhone");
       expect(bundle.apns.deviceToken, 'abcdef0123456789');
       expect(bundle.apns.production, isTrue);
-      expect(bundle.nightscout?.url, 'https://ns.example.com');
+      expect(bundle.fcmAvailable, isTrue);
       expect(bundle.limits.maxBolus, 6.5);
       // Pinned vector — TrioTests/FollowerPairingTests.swift asserts the same
       // code for the same secret on the host side.
@@ -96,6 +97,64 @@ void main() {
         TrioCommand.cancelOverride().toPayload(user: 'Mom', sequence: 4)['command_type'],
         'cancel_override',
       );
+    });
+
+    test('status request and push registration commands', () {
+      expect(
+        TrioCommand.statusRequest().toPayload(user: 'Mom', sequence: 5)['command_type'],
+        'status_request',
+      );
+
+      final register = TrioCommand.registerFollower(
+        pushToken: 'abc123',
+        pushTransport: 'apns',
+        pushBundleId: 'org.nightscout.triofollower',
+        pushEnvironment: 'production',
+      ).toPayload(user: 'Mom', sequence: 6);
+      expect(register['command_type'], 'register_follower');
+      expect(register['push_token'], 'abc123');
+      expect(register['push_transport'], 'apns');
+      expect(register['push_bundle_id'], 'org.nightscout.triofollower');
+      expect(register['push_environment'], 'production');
+    });
+  });
+
+  group('StatusSnapshot', () {
+    test('parses the host status payload', () {
+      final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      final snapshot = StatusSnapshot.fromJson({
+        'type': 'status',
+        'timestamp': now,
+        'units': 'mg/dL',
+        'readings': [
+          {'sgv': 104, 'date': now - 60, 'direction': 'Flat'},
+          {'sgv': 100, 'date': now - 360, 'direction': 'FortyFiveUp'},
+        ],
+        'iob': 1.25,
+        'cob': 15,
+        'last_loop': now - 120,
+        'eventual_bg': 120,
+        'temp_target': {'target': 140, 'name': 'Exercise', 'started_at': now - 600, 'duration': 120},
+        'override': null,
+        'max_bolus': 6.5,
+        'max_carbs': 120,
+      });
+
+      expect(snapshot, isNotNull);
+      expect(snapshot!.latest?.sgv, 104);
+      expect(snapshot.latest?.trendArrow, '→');
+      expect(snapshot.delta, 4);
+      expect(snapshot.iob, 1.25);
+      expect(snapshot.cob, 15);
+      expect(snapshot.tempTarget?.target, 140);
+      expect(snapshot.tempTarget?.until, isNotNull);
+      expect(snapshot.override, isNull);
+      expect(snapshot.maxBolus, 6.5);
+    });
+
+    test('rejects non-status payloads', () {
+      expect(StatusSnapshot.fromJson({'type': 'other', 'timestamp': 1.0}), isNull);
+      expect(StatusSnapshot.fromJson({'type': 'status'}), isNull);
     });
   });
 

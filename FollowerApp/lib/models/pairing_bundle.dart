@@ -16,7 +16,7 @@ class PairingBundle {
     required this.secret,
     required this.apns,
     required this.limits,
-    this.nightscout,
+    this.fcmAvailable = false,
   });
 
   static const pairingType = 'trio-follower-pairing';
@@ -34,8 +34,11 @@ class PairingBundle {
   final String secret;
 
   final ApnsInfo apns;
-  final NightscoutInfo? nightscout;
   final CommandLimits limits;
+
+  /// Whether the host has FCM configured. Android followers receive status
+  /// pushes only when this is true; commands work regardless.
+  final bool fcmAvailable;
 
   /// Six-digit code derived from the secret, shown to the user after scanning
   /// so they can compare it against the code on the host screen.
@@ -73,7 +76,6 @@ class PairingBundle {
       throw const PairingParseException('The pairing code is missing push notification details.');
     }
     final limitsMap = map['limits'];
-    final nsMap = map['nightscout'];
     try {
       return PairingBundle(
         version: version,
@@ -82,10 +84,10 @@ class PairingBundle {
         hostName: (map['host_name'] as String?) ?? 'Trio',
         secret: map['secret'] as String,
         apns: ApnsInfo.fromJson(apnsMap),
-        nightscout: nsMap is Map<String, dynamic> ? NightscoutInfo.fromJson(nsMap) : null,
         limits: limitsMap is Map<String, dynamic>
             ? CommandLimits.fromJson(limitsMap)
             : const CommandLimits(maxBolus: 10, maxCarbs: 250, units: 'mg/dL'),
+        fcmAvailable: (map['fcm_available'] as bool?) ?? false,
       );
     } catch (_) {
       throw const PairingParseException('The pairing code is incomplete or damaged. Generate a new one on the Trio host.');
@@ -100,8 +102,8 @@ class PairingBundle {
         'host_name': hostName,
         'secret': secret,
         'apns': apns.toJson(),
-        if (nightscout != null) 'nightscout': nightscout!.toJson(),
         'limits': limits.toJson(),
+        'fcm_available': fcmAvailable,
       };
 }
 
@@ -140,23 +142,6 @@ class ApnsInfo {
         'key_id': keyId,
         'apns_key': apnsKey,
         'production': production,
-      };
-}
-
-class NightscoutInfo {
-  const NightscoutInfo({required this.url, this.apiSecret});
-
-  final String url;
-  final String? apiSecret;
-
-  factory NightscoutInfo.fromJson(Map<String, dynamic> json) => NightscoutInfo(
-        url: json['url'] as String,
-        apiSecret: json['api_secret'] as String?,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'url': url,
-        if (apiSecret != null) 'api_secret': apiSecret,
       };
 }
 

@@ -1,8 +1,9 @@
 name: trio_follower
 description: >-
-  Follower app for Trio. Pairs with a Trio host device by QR code and sends
+  Follower app for Trio. Pairs with a Trio host device by QR code, sends
   end-to-end encrypted remote commands (bolus, meal, temp target, override)
-  over APNS, with Nightscout-based status display.
+  over APNS, and receives encrypted status pushed directly from the host
+  device — no Nightscout or other third-party data source.
 publish_to: "none"
 version: 0.1.0+1
 
@@ -21,8 +22,10 @@ dependencies:
   dart_jsonwebtoken: ^2.14.0
   # Direct HTTP/2 connection to Apple's APNS endpoints
   http2: ^2.3.0
-  # Nightscout REST calls
-  http: ^1.2.1
+  # Receiving status pushes from the host (raw APNS on iOS, FCM on Android)
+  push: ^2.2.0
+  # Own bundle id, sent to the host so it can address APNS status pushes
+  package_info_plus: ^8.0.2
   # QR code scanning during pairing
   mobile_scanner: ^5.2.3
   # Pairing bundle (secrets) storage in Keychain / Android Keystore

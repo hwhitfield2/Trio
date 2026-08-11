@@ -26,10 +26,13 @@ extension RemoteControlConfig {
                 format: String(localized: "Paired %@", comment: "Follower pairing date"),
                 follower.createdAt.formatted(date: .abbreviated, time: .omitted)
             )
+            let push = follower.isPushRegistered
+                ? String(localized: "Status pushes on")
+                : String(localized: "Awaiting first connection")
             guard let lastSeen = follower.lastSeenAt else {
-                return paired + " · " + String(localized: "No commands received yet")
+                return paired + " · " + push
             }
-            return paired + " · " + String(
+            return paired + " · " + push + " · " + String(
                 format: String(localized: "Last command %@", comment: "Follower last command date"),
                 lastSeen.formatted(date: .abbreviated, time: .shortened)
             )
@@ -160,6 +163,25 @@ extension RemoteControlConfig {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             TextEditor(text: $state.apnsKey)
+                                .font(.system(.footnote, design: .monospaced))
+                                .frame(minHeight: 90)
+                                .disableAutocorrection(true)
+                                .autocapitalization(.none)
+                        }
+                    }
+                ).listRowBackground(Color.chart)
+
+                Section(
+                    header: Text("Android Followers (FCM)"),
+                    footer: Text(
+                        "Only needed for Android follower devices: they receive the host's status through Firebase Cloud Messaging. Paste the service-account JSON of your Firebase project. iOS followers work without this."
+                    ),
+                    content: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Firebase service-account JSON")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextEditor(text: $state.fcmServiceAccountJSON)
                                 .font(.system(.footnote, design: .monospaced))
                                 .frame(minHeight: 90)
                                 .disableAutocorrection(true)

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
@@ -164,9 +166,20 @@ class _VerificationDialog extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'This device will be able to send bolus, meal, temp target and '
-            'override commands to ${bundle.hostName}.',
+            'override commands to ${bundle.hostName}, and will receive '
+            'encrypted status directly from it.',
             style: theme.textTheme.bodySmall,
           ),
+          if (Platform.isAndroid && !bundle.fcmAvailable) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Note: the host has no FCM credential configured, so this '
+              'Android device will not receive live status. Commands still '
+              'work. Add a Firebase service account on the host under '
+              'Settings → Remote Control to enable status pushes.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+            ),
+          ],
         ],
       ),
       actions: [

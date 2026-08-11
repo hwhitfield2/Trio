@@ -415,6 +415,8 @@
 		AD3D2CD42CD01B9EB8F26522 /* PumpConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF65DA88F972B56090AD6AC3 /* PumpConfigDataFlow.swift */; };
 		AEC49BE7B933E7171AFFF218 /* CaregiverMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */; };
 		FA0000000000000000000002 /* FollowerPairingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000001 /* FollowerPairingManager.swift */; };
+		FA0000000000000000000008 /* FollowerPushSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* FollowerPushSender.swift */; };
+		FA000000000000000000000A /* FollowerStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000009 /* FollowerStatusPublisher.swift */; };
 		FA0000000000000000000004 /* FollowerPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* FollowerPairingView.swift */; };
 		FA0000000000000000000006 /* FollowerPairingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* FollowerPairingTests.swift */; };
 		B015AFE32E500000000D7351 /* BolusSafetyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFE12E500000000D7351 /* BolusSafetyValidator.swift */; };
@@ -1564,6 +1566,8 @@
 		C91F8F20D32EBEBBC4FE9A75 /* TwilioConfigStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwilioConfigStateModel.swift; sourceTree = "<group>"; };
 		C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingManager.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* FollowerPairingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerPairingManager.swift; sourceTree = "<group>"; };
+		FA0000000000000000000007 /* FollowerPushSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerPushSender.swift; sourceTree = "<group>"; };
+		FA0000000000000000000009 /* FollowerStatusPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerStatusPublisher.swift; sourceTree = "<group>"; };
 		FA0000000000000000000003 /* FollowerPairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerPairingView.swift; sourceTree = "<group>"; };
 		FA0000000000000000000005 /* FollowerPairingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerPairingTests.swift; sourceTree = "<group>"; };
 		CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryLimitsSyncTests.swift; sourceTree = "<group>"; };
@@ -4197,6 +4201,8 @@
 			children = (
 				DD485F172E466F1800CE8CBF /* SecureMessenger.swift */,
 				FA0000000000000000000001 /* FollowerPairingManager.swift */,
+				FA0000000000000000000007 /* FollowerPushSender.swift */,
+				FA0000000000000000000009 /* FollowerStatusPublisher.swift */,
 				DD17A0312E3FEA1F008E1BF0 /* RemoteNotificationResponseManager.swift */,
 				DD868FD72E381A54005D3308 /* APNSJWTClaims.swift */,
 				DD32CFA12CC824E1003686D6 /* TrioRemoteControl+Helpers.swift */,
@@ -5213,6 +5219,8 @@
 				38569347270B5DFB0002C50D /* CGMType.swift in Sources */,
 				DD485F182E466F1800CE8CBF /* SecureMessenger.swift in Sources */,
 				FA0000000000000000000002 /* FollowerPairingManager.swift in Sources */,
+				FA0000000000000000000008 /* FollowerPushSender.swift in Sources */,
+				FA000000000000000000000A /* FollowerStatusPublisher.swift in Sources */,
 				FA0000000000000000000004 /* FollowerPairingView.swift in Sources */,
 				3821ED4C25DD18BA00BC42AD /* Constants.swift in Sources */,
 				384E803425C385E60086DB71 /* JavaScriptWorker.swift in Sources */,

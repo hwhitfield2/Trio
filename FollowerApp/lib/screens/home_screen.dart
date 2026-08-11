@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../models/status_snapshot.dart';
 import '../state/app_state.dart';
 import '../widgets/glucose_chart.dart';
 import 'bolus_screen.dart';
@@ -18,7 +19,6 @@ class HomeScreen extends StatelessWidget {
     final state = context.watch<AppState>();
     final theme = Theme.of(context);
     final bundle = state.bundle!;
-    final mmol = bundle.limits.units == 'mmol/L';
 
     return Scaffold(
       appBar: AppBar(
@@ -33,15 +33,15 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: state.refreshStatus,
+        onRefresh: state.requestStatus,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (state.hasNightscout) _StatusCard(mmol: mmol) else const _NoNightscoutCard(),
+            const _StatusCard(),
             const SizedBox(height: 16),
             Text('Remote actions', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            _ActionGrid(maxBolus: bundle.limits.maxBolus),
+            const _ActionGrid(),
             const SizedBox(height: 16),
             if (state.history.isNotEmpty) ...[
               Text('Recent commands', style: theme.textTheme.titleMedium),
@@ -68,17 +68,17 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.mmol});
-
-  final bool mmol;
-
-  String _formatSgv(int sgv) => mmol ? (sgv / 18.0).toStringAsFixed(1) : sgv.toString();
+  const _StatusCard();
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final theme = Theme.of(context);
-    final latest = state.entries.isEmpty ? null : state.entries.first;
+    final snapshot = state.snapshot;
+    final mmol = state.units == 'mmol/L';
+    final latest = snapshot?.latest;
+
+    String formatSgv(num sgv) => mmol ? (sgv / 18.0).toStringAsFixed(1) : sgv.round().toString();
 
     return Card(
       child: Padding(
@@ -86,20 +86,28 @@ class _StatusCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (state.statusError != null)
-              Text(state.statusError!, style: TextStyle(color: theme.colorScheme.error))
-            else if (latest == null)
-              const Text('No glucose data yet. Pull to refresh.')
-            else ...[
+            if (snapshot == null || latest == null) ...[
+              const Text(
+                'Waiting for data from the host. Pull to refresh — the host '
+                'sends its status directly to this device.',
+              ),
+            ] else ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    _formatSgv(latest.sgv),
+                    formatSgv(latest.sgv),
                     style: theme.textTheme.displayMedium?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 8),
                   Text(latest.trendArrow, style: theme.textTheme.headlineMedium),
+                  if (snapshot.delta != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${snapshot.delta! >= 0 ? '+' : ''}${mmol ? (snapshot.delta! / 18.0).toStringAsFixed(1) : snapshot.delta}',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ],
                   const Spacer(),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -114,18 +122,51 @@ class _StatusCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Row(
+              Wrap(
+                spacing: 12,
                 children: [
-                  if (state.status.iob != null)
-                    Text('IOB ${state.status.iob!.toStringAsFixed(2)} U  ',
-                        style: theme.textTheme.bodyMedium),
-                  if (state.status.cob != null)
-                    Text('COB ${state.status.cob!.toStringAsFixed(0)} g',
-                        style: theme.textTheme.bodyMedium),
+                  if (snapshot.iob != null)
+                    Text('IOB ${snapshot.iob!.toStringAsFixed(2)} U', style: theme.textTheme.bodyMedium),
+                  if (snapshot.cob != null)
+                    Text('COB ${snapshot.cob!.toStringAsFixed(0)} g', style: theme.textTheme.bodyMedium),
+                  if (snapshot.eventualBg != null)
+                    Text('→ ${formatSgv(snapshot.eventualBg!)}', style: theme.textTheme.bodyMedium),
                 ],
               ),
+              if (snapshot.tempTarget != null || snapshot.override != null) ...[
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    if (snapshot.tempTarget != null)
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        avatar: const Icon(Icons.gps_fixed, size: 16),
+                        label: Text(
+                          '${formatSgv(snapshot.tempTarget!.target)}'
+                          '${snapshot.tempTarget!.until != null ? ' until ${DateFormat.jm().format(snapshot.tempTarget!.until!)}' : ''}',
+                        ),
+                      ),
+                    if (snapshot.override != null)
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        avatar: const Icon(Icons.tune, size: 16),
+                        label: Text(snapshot.override!.name),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
-              GlucoseChart(entries: state.entries, mmol: mmol),
+              GlucoseChart(readings: snapshot.readings),
+              const SizedBox(height: 8),
+              _FreshnessRow(snapshot: snapshot),
+            ],
+            if (state.statusHint != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                state.statusHint!,
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.tertiary),
+              ),
             ],
           ],
         ),
@@ -134,27 +175,45 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
-class _NoNightscoutCard extends StatelessWidget {
-  const _NoNightscoutCard();
+class _FreshnessRow extends StatelessWidget {
+  const _FreshnessRow({required this.snapshot});
+
+  final StatusSnapshot snapshot;
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Text(
-          'No Nightscout configured on the host, so live glucose is not '
-          'available here. Remote commands still work.',
+    final theme = Theme.of(context);
+    final age = DateTime.now().difference(snapshot.timestamp);
+    final stale = age > const Duration(minutes: 15);
+
+    String describeAge(Duration duration) {
+      if (duration.inMinutes < 1) return 'just now';
+      if (duration.inMinutes < 60) return '${duration.inMinutes} min ago';
+      return '${duration.inHours} h ago';
+    }
+
+    return Row(
+      children: [
+        Icon(
+          stale ? Icons.cloud_off : Icons.phone_iphone,
+          size: 14,
+          color: stale ? theme.colorScheme.error : theme.colorScheme.outline,
         ),
-      ),
+        const SizedBox(width: 4),
+        Text(
+          'From host ${describeAge(age)}'
+          '${snapshot.lastLoop != null ? ' · last loop ${describeAge(DateTime.now().difference(snapshot.lastLoop!))}' : ''}',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: stale ? theme.colorScheme.error : theme.colorScheme.outline,
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _ActionGrid extends StatelessWidget {
-  const _ActionGrid({required this.maxBolus});
-
-  final double maxBolus;
+  const _ActionGrid();
 
   @override
   Widget build(BuildContext context) {
@@ -162,9 +221,7 @@ class _ActionGrid extends StatelessWidget {
       (
         Icons.water_drop,
         'Bolus',
-        () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => BolusScreen(maxBolus: maxBolus)),
-            )
+        () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BolusScreen()))
       ),
       (
         Icons.restaurant,

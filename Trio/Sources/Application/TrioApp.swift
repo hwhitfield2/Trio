@@ -97,6 +97,7 @@ extension Notification.Name {
         _ = resolver.resolve(FoodLibraryManager.self)!
         _ = resolver.resolve(SiteLifecycleManager.self)!
         _ = resolver.resolve(SleepSafetyManager.self)!
+        _ = resolver.resolve(FollowerStatusPublisher.self)!
     }
 
     init() {

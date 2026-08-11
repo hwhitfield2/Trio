@@ -31,23 +31,23 @@ class _MealScreenState extends State<MealScreen> {
   }
 
   Future<void> _send() async {
-    final limits = context.read<AppState>().bundle!.limits;
+    final state = context.read<AppState>();
     final carbs = int.tryParse(_carbs.text);
     if (carbs == null || carbs <= 0) {
       setState(() => _error = 'Enter the carbs in grams.');
       return;
     }
-    if (carbs > limits.maxCarbs) {
+    if (carbs > state.maxCarbs) {
       setState(() =>
-          _error = 'The host allows at most ${limits.maxCarbs.toStringAsFixed(0)} g of carbs.');
+          _error = 'The host allows at most ${state.maxCarbs.toStringAsFixed(0)} g of carbs.');
       return;
     }
     final fat = int.tryParse(_fat.text);
     final protein = int.tryParse(_protein.text);
     final bolus = double.tryParse(_bolus.text.replaceAll(',', '.'));
-    if (bolus != null && bolus > limits.maxBolus) {
+    if (bolus != null && bolus > state.maxBolus) {
       setState(() =>
-          _error = 'The host allows at most ${limits.maxBolus.toStringAsFixed(1)} U per bolus.');
+          _error = 'The host allows at most ${state.maxBolus.toStringAsFixed(1)} U per bolus.');
       return;
     }
 

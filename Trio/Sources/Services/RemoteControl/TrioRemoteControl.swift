@@ -11,6 +11,7 @@ class TrioRemoteControl: Injectable {
     @Injected() internal var overrideStorage: OverrideStorage!
     @Injected() internal var settings: SettingsManager!
     @Injected() internal var bolusSafetyValidator: BolusSafetyValidator!
+    @Injected() internal var statusPublisher: FollowerStatusPublisher!
 
     private let timeWindow: TimeInterval = 600
 
@@ -61,7 +62,7 @@ class TrioRemoteControl: Injectable {
             "Command successfully decrypted and authenticated. Time difference: \(Int(Date().timeIntervalSince1970 - commandPayload.timestamp)) seconds."
         )
 
-        try await dispatch(commandPayload)
+        try await dispatch(commandPayload, followerId: nil)
     }
 
     /// Handles a command sent by a paired follower app. The command is
@@ -113,7 +114,12 @@ class TrioRemoteControl: Injectable {
             "Follower command from \(follower.name) decrypted and authenticated (sequence \(sequence))."
         )
 
-        try await dispatch(commandPayload)
+        try await dispatch(commandPayload, followerId: followerId)
+
+        // Push a fresh status snapshot so the follower sees the effect of its
+        // command (updated IOB/COB, active targets) without waiting for the
+        // next loop cycle.
+        await statusPublisher.publish(toFollowerId: followerId)
     }
 
     private func isTimestampAcceptable(for commandPayload: CommandPayload) async -> Bool {
@@ -136,7 +142,7 @@ class TrioRemoteControl: Injectable {
         return true
     }
 
-    private func dispatch(_ commandPayload: CommandPayload) async throws {
+    private func dispatch(_ commandPayload: CommandPayload, followerId: String?) async throws {
         switch commandPayload.commandType {
         case .bolus:
             try await handleBolusCommand(commandPayload)
@@ -153,6 +159,35 @@ class TrioRemoteControl: Injectable {
             await handleStartOverrideCommand(commandPayload)
         case .cancelOverride:
             await handleCancelOverrideCommand(commandPayload)
+        case .statusRequest:
+            guard followerId != nil else {
+                await logError("Status request rejected: only paired followers can request status.", payload: commandPayload)
+                return
+            }
+            // The follower-path caller publishes a snapshot after dispatch,
+            // which is exactly what a status request asks for.
+        case .registerFollower:
+            guard let followerId = followerId else {
+                await logError(
+                    "Push registration rejected: only paired followers can register for status pushes.",
+                    payload: commandPayload
+                )
+                return
+            }
+            guard let token = commandPayload.pushToken, !token.isEmpty,
+                  let transport = commandPayload.pushTransport, ["apns", "fcm"].contains(transport)
+            else {
+                await logError("Push registration rejected: missing or invalid push token/transport.", payload: commandPayload)
+                return
+            }
+            FollowerPairingManager.shared.updatePushRegistration(
+                followerId: followerId,
+                token: token,
+                transport: transport,
+                bundleId: commandPayload.pushBundleId,
+                environment: commandPayload.pushEnvironment
+            )
+            debug(.remoteControl, "Follower push registration stored (transport: \(transport)).")
         }
     }
 }

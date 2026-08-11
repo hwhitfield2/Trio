@@ -17,6 +17,7 @@ class PairingStore {
 
   static const _pairingKey = 'trio_follower.pairing';
   static const _sequenceKey = 'trio_follower.sequence';
+  static const _registeredTokenKey = 'trio_follower.registered_push_token';
 
   Future<PairingBundle?> loadPairing() async {
     final raw = await _storage.read(key: _pairingKey);
@@ -36,7 +37,15 @@ class PairingStore {
   Future<void> clear() async {
     await _storage.delete(key: _pairingKey);
     await _storage.delete(key: _sequenceKey);
+    await _storage.delete(key: _registeredTokenKey);
   }
+
+  /// The push token last successfully registered with the host, so we only
+  /// re-send register_follower when the token actually changes.
+  Future<String?> get registeredPushToken => _storage.read(key: _registeredTokenKey);
+
+  Future<void> setRegisteredPushToken(String token) =>
+      _storage.write(key: _registeredTokenKey, value: token);
 
   /// Reserves and returns the next sequence number. The counter is advanced
   /// *before* the command is sent: if a send fails after APNS may have seen

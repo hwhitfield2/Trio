@@ -11,6 +11,7 @@ extension RemoteControlConfig {
         @Published var apnsTeamId: String = ""
         @Published var apnsKeyId: String = ""
         @Published var apnsKey: String = ""
+        @Published var fcmServiceAccountJSON: String = ""
         @Published var pairingFollower: PairedFollower?
         @Published var pairingPayload: String?
         @Published var pairingError: String?
@@ -24,6 +25,7 @@ extension RemoteControlConfig {
             apnsTeamId = FollowerPairingManager.shared.apnsTeamId
             apnsKeyId = FollowerPairingManager.shared.apnsKeyId
             apnsKey = FollowerPairingManager.shared.apnsKey
+            fcmServiceAccountJSON = FollowerPairingManager.shared.fcmServiceAccountJSON
 
             $isTrioRemoteControlEnabled
                 .receive(on: DispatchQueue.main)
@@ -55,6 +57,12 @@ extension RemoteControlConfig {
                 .dropFirst()
                 .receive(on: DispatchQueue.main)
                 .sink { FollowerPairingManager.shared.apnsKey = $0 }
+                .store(in: &lifetime)
+
+            $fcmServiceAccountJSON
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { FollowerPairingManager.shared.fcmServiceAccountJSON = $0 }
                 .store(in: &lifetime)
         }
 

@@ -21,7 +21,7 @@ class _TempTargetScreenState extends State<TempTargetScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final mmol = context.read<AppState>().bundle!.limits.units == 'mmol/L';
+    final mmol = context.read<AppState>().units == 'mmol/L';
     final displayTarget = mmol ? (_targetMgdl / 18.0).toStringAsFixed(1) : _targetMgdl.round().toString();
     final unitsLabel = mmol ? 'mmol/L' : 'mg/dL';
 
