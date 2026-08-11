@@ -259,7 +259,7 @@ platform :ios do
     ENV["MATCH_READONLY"] = false.to_s
     BUNDLE_ID = ENV["BUNDLE_ID"]
     
-    app_store_connect_api_key(
+    api_key = app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
@@ -304,12 +304,19 @@ platform :ios do
     # Create the App Store Connect app record for the follower so TestFlight
     # uploads work on the first build. Best-effort: never fail the identifiers
     # lane for users who don't build the follower.
+    #
+    # api_key has to be passed explicitly: produce does not read the key from
+    # the lane context and otherwise falls back to Apple ID auth, failing with
+    # "No value found for 'username'". The bundle id itself is already created
+    # by configure_bundle_id above, hence skip_devcenter.
     begin
       produce(
+        api_key: api_key,
         app_identifier: "#{BUNDLE_ID}follower",
         app_name: "Trio Follower",
         language: "en-US",
         sku: "#{BUNDLE_ID}follower",
+        skip_devcenter: true,
         skip_itc: false
       )
     rescue => e
