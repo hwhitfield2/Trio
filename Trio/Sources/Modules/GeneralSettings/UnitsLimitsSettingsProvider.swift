@@ -77,6 +77,21 @@ extension UnitsLimitsSettings {
         /// strings rather than throws so a partial pump failure can never
         /// leave storage half-rescaled.
         func rescaleTherapySettings(_ rescale: InsulinConcentrationRescale) async -> [String] {
+            var warnings = rescaleStorage(rescale)
+            guard !rescale.isIdentity else { return warnings }
+            if let tddWarning = await rescale.rescaleTDDHistory() {
+                warnings.append(tddWarning)
+            }
+            warnings.append(contentsOf: await programPump())
+            return warnings
+        }
+
+        /// The storage half of the migration: every volume-unit file rescaled
+        /// in place, synchronously. It must not be queued behind pump I/O —
+        /// until it runs, the stored files and the concentration setting
+        /// disagree and every real value derived from them is off by the
+        /// factor. TDD history and pump programming follow asynchronously.
+        func rescaleStorage(_ rescale: InsulinConcentrationRescale) -> [String] {
             guard !rescale.isIdentity else { return [] }
             var warnings: [String] = []
 
@@ -132,13 +147,6 @@ extension UnitsLimitsSettings {
             // changed meaning at the switch — discard it and let it regenerate.
             storage.remove(OpenAPS.Settings.autotune)
 
-            // TDD history feeds dynamic ISF and the ISF/CR calculator for up to
-            // 10 days; rescale it so pre-switch totals keep their real meaning
-            // in the new volume scale.
-            if let tddWarning = await rescale.rescaleTDDHistory() {
-                warnings.append(tddWarning)
-            }
-
             // Delivery limits: storage first (unconditionally), pump second.
             let storedLimits = settings()
             let rescaledLimits = PumpSettings(
@@ -190,8 +198,6 @@ extension UnitsLimitsSettings {
                 ))
             }
 
-            // Pump programming — failures are warnings, never partial storage.
-            warnings.append(contentsOf: await programPump())
             return warnings
         }
 
@@ -231,8 +237,21 @@ extension UnitsLimitsSettings {
                 }
             }
 
+            // The pump has the last word on delivery limits: save(settings:)
+            // persists whatever the pump reports back. Some pumps ignore the
+            // request entirely and return their own hardware configuration
+            // (Dana), others clamp to a hardware ceiling (Medtronic). That is
+            // the truth about what will actually be enforced, but it silently
+            // undoes a concentration rescale — so compare and say so.
+            let intended = settings()
             do {
-                for try await _ in save(settings: settings()).values { break }
+                for try await _ in save(settings: intended).values { break }
+                let applied = settings()
+                if applied.maxBolus != intended.maxBolus || applied.maxBasal != intended.maxBasal {
+                    warnings.append(String(
+                        localized: "The pump would not accept the rescaled delivery limits and kept its own: Maximum Bolus \(applied.maxBolus) U and Maximum Basal Rate \(applied.maxBasal) U/hr in pumped units. Check that these still match the therapy you intend."
+                    ))
+                }
             } catch {
                 warnings.append(String(
                     localized: "Re-programming the pump's delivery limits failed: \(error.localizedDescription)"

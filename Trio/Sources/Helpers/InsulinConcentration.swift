@@ -98,6 +98,38 @@ extension TrioSettings {
     }
 }
 
+extension PickerSetting {
+    /// Widens the range so `value` is reachable, moving the bounds in whole
+    /// steps only.
+    ///
+    /// `PickerSettingsProvider.generatePickerValues` builds the wheel by
+    /// stepping up from `min`, so lowering `min` by an arbitrary amount shifts
+    /// the entire stride and makes every ordinary round value (1.0, 1.5, …)
+    /// disappear. Extending in whole steps keeps the grid aligned to where it
+    /// started, which is what a value preserved across a concentration change
+    /// needs.
+    func extended(toCover value: Decimal) -> PickerSetting {
+        guard step > 0 else { return self }
+        var setting = self
+        if value < setting.min {
+            let deficit = setting.min - value
+            setting.min -= wholeSteps(covering: deficit) * step
+        }
+        if value > setting.max {
+            let excess = value - setting.max
+            setting.max += wholeSteps(covering: excess) * step
+        }
+        return setting
+    }
+
+    private func wholeSteps(covering distance: Decimal) -> Decimal {
+        var steps = distance / step
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &steps, 0, .up)
+        return rounded
+    }
+}
+
 /// Scale factors that re-express stored volume-unit therapy settings for a new
 /// concentration while preserving their real-insulin meaning.
 struct InsulinConcentrationRescale {
@@ -125,13 +157,27 @@ struct InsulinConcentrationRescale {
         let scale = amountScale as NSDecimalNumber
         return await context.perform {
             do {
-                let records = try context.fetch(TDDStored.fetchRequest())
-                for record in records {
-                    record.total = record.total?.multiplying(by: scale)
-                    record.bolus = record.bolus?.multiplying(by: scale)
-                    record.tempBasal = record.tempBasal?.multiplying(by: scale)
-                    record.scheduledBasal = record.scheduledBasal?.multiplying(by: scale)
-                    record.weightedAverage = record.weightedAverage?.multiplying(by: scale)
+                // TDDStored is never purged and grows by ~288 rows a day, so a
+                // multi-year store holds six figures of rows. Walk it in
+                // batches, saving and resetting as we go, rather than
+                // materializing every row and committing one huge transaction.
+                let request = TDDStored.fetchRequest()
+                request.fetchBatchSize = 500
+                let records = try context.fetch(request)
+                for (index, record) in records.enumerated() {
+                    autoreleasepool {
+                        record.total = record.total?.multiplying(by: scale)
+                        record.bolus = record.bolus?.multiplying(by: scale)
+                        record.tempBasal = record.tempBasal?.multiplying(by: scale)
+                        record.scheduledBasal = record.scheduledBasal?.multiplying(by: scale)
+                        record.weightedAverage = record.weightedAverage?.multiplying(by: scale)
+                    }
+                    // Commit periodically so one multi-year transaction cannot
+                    // stall or fail wholesale. The context is deliberately NOT
+                    // reset here — that would invalidate the rows still to come.
+                    if index % 500 == 499, context.hasChanges {
+                        try context.save()
+                    }
                 }
                 if context.hasChanges {
                     try context.save()

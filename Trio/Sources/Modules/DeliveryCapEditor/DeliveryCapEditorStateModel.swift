@@ -28,16 +28,18 @@ extension DeliveryCapEditor {
         /// concentration change stay in range — SwiftUI's Stepper clamps an
         /// out-of-range value into its bounds on the first tap, which would
         /// silently collapse (and auto-save) a safety cap.
+        /// Snapshots from `load()`, not the live windows — a bound computed
+        /// from the current values follows them downward, so a stepped-down cap
+        /// could never be restored.
+        private var largestLoadedBasalRate: Double = 0
+        private var largestLoadedSMB: Double = 0
+
         var maxBasalUpperBound: Double {
-            let staticBound = 10 * concentrationFactor
-            let largestLoaded = windows.map { Double(truncating: $0.maxBasalRate as NSDecimalNumber) }.max() ?? 0
-            return max(staticBound, largestLoaded)
+            max(10 * concentrationFactor, largestLoadedBasalRate)
         }
 
         var maxSMBUpperBound: Double {
-            let staticBound = 5 * concentrationFactor
-            let largestLoaded = windows.map { Double(truncating: $0.maxSMB as NSDecimalNumber) }.max() ?? 0
-            return max(staticBound, largestLoaded)
+            max(5 * concentrationFactor, largestLoadedSMB)
         }
 
         override func subscribe() {
@@ -53,6 +55,9 @@ extension DeliveryCapEditor {
                     window.maxSMB = settings.realInsulinAmount(fromVolume: window.maxSMB)
                     return window
                 }
+
+            largestLoadedBasalRate = windows.map { Double(truncating: $0.maxBasalRate as NSDecimalNumber) }.max() ?? 0
+            largestLoadedSMB = windows.map { Double(truncating: $0.maxSMB as NSDecimalNumber) }.max() ?? 0
         }
 
         func save() {

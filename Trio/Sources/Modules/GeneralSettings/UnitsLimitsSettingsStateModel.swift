@@ -60,6 +60,11 @@ extension UnitsLimitsSettings {
         /// persisted and restored on re-entry until a retry succeeds.
         @Persisted(key: "UnitsLimitsSettings.concentrationSyncWarning") private var persistedSyncWarning: String = ""
 
+        /// Warnings about storage that the last migration produced (clamped
+        /// basal rates, a failed TDD rescale). Retrying the pump cannot fix
+        /// these, so they are re-emitted rather than cleared.
+        @MainActor private var storageWarnings: [String] = []
+
         var preferences: Preferences {
             settingsManager.preferences
         }
@@ -114,16 +119,23 @@ extension UnitsLimitsSettings {
         /// Picker grids for the insulin-denominated limits in actual insulin
         /// units — the grids get proportionally finer under dilution so values
         /// like a real Max IOB of 1.5 U stay selectable.
+        /// The stored values as loaded, NOT the live picker bindings — a grid
+        /// whose bounds follow the wheel's own selection ratchets shut as the
+        /// user scrolls down.
+        private var loadedMaxBolus: Decimal = 0
+        private var loadedMaxBasal: Decimal = 0
+        private var loadedMaxIOB: Decimal = 0
+
         var maxIOBPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxIOB, coveringCurrent: maxIOB)
+            scaledToReal(PickerSettingsProvider.shared.settings.maxIOB, coveringCurrent: loadedMaxIOB)
         }
 
         var maxBolusPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxBolus, coveringCurrent: maxBolus)
+            scaledToReal(PickerSettingsProvider.shared.settings.maxBolus, coveringCurrent: loadedMaxBolus)
         }
 
         var maxBasalPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxBasal, coveringCurrent: maxBasal)
+            scaledToReal(PickerSettingsProvider.shared.settings.maxBasal, coveringCurrent: loadedMaxBasal)
         }
 
         /// A concentration rescale preserves the real value, which can exceed
@@ -138,15 +150,21 @@ extension UnitsLimitsSettings {
             var setting = setting
             setting.value = settings.realInsulinAmount(fromVolume: setting.value)
             setting.step = settings.realInsulinAmount(fromVolume: setting.step)
-            setting.min = Swift.min(settings.realInsulinAmount(fromVolume: setting.min), Swift.max(current, 0))
-            setting.max = Swift.max(settings.realInsulinAmount(fromVolume: setting.max), current)
-            return setting
+            setting.min = settings.realInsulinAmount(fromVolume: setting.min)
+            setting.max = settings.realInsulinAmount(fromVolume: setting.max)
+            return setting.extended(toCover: current)
         }
 
         private func refreshDisplayedPumpLimits() {
             let stored = provider.settings()
             maxBasal = settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBasal)
             maxBolus = settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBolus)
+            // Snapshot for the picker grids: the ceiling must not follow the
+            // wheel's own selection, or scrolling down would ratchet the
+            // reachable range shut.
+            loadedMaxBasal = maxBasal
+            loadedMaxBolus = maxBolus
+            loadedMaxIOB = maxIOB
         }
 
         /// Rescales every stored (volume-unit) therapy setting for the new
@@ -166,11 +184,23 @@ extension UnitsLimitsSettings {
             prefs.maxIOB *= rescale.amountScale
             settingsManager.preferences = prefs
 
+            // Rescale storage NOW, not on the chain: the concentration setting
+            // has already been written, so until the files follow, every real
+            // value derived from them is off by the factor. Only pump
+            // programming — which can take tens of seconds over BLE — is queued.
+            let storageWarnings = provider.rescaleStorage(rescale)
+            refreshDisplayedPumpLimits()
+
             serialized { [self] in
-                // All storage reads happen inside rescaleTherapySettings, which
-                // now runs only after any previously queued write finished.
-                let warnings = await provider.rescaleTherapySettings(rescale)
-                finishPumpSync(warnings: warnings)
+                var persistentWarnings = storageWarnings
+                if let tddWarning = await rescale.rescaleTDDHistory() {
+                    persistentWarnings.append(tddWarning)
+                }
+                // Remembered so a later Retry Pump Sync cannot erase them: they
+                // describe storage, which retrying the pump does not touch.
+                self.storageWarnings = persistentWarnings
+                let pumpWarnings = await provider.programPump()
+                finishPumpSync(warnings: persistentWarnings + pumpWarnings)
 
                 // The loop reads the rescaled profile files on its next cycle;
                 // the observer broadcasts in the provider cover in-memory listeners.
@@ -192,7 +222,10 @@ extension UnitsLimitsSettings {
         func retryPumpSync() {
             serialized { [self] in
                 let warnings = await provider.programPump()
-                finishPumpSync(warnings: warnings)
+                // A pump retry cannot undo a storage-level problem (a clamped
+                // basal rate, a failed TDD rescale), so those warnings survive
+                // it — only the pump-programming ones are cleared on success.
+                finishPumpSync(warnings: storageWarnings + warnings)
             }
         }
 
@@ -219,8 +252,14 @@ extension UnitsLimitsSettings {
         func saveIfChanged() {
             let desiredRealBolus = maxBolus
             let desiredRealBasal = maxBasal
+            let capturedFactor = settingsManager.settings.insulinConcentrationFactorDecimal
 
             serialized { [self] in
+                // A concentration change queued after these values were read
+                // has already preserved their real meaning; re-applying them
+                // against the new factor would double-count it.
+                guard settingsManager.settings.insulinConcentrationFactorDecimal == capturedFactor else { return }
+
                 let currentSettings = settingsManager.settings
                 let volumeBolus = currentSettings.volumeInsulinAmount(fromReal: desiredRealBolus)
                 let volumeBasal = currentSettings.volumeInsulinAmount(fromReal: desiredRealBasal)

@@ -1553,6 +1553,67 @@ extension SettingsExport.StateModel {
             if let tddWarning = await rescale.rescaleTDDHistory() {
                 summary.notes.append(tddWarning)
             }
+
+            // A backup need not carry every therapy category — validate()
+            // accepts any one field, and exportBackup silently omits anything
+            // it could not read. Whatever the backup does NOT replace is still
+            // scaled for the old concentration and must be rescaled too, or
+            // the files end up in two different unit scales at once.
+            if backup.insulinSensitivities == nil,
+               let isf = storage.retrieve(OpenAPS.Settings.insulinSensitivities, as: InsulinSensitivities.self)
+            {
+                let rescaled = InsulinSensitivities(
+                    units: isf.units,
+                    userPreferredUnits: isf.userPreferredUnits,
+                    sensitivities: isf.sensitivities.map {
+                        InsulinSensitivityEntry(
+                            sensitivity: $0.sensitivity * rescale.ratioScale,
+                            offset: $0.offset,
+                            start: $0.start
+                        )
+                    }
+                )
+                storage.save(rescaled, as: OpenAPS.Settings.insulinSensitivities)
+            }
+
+            if backup.carbRatios == nil,
+               let carbRatios = storage.retrieve(OpenAPS.Settings.carbRatios, as: CarbRatios.self)
+            {
+                let rescaled = CarbRatios(
+                    units: carbRatios.units,
+                    schedule: carbRatios.schedule.map {
+                        CarbRatioEntry(start: $0.start, offset: $0.offset, ratio: $0.ratio * rescale.ratioScale)
+                    }
+                )
+                storage.save(rescaled, as: OpenAPS.Settings.carbRatios)
+            }
+
+            if backup.basalProfile == nil,
+               let profile = storage.retrieve(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self)
+            {
+                let rescaled = profile.map {
+                    BasalProfileEntry(start: $0.start, minutes: $0.minutes, rate: $0.rate * rescale.amountScale)
+                }
+                storage.save(rescaled, as: OpenAPS.Settings.basalProfile)
+            }
+
+            if backup.pumpSettings == nil {
+                let stored = settingsManager.pumpSettings
+                storage.save(
+                    PumpSettings(
+                        insulinActionCurve: stored.insulinActionCurve,
+                        maxBolus: stored.maxBolus * rescale.amountScale,
+                        maxBasal: stored.maxBasal * rescale.amountScale
+                    ),
+                    as: OpenAPS.Settings.settings
+                )
+            }
+
+            if backup.preferences == nil {
+                var prefs = settingsManager.preferences
+                prefs.maxIOB *= rescale.amountScale
+                settingsManager.preferences = prefs
+            }
         }
 
         if let importedPreferences = backup.preferences {

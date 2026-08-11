@@ -190,11 +190,8 @@ extension Onboarding {
             setting.step = settings.realInsulinAmount(fromVolume: setting.step)
             setting.min = settings.realInsulinAmount(fromVolume: setting.min)
             setting.max = settings.realInsulinAmount(fromVolume: setting.max)
-            if let current = current {
-                setting.min = Swift.min(setting.min, Swift.max(current, 0))
-                setting.max = Swift.max(setting.max, current)
-            }
-            return setting
+            guard let current = current else { return setting }
+            return setting.extended(toCover: current)
         }
 
         /// Delivery-limit grids in actual insulin units, for the onboarding
@@ -202,16 +199,22 @@ extension Onboarding {
         /// The ceiling is extended to cover the value already loaded so a limit
         /// legitimately preserved across a concentration change stays
         /// selectable rather than silently snapping down.
+        /// Snapshots taken when the limits are loaded — never the live picker
+        /// bindings, whose own selection would otherwise ratchet the grid shut.
+        private var loadedMaxIOB: Decimal = 0
+        private var loadedMaxBolus: Decimal = 0
+        private var loadedMaxBasal: Decimal = 0
+
         var maxIOBPickerSetting: PickerSetting {
-            scaledAmountSetting(settingsProvider.settings.maxIOB, coveringCurrent: maxIOB)
+            scaledAmountSetting(settingsProvider.settings.maxIOB, coveringCurrent: loadedMaxIOB)
         }
 
         var maxBolusPickerSetting: PickerSetting {
-            scaledAmountSetting(settingsProvider.settings.maxBolus, coveringCurrent: maxBolus)
+            scaledAmountSetting(settingsProvider.settings.maxBolus, coveringCurrent: loadedMaxBolus)
         }
 
         var maxBasalPickerSetting: PickerSetting {
-            scaledAmountSetting(settingsProvider.settings.maxBasal, coveringCurrent: maxBasal)
+            scaledAmountSetting(settingsProvider.settings.maxBasal, coveringCurrent: loadedMaxBasal)
         }
 
         // MARK: - Basal Profile
@@ -501,17 +504,18 @@ extension Onboarding {
             let pumpSettingsFromFile = provider.pumpSettingsFromFile
             let providedSettings = settingsProvider.settings
 
-            // Stored limits (and the guardrails they are clamped to) are pump
-            // volume units; the editor displays actual insulin units, so clamp
-            // in volume space first, then convert for display. The guardrail
-            // ceiling is raised to the stored value where a concentration
-            // change legitimately pushed it above the U-100-era bound —
-            // clamping there would silently lower the user's safety limit.
+            // Stored limits are pump volume units; the editor displays actual
+            // insulin units. The guardrails were authored for U-100, where the
+            // two coincide — they are really bounds on the REAL value, so scale
+            // them into volume space before clamping. At U-100 this is exactly
+            // the original clamp; at U-10 it admits the legitimately 10x larger
+            // volume figure without dropping the ceiling altogether.
             let settings = settingsManager.settings
 
             func clampPreservingStored(_ stored: Decimal, to guardrail: PickerSetting) -> Decimal {
                 var guardrail = guardrail
-                guardrail.max = Swift.max(guardrail.max, stored)
+                guardrail.min = settings.volumeInsulinAmount(fromReal: guardrail.min)
+                guardrail.max = settings.volumeInsulinAmount(fromReal: guardrail.max)
                 return stored.clamp(to: guardrail)
             }
 
@@ -530,6 +534,10 @@ extension Onboarding {
             )
             maxCOB = preferences.maxCOB.clamp(to: providedSettings.maxCOB)
             minimumSafetyThreshold = preferences.threshold_setting
+
+            loadedMaxBolus = maxBolus
+            loadedMaxBasal = maxBasal
+            loadedMaxIOB = maxIOB
         }
 
         // MARK: - Get Therapy Items
