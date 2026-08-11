@@ -97,14 +97,15 @@ final class BaseDeviceDataManager: DeviceDataManager, Injectable {
                 pumpDisplayState.value = PumpDisplayState(name: pumpManager.localizedTitle, image: pumpManager.smallImage)
                 pumpName.send(pumpManager.localizedTitle)
 
+                // With diluted insulin the pump's volume increments deliver
+                // `increment × concentration` actual insulin units, and the
+                // user's limits (actual insulin units) map to a larger volume.
+                let concentration = settingsManager.settings.insulinConcentrationFactor
+
                 var modifiedPreferences = settingsManager.preferences
-                let bolusIncrement = Decimal(
-                    pumpManager.supportedBolusVolumes.first ??
-                        Double(
-                            settingsManager.preferences
-                                .bolusIncrement
-                        )
-                )
+                let bolusIncrement = (pumpManager.supportedBolusVolumes.first)
+                    .map { Decimal($0) * settingsManager.settings.insulinConcentrationFactorDecimal } ??
+                    settingsManager.preferences.bolusIncrement
                 modifiedPreferences
                     .bolusIncrement = bolusIncrement > 0 ? bolusIncrement : 0.1
                 storage.save(modifiedPreferences, as: OpenAPS.Settings.preferences)
@@ -115,10 +116,7 @@ final class BaseDeviceDataManager: DeviceDataManager, Injectable {
                 // — silently rejecting temp basals that oref correctly
                 // determines are within the user's configured maxBasal.
                 let pumpSettings = settingsManager.pumpSettings
-                let deliveryLimits = DeliveryLimits(
-                    maximumBasalRate: HKQuantity(unit: .internationalUnitsPerHour, doubleValue: Double(pumpSettings.maxBasal)),
-                    maximumBolus: HKQuantity(unit: .internationalUnit(), doubleValue: Double(pumpSettings.maxBolus))
-                )
+                let deliveryLimits = pumpSettings.pumpDeliveryLimits(insulinConcentration: concentration)
 
                 processQueue.async {
                     pumpManager.syncDeliveryLimits(limits: deliveryLimits) { result in
@@ -580,10 +578,12 @@ extension BaseDeviceDataManager: PumpManagerDelegate {
         Task {
             do {
                 // filter buggy TBRs > maxBasal from MDT
+                // Pump events carry volume units; maxBasal is actual insulin units.
+                let concentration = settingsManager.settings.insulinConcentrationFactor
                 let events = events.filter {
                     // type is optional...
                     guard let type = $0.type, type == .tempBasal else { return true }
-                    return $0.dose?.unitsPerHour ?? 0 <= Double(settingsManager.pumpSettings.maxBasal)
+                    return ($0.dose?.unitsPerHour ?? 0) * concentration <= Double(settingsManager.pumpSettings.maxBasal)
                 }
                 debug(.deviceManager, "Storing \(events.count) new pump events: \(events)")
                 try await pumpHistoryStorage.storePumpEvents(events)

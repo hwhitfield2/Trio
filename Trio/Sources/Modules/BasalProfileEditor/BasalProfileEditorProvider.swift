@@ -5,6 +5,7 @@ import LoopKit
 extension BasalProfileEditor {
     final class Provider: BaseProvider, BasalProfileEditorProvider {
         private let processQueue = DispatchQueue(label: "BasalProfileEditorProvider.processQueue")
+        @Injected() private var settingsManager: SettingsManager!
 
         var profile: [BasalProfileEntry] {
             storage.retrieve(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self)
@@ -13,7 +14,10 @@ extension BasalProfileEditor {
         }
 
         var supportedBasalRates: [Decimal]? {
-            deviceManager.pumpManager?.supportedBasalRates.map { Decimal($0) }
+            // Pump-supported volume rates expressed in actual insulin units, so
+            // the editor offers exactly the rates the pump can deliver.
+            let concentration = settingsManager.settings.insulinConcentrationFactorDecimal
+            return deviceManager.pumpManager?.supportedBasalRates.map { Decimal($0) * concentration }
         }
 
         func saveProfile(_ profile: [BasalProfileEntry]) -> AnyPublisher<Void, Error> {
@@ -22,8 +26,10 @@ extension BasalProfileEditor {
                 return Fail(error: NSError()).eraseToAnyPublisher()
             }
 
+            // The profile is actual insulin units; the pump schedule is volume.
+            let concentration = settingsManager.settings.insulinConcentrationFactor
             let syncValues = profile.map {
-                RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate))
+                RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate) / concentration)
             }
 
             return Future { promise in

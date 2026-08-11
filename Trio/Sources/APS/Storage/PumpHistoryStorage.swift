@@ -47,6 +47,10 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
     }
 
     func storePumpEvents(_ events: [NewPumpEvent]) async throws {
+        // Pump events carry volume units (the pump assumes U-100); scale them
+        // to actual insulin units before storing. 1 for standard insulin.
+        let concentration = settings.settings.insulinConcentrationFactor
+        let concentrationDecimal = settings.settings.insulinConcentrationFactorDecimal
         try await context.perform {
             for event in events {
                 let existingEvents: [PumpEventStored] = try CoreDataStack.shared.fetchEntities(
@@ -63,7 +67,7 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
 
                     guard let dose = event.dose else { continue }
                     let amount = self.roundDose(
-                        dose.unitsInDeliverableIncrements,
+                        dose.unitsInDeliverableIncrements * concentration,
                         toIncrement: Double(self.settings.preferences.bolusIncrement)
                     )
 
@@ -112,7 +116,7 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                         continue
                     }
 
-                    let rate = Decimal(dose.unitsPerHour)
+                    let rate = Decimal(dose.unitsPerHour) * concentrationDecimal
                     let minutes = (dose.endDate - dose.startDate).timeInterval / 60
                     let delivered = dose.deliveredUnits
                     let date = event.date

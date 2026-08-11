@@ -16,6 +16,17 @@ extension UnitsLimitsSettings {
         @Published var maxCOB: Decimal = 120
         @Published var hasChanged: Bool = false
         @Published var threshold_setting: Decimal = 60
+        @Published var allowDilution: Bool = false
+        @Published var insulinConcentrationOption: InsulinConcentrationOption = .u100
+        @Published var concentrationSyncMessage: String?
+
+        /// Insulin concentration the pump was last (re)programmed for; used to
+        /// re-sync the pump only when the effective concentration truly changes.
+        private var lastSyncedConcentration: Double?
+
+        /// The setting subscriptions replay the stored values synchronously on
+        /// subscribe; only user-driven toggles may default the concentration.
+        private var isReplayingStoredSettings = true
 
         var preferences: Preferences {
             settingsManager.preferences
@@ -37,6 +48,49 @@ extension UnitsLimitsSettings {
 
             maxBasal = pumpSettings.maxBasal
             maxBolus = pumpSettings.maxBolus
+
+            lastSyncedConcentration = settingsManager.settings.insulinConcentrationFactor
+
+            subscribeSetting(\.allowDilution, on: $allowDilution, initial: {
+                allowDilution = $0
+            }, didSet: { [weak self] enabled in
+                guard let self else { return }
+                if enabled, !self.isReplayingStoredSettings,
+                   self.settingsManager.settings.insulinConcentration >= 1
+                {
+                    // Enabling dilution while U-100 is stored would be a no-op;
+                    // default to U-10 (the picker reflects this immediately).
+                    self.insulinConcentrationOption = .u10
+                }
+                self.handleConcentrationChange()
+            })
+
+            subscribeSetting(\.insulinConcentration, on: $insulinConcentrationOption.map(\.factor), initial: {
+                insulinConcentrationOption = InsulinConcentrationOption(factor: $0)
+            }, didSet: { [weak self] _ in
+                self?.handleConcentrationChange()
+            })
+
+            isReplayingStoredSettings = false
+        }
+
+        /// Re-programs the pump (bolus increment, delivery limits, basal
+        /// schedule) whenever the effective insulin concentration changes.
+        private func handleConcentrationChange() {
+            let factor = settingsManager.settings.insulinConcentrationFactor
+            guard factor != lastSyncedConcentration else { return }
+            lastSyncedConcentration = factor
+
+            Task { @MainActor in
+                do {
+                    try await provider.resyncPumpInsulinConcentration()
+                    concentrationSyncMessage = nil
+                } catch {
+                    concentrationSyncMessage = String(
+                        localized: "Updating the pump for the new insulin concentration failed: \(error.localizedDescription). Do not rely on automated dosing until you have re-saved your basal profile and delivery limits with the pump connected."
+                    )
+                }
+            }
         }
 
         var isPumpSettingUnchanged: Bool {

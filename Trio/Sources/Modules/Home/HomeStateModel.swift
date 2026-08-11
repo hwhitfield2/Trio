@@ -564,21 +564,28 @@ extension Home {
 
         private func setupPumpSettings() async {
             let settings = await provider.pumpSettings()
+            // The pump setup UI works in pump volume units; stored settings are
+            // actual insulin units, so scale by the insulin concentration.
+            let concentration = settingsManager.settings.insulinConcentrationFactor
             await MainActor.run {
                 self.maxBasal = settings.maxBasal
-                self.pumpInitialSettings.maxBasalRateUnitsPerHour = Double(settings.maxBasal)
-                self.pumpInitialSettings.maxBolusUnits = Double(settings.maxBolus)
+                self.pumpInitialSettings.maxBasalRateUnitsPerHour = Double(settings.maxBasal) / concentration
+                self.pumpInitialSettings.maxBolusUnits = Double(settings.maxBolus) / concentration
             }
         }
 
         private func setupBasalProfile() async {
             let basalProfile = await provider.getBasalProfile()
+            let concentration = settingsManager.settings.insulinConcentrationFactor
             await MainActor.run {
                 self.basalProfile = basalProfile
 
                 if let schedule = BasalRateSchedule(
                     dailyItems: basalProfile
-                        .map { RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate)) }
+                        .map { RepeatingScheduleValue(
+                            startTime: TimeInterval($0.minutes * 60),
+                            value: Double($0.rate) / concentration
+                        ) }
                 ) {
                     self.pumpInitialSettings.basalSchedule = schedule
                 }

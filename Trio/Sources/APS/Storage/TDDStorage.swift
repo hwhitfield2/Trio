@@ -27,6 +27,7 @@ struct TDDResult {
 /// Implementation of the TDD Calculator
 final class BaseTDDStorage: TDDStorage, Injectable {
     @Injected() private var storage: FileStorage!
+    @Injected() private var settingsManager: SettingsManager!
 
     private let privateContext = CoreDataStack.shared.newTaskContext()
 
@@ -77,14 +78,20 @@ final class BaseTDDStorage: TDDStorage, Injectable {
         async let pumpDataHours = calculatePumpDataHours(pumpHistory)
         async let bolusInsulin = calculateBolusInsulin(bolusEvents)
         let gaps = findBasalGaps(in: tempBasalEvents)
+        // History and profile are stored in actual insulin units; round them via
+        // the pump's volume increments scaled by the insulin concentration.
+        let concentration = settingsManager.settings.insulinConcentrationFactor
+        let roundToSupportedBasalRate: (Double) -> Double = {
+            pumpManager.roundToSupportedBasalRate(unitsPerHour: $0, insulinConcentration: concentration)
+        }
         async let scheduledBasalInsulin = !gaps.isEmpty ? calculateScheduledBasalInsulin(
             gaps: gaps,
             profile: basalProfile,
-            roundToSupportedBasalRate: pumpManager.roundToSupportedBasalRate
+            roundToSupportedBasalRate: roundToSupportedBasalRate
         ) : 0
         async let tempBasalInsulin = calculateTempBasalInsulin(
             tempBasalEvents, suspendResumePairs: suspendResumePairs,
-            roundToSupportedBasalRate: pumpManager.roundToSupportedBasalRate
+            roundToSupportedBasalRate: roundToSupportedBasalRate
         )
         async let weightedAverage = calculateWeightedAverage()
 
