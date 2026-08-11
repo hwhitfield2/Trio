@@ -131,8 +131,11 @@ extension UnitsLimitsSettings {
         /// U-10 ceiling of 3 U) — extend the grid so the stored value stays
         /// visible and re-selectable instead of silently snapping down.
         private func scaledToReal(_ setting: PickerSetting, coveringCurrent current: Decimal) -> PickerSetting {
+            // SwiftUI evaluates `body` — and therefore this grid — before
+            // `configureView` sets the resolver that injects settingsManager,
+            // so fall back to the unscaled (U-100) grid until it is available.
+            guard let settings = settingsManager?.settings else { return setting }
             var setting = setting
-            let settings = settingsManager.settings
             setting.value = settings.realInsulinAmount(fromVolume: setting.value)
             setting.step = settings.realInsulinAmount(fromVolume: setting.step)
             setting.min = Swift.min(settings.realInsulinAmount(fromVolume: setting.min), Swift.max(current, 0))
@@ -206,12 +209,6 @@ extension UnitsLimitsSettings {
                 concentrationSyncMessage = message
                 persistedSyncWarning = message
             }
-        }
-
-        var isPumpSettingUnchanged: Bool {
-            let stored = provider.settings()
-            return settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBasal) == maxBasal &&
-                settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBolus) == maxBolus
         }
 
         /// Persists the edited limits. The displayed values are actual insulin

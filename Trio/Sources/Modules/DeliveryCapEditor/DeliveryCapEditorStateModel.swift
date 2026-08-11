@@ -10,10 +10,17 @@ extension DeliveryCapEditor {
         /// (the loop enforces the caps against pumped quantities).
         var windows: [DeliveryCapWindow] = []
 
+        /// The concentration factor, or 1 before `configureView` has injected
+        /// settingsManager — SwiftUI evaluates `body` (which reads the bounds
+        /// and step below) before that happens.
+        private var concentrationFactor: Double {
+            settingsManager?.settings.insulinConcentrationFactor ?? 1
+        }
+
         /// Stepper increment in actual insulin units — the pump's 0.05 U volume
         /// step carries proportionally less insulin when diluted (0.005 U at U-10).
         var stepSize: Double {
-            0.05 * settingsManager.settings.insulinConcentrationFactor
+            0.05 * concentrationFactor
         }
 
         /// At least 10 pump-volume units expressed in actual insulin units,
@@ -22,13 +29,13 @@ extension DeliveryCapEditor {
         /// out-of-range value into its bounds on the first tap, which would
         /// silently collapse (and auto-save) a safety cap.
         var maxBasalUpperBound: Double {
-            let staticBound = 10 * settingsManager.settings.insulinConcentrationFactor
+            let staticBound = 10 * concentrationFactor
             let largestLoaded = windows.map { Double(truncating: $0.maxBasalRate as NSDecimalNumber) }.max() ?? 0
             return max(staticBound, largestLoaded)
         }
 
         var maxSMBUpperBound: Double {
-            let staticBound = 5 * settingsManager.settings.insulinConcentrationFactor
+            let staticBound = 5 * concentrationFactor
             let largestLoaded = windows.map { Double(truncating: $0.maxSMB as NSDecimalNumber) }.max() ?? 0
             return max(staticBound, largestLoaded)
         }

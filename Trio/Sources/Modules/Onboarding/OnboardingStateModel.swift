@@ -171,8 +171,11 @@ extension Onboarding {
         /// every stored value stays representable (and the resolution stays
         /// proportional) under dilution. At U-100 this is the identity.
         private func scaledRatioSetting(_ setting: PickerSetting) -> PickerSetting {
+            // SwiftUI evaluates `body` — and therefore these grids — before
+            // `configureView` sets the resolver that injects settingsManager,
+            // so fall back to the unscaled (U-100) grid until it is available.
+            guard let settings = settingsManager?.settings else { return setting }
             var setting = setting
-            let settings = settingsManager.settings
             setting.value = settings.realInsulinRatio(fromVolume: setting.value)
             setting.step = settings.realInsulinRatio(fromVolume: setting.step)
             setting.min = settings.realInsulinRatio(fromVolume: setting.min)
@@ -181,8 +184,8 @@ extension Onboarding {
         }
 
         private func scaledAmountSetting(_ setting: PickerSetting, coveringCurrent current: Decimal? = nil) -> PickerSetting {
+            guard let settings = settingsManager?.settings else { return setting }
             var setting = setting
-            let settings = settingsManager.settings
             setting.value = settings.realInsulinAmount(fromVolume: setting.value)
             setting.step = settings.realInsulinAmount(fromVolume: setting.step)
             setting.min = settings.realInsulinAmount(fromVolume: setting.min)
