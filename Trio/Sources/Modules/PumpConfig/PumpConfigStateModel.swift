@@ -25,9 +25,15 @@ extension PumpConfig {
                 .store(in: &lifetime)
 
             Task {
+                // The pump setup UI works in pump volume units; stored settings
+                // are actual insulin units, so scale by the insulin concentration.
+                let concentration = settingsManager.settings.insulinConcentrationFactor
                 let basalSchedule = BasalRateSchedule(
                     dailyItems: await provider.getBasalProfile().map {
-                        RepeatingScheduleValue(startTime: $0.minutes.minutes.timeInterval, value: Double($0.rate))
+                        RepeatingScheduleValue(
+                            startTime: $0.minutes.minutes.timeInterval,
+                            value: Double($0.rate) / concentration
+                        )
                     }
                 )
 
@@ -35,8 +41,8 @@ extension PumpConfig {
 
                 await MainActor.run {
                     initialSettings = PumpInitialSettings(
-                        maxBolusUnits: Double(pumpSettings.maxBolus),
-                        maxBasalRateUnitsPerHour: Double(pumpSettings.maxBasal),
+                        maxBolusUnits: Double(pumpSettings.maxBolus) / concentration,
+                        maxBasalRateUnitsPerHour: Double(pumpSettings.maxBasal) / concentration,
                         basalSchedule: basalSchedule!
                     )
                 }

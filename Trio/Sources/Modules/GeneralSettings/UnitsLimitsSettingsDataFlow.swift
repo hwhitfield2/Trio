@@ -7,4 +7,5 @@ enum UnitsLimitsSettings {
 protocol UnitsLimitsSettingsProvider: Provider {
     func settings() -> PumpSettings
     func save(settings: PumpSettings) -> AnyPublisher<Void, Error>
+    func resyncPumpInsulinConcentration() async throws
 }
