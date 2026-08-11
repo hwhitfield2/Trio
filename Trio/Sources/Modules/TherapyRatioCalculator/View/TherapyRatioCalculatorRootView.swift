@@ -51,7 +51,7 @@ extension TherapyRatioCalculator {
             List {
                 explainerSection
                 dataSourceSection
-                if state.effectiveTDD != nil {
+                if state.effectiveRealTDD != nil {
                     recommendationSection
                 }
                 methodologySection
@@ -132,7 +132,7 @@ extension TherapyRatioCalculator {
                             ProgressView()
                             Text("Loading insulin history…").foregroundStyle(.secondary)
                         }
-                    } else if let tdd = state.averageTDD {
+                    } else if let tdd = state.averageRealTDD {
                         HStack {
                             Text("7-Day Average TDD")
                             Spacer()
@@ -141,6 +141,7 @@ extension TherapyRatioCalculator {
                         Text("Based on \(state.tddSampleDays) days of recorded insulin delivery.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                        dilutionNote
                         if !state.hasSufficientHistory {
                             HStack(alignment: .top, spacing: 6) {
                                 Image(systemName: "hourglass").foregroundStyle(.orange)
@@ -179,7 +180,7 @@ extension TherapyRatioCalculator {
                             updateWeight(weightInput, unit: newUnit)
                         }
                     }
-                    if let tdd = state.effectiveTDD {
+                    if let tdd = state.effectiveRealTDD {
                         HStack {
                             Text("Estimated TDD")
                             Spacer()
@@ -190,10 +191,24 @@ extension TherapyRatioCalculator {
                         )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        dilutionNote
                     }
                 }
             }
             .listRowBackground(Color.chart)
+        }
+
+        /// Every figure on this screen — TDD, ISF, CR — is in actual insulin
+        /// units so the 1800/500 arithmetic reconciles on screen. Elsewhere
+        /// Trio reports pumped volume units, so name the difference explicitly.
+        @ViewBuilder private var dilutionNote: some View {
+            if state.isDiluted, let volumeTDD = state.effectiveTDD {
+                Text(
+                    "Shown in actual insulin units, matching the ISF and carb ratio below. Because you use diluted insulin, the same dose reads as \(formattedRatio(volumeTDD)) pumped units elsewhere in Trio."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
         }
 
         private var recommendationSection: some View {

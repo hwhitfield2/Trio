@@ -69,6 +69,23 @@ extension TherapyRatioCalculator {
                 tddSpanHours >= Double(Self.minimumSampleDays - 1) * 24.0
         }
 
+        /// Concentration factor, or 1 before the resolver injects services —
+        /// SwiftUI evaluates `body` (which reads the values below) first.
+        private var concentrationFactor: Decimal {
+            settingsManager?.settings.insulinConcentrationFactorDecimal ?? 1
+        }
+
+        /// Whether diluted insulin is in use, so the screen can explain that
+        /// Trio's other TDD figures are shown in larger pumped units.
+        var isDiluted: Bool { concentrationFactor != 1 }
+
+        /// The recorded 7-day average TDD in *actual insulin* units — the unit
+        /// every ISF, CR, and rule on this screen speaks. Storage is in pumped
+        /// volume units.
+        var averageRealTDD: Decimal? {
+            averageTDD.map { $0 * concentrationFactor }
+        }
+
         /// The TDD driving the recommendations in *actual insulin* units, per the
         /// selected source — the clinical 1800/500 rules are defined for actual
         /// insulin. Insufficient history still yields a preliminary estimate — it
@@ -77,17 +94,17 @@ extension TherapyRatioCalculator {
         var effectiveRealTDD: Decimal? {
             switch tddSource {
             case .pumpHistory:
-                return averageTDD.map { settingsManager.settings.realInsulinAmount(fromVolume: $0) }
+                return averageRealTDD
             case .bodyWeight:
                 guard bodyWeightKg > 0 else { return nil }
                 return bodyWeightKg * Self.unitsPerKg
             }
         }
 
-        /// The same TDD in pumped volume units, for display alongside Trio's
-        /// other delivery statistics.
+        /// The same TDD in pumped volume units, matching the figures Trio shows
+        /// everywhere else (Home, statistics, uploads).
         var effectiveTDD: Decimal? {
-            effectiveRealTDD.map { settingsManager.settings.volumeInsulinAmount(fromReal: $0) }
+            effectiveRealTDD.map { $0 / concentrationFactor }
         }
 
         /// Whether the current recommendations may be written to the profile.
