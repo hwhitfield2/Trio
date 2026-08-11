@@ -2,9 +2,13 @@ import Foundation
 
 struct EncryptedPushMessage: Decodable {
     let encryptedData: String
+    /// Present when the sender is a paired follower app. Selects the
+    /// per-follower secret used to decrypt `encryptedData`.
+    let followerId: String?
 
     enum CodingKeys: String, CodingKey {
         case encryptedData = "encrypted_data"
+        case followerId = "follower_id"
     }
 }
 
@@ -20,6 +24,9 @@ struct CommandPayload: Decodable, Sendable {
     var fat: Int?
     var overrideName: String?
     var scheduledTime: TimeInterval?
+    /// Monotonically increasing counter set by paired follower apps. Required
+    /// on the follower command path, where it provides replay protection.
+    var sequence: Int?
     var returnNotification: ReturnNotificationInfo?
 
     struct ReturnNotificationInfo: Decodable, Sendable {
@@ -52,6 +59,7 @@ struct CommandPayload: Decodable, Sendable {
         case commandType = "command_type"
         case bolusAmount = "bolus_amount"
         case scheduledTime = "scheduled_time"
+        case sequence
         case returnNotification = "return_notification"
     }
 

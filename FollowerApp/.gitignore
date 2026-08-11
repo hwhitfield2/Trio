@@ -1,0 +1,24 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Platform shells are generated with `flutter create .` (see README).
+# Commit them once generated and customized if you prefer; by default we
+# keep generated intermediates out.
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+android/.gradle/
+android/local.properties
+android/app/.cxx/
+
+# IDE
+.idea/
+*.iml
+.vscode/

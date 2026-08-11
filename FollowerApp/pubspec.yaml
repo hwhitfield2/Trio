@@ -1,0 +1,42 @@
+name: trio_follower
+description: >-
+  Follower app for Trio. Pairs with a Trio host device by QR code and sends
+  end-to-end encrypted remote commands (bolus, meal, temp target, override)
+  over APNS, with Nightscout-based status display.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # AES-256-GCM command encryption (matches Trio's SecureMessenger)
+  cryptography: ^2.7.0
+  # SHA-256 for key derivation and verification codes
+  crypto: ^3.0.3
+  # ES256 JWT signing for APNS provider authentication
+  dart_jsonwebtoken: ^2.14.0
+  # Direct HTTP/2 connection to Apple's APNS endpoints
+  http2: ^2.3.0
+  # Nightscout REST calls
+  http: ^1.2.1
+  # QR code scanning during pairing
+  mobile_scanner: ^5.2.3
+  # Pairing bundle (secrets) storage in Keychain / Android Keystore
+  flutter_secure_storage: ^9.2.2
+  # Face ID / Touch ID / biometric confirmation before sending commands
+  local_auth: ^2.3.0
+  provider: ^6.1.2
+  intl: ^0.19.0
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

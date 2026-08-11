@@ -15,9 +15,25 @@ extension RemoteControlConfig {
         @State var hintLabel: String?
         @State private var decimalPlaceholder: Decimal = 0.0
         @State private var isCopied: Bool = false
+        @State private var showFollowerNamePrompt: Bool = false
+        @State private var newFollowerName: String = ""
 
         @Environment(\.colorScheme) var colorScheme
         @Environment(AppState.self) var appState
+
+        private func followerDetailText(_ follower: PairedFollower) -> String {
+            let paired = String(
+                format: String(localized: "Paired %@", comment: "Follower pairing date"),
+                follower.createdAt.formatted(date: .abbreviated, time: .omitted)
+            )
+            guard let lastSeen = follower.lastSeenAt else {
+                return paired + " · " + String(localized: "No commands received yet")
+            }
+            return paired + " · " + String(
+                format: String(localized: "Last command %@", comment: "Follower last command date"),
+                lastSeen.formatted(date: .abbreviated, time: .shortened)
+            )
+        }
 
         var body: some View {
             List {
@@ -86,8 +102,105 @@ extension RemoteControlConfig {
                         .frame(maxWidth: .infinity)
                     }
                 ).listRowBackground(Color.chart)
+
+                Section(
+                    header: Text("Follower Apps"),
+                    footer: Text(
+                        "Pair the Trio Follower app (iOS or Android) by QR code. Each follower gets its own secret and can be revoked individually. Commands from followers are replay-protected and follow the same safety limits as this device."
+                    ),
+                    content: {
+                        if state.followers.isEmpty {
+                            Text("No followers paired yet.")
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(state.followers) { follower in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(follower.name)
+                                    Text(followerDetailText(follower))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .swipeActions {
+                                    Button(role: .destructive) {
+                                        state.revokeFollower(id: follower.id)
+                                    } label: {
+                                        Label("Revoke", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        }
+
+                        Button(action: {
+                            newFollowerName = ""
+                            showFollowerNamePrompt = true
+                        }) {
+                            Label("Pair New Follower", systemImage: "qrcode")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .foregroundColor(.white)
+                        .disabled(!state.isTrioRemoteControlEnabled)
+                    }
+                ).listRowBackground(Color.chart)
+
+                Section(
+                    header: Text("APNS Credentials"),
+                    footer: Text(
+                        "Followers deliver commands through Apple push notifications, so they need the push key of the Apple Developer account this Trio was built with. Enter the Team ID, Key ID and the contents of the .p8 key file once; they are stored in the keychain and shared with followers during pairing."
+                    ),
+                    content: {
+                        TextField("Team ID (e.g. A1B2C3D4E5)", text: $state.apnsTeamId)
+                            .disableAutocorrection(true)
+                            .autocapitalization(.allCharacters)
+                        TextField("Key ID (e.g. F6G7H8I9J0)", text: $state.apnsKeyId)
+                            .disableAutocorrection(true)
+                            .autocapitalization(.allCharacters)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("APNS Key (.p8 file contents)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextEditor(text: $state.apnsKey)
+                                .font(.system(.footnote, design: .monospaced))
+                                .frame(minHeight: 90)
+                                .disableAutocorrection(true)
+                                .autocapitalization(.none)
+                        }
+                    }
+                ).listRowBackground(Color.chart)
             }
             .listSectionSpacing(sectionSpacing)
+            .alert("Pair New Follower", isPresented: $showFollowerNamePrompt) {
+                TextField("Follower name (e.g. Mom's iPhone)", text: $newFollowerName)
+                Button("Cancel", role: .cancel) {}
+                Button("Create QR Code") {
+                    state.startPairing(name: newFollowerName)
+                }
+            } message: {
+                Text("Give this follower device a name so you can recognize and revoke it later.")
+            }
+            .alert(
+                "Pairing Failed",
+                isPresented: Binding(
+                    get: { state.pairingError != nil },
+                    set: { if !$0 { state.pairingError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { state.pairingError = nil }
+            } message: {
+                Text(state.pairingError ?? "")
+            }
+            .sheet(
+                isPresented: Binding(
+                    get: { state.pairingFollower != nil && state.pairingPayload != nil },
+                    set: { if !$0 { state.finishPairing() } }
+                )
+            ) {
+                if let follower = state.pairingFollower, let payload = state.pairingPayload {
+                    FollowerPairingView(follower: follower, payload: payload) {
+                        state.finishPairing()
+                    }
+                }
+            }
             .sheet(isPresented: $shouldDisplayHint) {
                 SettingInputHintView(
                     hintDetent: $hintDetent,
