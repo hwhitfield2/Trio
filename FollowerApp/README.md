@@ -79,7 +79,7 @@ The repository's GitHub Actions build the follower for you:
 
 ### Local builds
 
-Prerequisites: [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.22.
+Prerequisites: [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.29.
 
 The repository intentionally contains only the Dart code and project
 metadata. One script generates the platform shells **and applies every

@@ -8,8 +8,8 @@ publish_to: "none"
 version: 0.1.0+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
-  flutter: ">=3.22.0"
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
 
 dependencies:
   flutter:
@@ -26,8 +26,11 @@ dependencies:
   push: ^2.2.0
   # Own bundle id, sent to the host so it can address APNS status pushes
   package_info_plus: ^8.0.2
-  # QR code scanning during pairing
-  mobile_scanner: ^5.2.3
+  # QR code scanning during pairing. 7.x decodes with Apple's Vision framework
+  # on iOS instead of Google MLKit; MLKit ships no arm64 simulator slice and
+  # forced EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 on the whole app, which
+  # made the iOS follower unrunnable on Apple Silicon simulators.
+  mobile_scanner: ^7.4.0
   # Pairing bundle (secrets) storage in Keychain / Android Keystore
   flutter_secure_storage: ^9.2.2
   # Face ID / Touch ID / biometric confirmation before sending commands
