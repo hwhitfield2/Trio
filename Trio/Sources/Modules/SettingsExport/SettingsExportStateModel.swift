@@ -1511,6 +1511,8 @@ extension SettingsExport.StateModel {
 
         var summary = ImportSummary()
 
+        let oldFactor = settingsManager.settings.insulinConcentrationFactorDecimal
+
         if var importedSettings = backup.trioSettings {
             let current = settingsManager.settings
             importedSettings.cgm = current.cgm
@@ -1518,6 +1520,39 @@ extension SettingsExport.StateModel {
             importedSettings.closedLoop = current.closedLoop
             settingsManager.settings = importedSettings
             summary.appliedCategories.append(String(localized: "Trio Settings"))
+        }
+
+        // The backup's therapy values are volume units self-consistent with the
+        // backup's own insulin concentration, so importing them needs no
+        // conversion. But local data NOT contained in the backup — scheduled
+        // delivery caps, TDD history, autotune output — still uses the previous
+        // concentration's volume scale and must be rescaled when the import
+        // changes the concentration, or safety caps and insulin-history-based
+        // recommendations silently shift in real meaning by up to 10x.
+        let newFactor = settingsManager.settings.insulinConcentrationFactorDecimal
+        let rescale = InsulinConcentrationRescale(from: oldFactor, to: newFactor)
+        if !rescale.isIdentity {
+            // Scheduled delivery caps: pumped units and pumped units per hour.
+            if let caps = storage.retrieve(OpenAPS.Settings.deliveryCaps, as: [DeliveryCapWindow].self) {
+                let rescaledCaps = caps.map { window in
+                    var window = window
+                    window.maxBasalRate *= rescale.amountScale
+                    window.maxSMB *= rescale.amountScale
+                    return window
+                }
+                storage.save(rescaledCaps, as: OpenAPS.Settings.deliveryCaps)
+            }
+
+            // Autotune output is derived from pump history whose volume units
+            // changed meaning at the switch — discard it and let it regenerate.
+            storage.remove(OpenAPS.Settings.autotune)
+
+            // TDD history feeds dynamic ISF and the ISF/CR calculator for up to
+            // 10 days; rescale it so pre-switch totals keep their real meaning
+            // in the new volume scale.
+            if let tddWarning = await rescale.rescaleTDDHistory() {
+                summary.notes.append(tddWarning)
+            }
         }
 
         if let importedPreferences = backup.preferences {
@@ -1548,12 +1583,12 @@ extension SettingsExport.StateModel {
         if let basalProfile = backup.basalProfile {
             do {
                 try await saveBasalProfile(basalProfile)
-                summary.appliedCategories.append(String(localized: "Basal Rates"))
             } catch {
                 summary.notes.append(String(
-                    localized: "Basal rates were NOT imported because they could not be synced to the pump: \(error.localizedDescription). Please review your basal rates manually."
+                    localized: "Basal rates were imported, but re-programming the pump failed: \(error.localizedDescription). The pump still runs its previous schedule — re-save your basal rates with the pump connected to sync it."
                 ))
             }
+            summary.appliedCategories.append(String(localized: "Basal Rates"))
         }
 
         await importTempTargetPresets(backup.tempTargetPresets ?? [], summary: &summary)
@@ -1568,12 +1603,16 @@ extension SettingsExport.StateModel {
         return .success(summary)
     }
 
-    /// Saves basal rates, syncing them to the pump first when one is paired
-    /// (same behavior as the basal rate editor). Without a paired pump the profile
-    /// is saved to storage and synced when a pump is set up.
+    /// Saves basal rates, storage first: the imported profile is self-consistent
+    /// with the imported insulin concentration, so it must be persisted even when
+    /// a paired pump cannot be reached — otherwise the imported ISF/CR/settings
+    /// and the kept basal profile would mix volume scales. A paired pump is
+    /// re-programmed afterwards; a sync failure only means the pump's fallback
+    /// schedule is stale, and the thrown error is surfaced as a warning.
     private func saveBasalProfile(_ profile: [BasalProfileEntry]) async throws {
+        storage.save(profile, as: OpenAPS.Settings.basalProfile)
+
         guard let pump = provider.deviceManager.pumpManager else {
-            storage.save(profile, as: OpenAPS.Settings.basalProfile)
             return
         }
 
@@ -1585,7 +1624,6 @@ extension SettingsExport.StateModel {
             pump.syncBasalRateSchedule(items: syncValues) { result in
                 switch result {
                 case .success:
-                    self.storage.save(profile, as: OpenAPS.Settings.basalProfile)
                     continuation.resume()
                 case let .failure(error):
                     continuation.resume(throwing: error)

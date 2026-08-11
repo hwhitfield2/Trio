@@ -1,4 +1,5 @@
 import Combine
+import CoreData
 import Foundation
 import HealthKit
 import LoopKit
@@ -68,13 +69,16 @@ extension UnitsLimitsSettings {
         /// Rescales the stored (pump-volume-unit) therapy settings for a new
         /// insulin concentration so their real-insulin meaning is preserved.
         ///
-        /// All storage is rescaled unconditionally first — the loop reads these
-        /// files, so they must stay mutually consistent even when the pump is
-        /// unreachable. The pump's fallback basal schedule is then re-programmed;
-        /// a failure there is thrown so the UI can warn the user to re-save the
-        /// basal profile with the pump connected.
-        func rescaleTherapySettings(_ rescale: InsulinConcentrationRescale) async throws {
-            guard !rescale.isIdentity else { return }
+        /// ALL storage — ISF, CR, delivery caps, delivery limits, TDD history,
+        /// basal profile — is rescaled unconditionally first: the loop reads
+        /// these files, so they must stay mutually consistent even when the
+        /// pump is unreachable. Pump programming (basal schedule, delivery
+        /// limits) is attempted afterwards; failures come back as warning
+        /// strings rather than throws so a partial pump failure can never
+        /// leave storage half-rescaled.
+        func rescaleTherapySettings(_ rescale: InsulinConcentrationRescale) async -> [String] {
+            guard !rescale.isIdentity else { return [] }
+            var warnings: [String] = []
 
             // ISF: mg/dL per pumped unit.
             if let isf = storage.retrieve(OpenAPS.Settings.insulinSensitivities, as: InsulinSensitivities.self) {
@@ -90,8 +94,10 @@ extension UnitsLimitsSettings {
                     }
                 )
                 storage.save(rescaled, as: OpenAPS.Settings.insulinSensitivities)
-                broadcaster.notify(InsulinSensitivitiesObserver.self, on: .main) {
-                    $0.insulinSensitivitiesDidChange(rescaled)
+                DispatchQueue.main.async {
+                    self.broadcaster.notify(InsulinSensitivitiesObserver.self, on: .main) {
+                        $0.insulinSensitivitiesDidChange(rescaled)
+                    }
                 }
             }
 
@@ -104,8 +110,10 @@ extension UnitsLimitsSettings {
                     }
                 )
                 storage.save(rescaled, as: OpenAPS.Settings.carbRatios)
-                broadcaster.notify(CarbRatiosObserver.self, on: .main) {
-                    $0.carbRatiosDidChange(rescaled)
+                DispatchQueue.main.async {
+                    self.broadcaster.notify(CarbRatiosObserver.self, on: .main) {
+                        $0.carbRatiosDidChange(rescaled)
+                    }
                 }
             }
 
@@ -124,49 +132,114 @@ extension UnitsLimitsSettings {
             // changed meaning at the switch — discard it and let it regenerate.
             storage.remove(OpenAPS.Settings.autotune)
 
-            // Basal profile: pumped units per hour. Rescale, snap to the pump's
-            // supported rates, store, then re-program the pump's own schedule.
-            let profile = storage.retrieve(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self) ?? []
-            guard profile.isNotEmpty else { return }
+            // TDD history feeds dynamic ISF and the ISF/CR calculator for up to
+            // 10 days; rescale it so pre-switch totals keep their real meaning
+            // in the new volume scale.
+            if let tddWarning = await rescale.rescaleTDDHistory() {
+                warnings.append(tddWarning)
+            }
 
-            let pump = deviceManager?.pumpManager
-            let rescaledProfile = profile.map { entry -> BasalProfileEntry in
-                var rate = entry.rate * rescale.amountScale
-                if let pump = pump {
-                    rate = Decimal(pump.roundToSupportedBasalRate(unitsPerHour: Double(rate)))
+            // Delivery limits: storage first (unconditionally), pump second.
+            let storedLimits = settings()
+            let rescaledLimits = PumpSettings(
+                insulinActionCurve: storedLimits.insulinActionCurve,
+                maxBolus: storedLimits.maxBolus * rescale.amountScale,
+                maxBasal: storedLimits.maxBasal * rescale.amountScale
+            )
+            storage.save(rescaledLimits, as: OpenAPS.Settings.settings)
+            let broadcastLimits = rescaledLimits
+            processQueue.async {
+                self.broadcaster.notify(PumpSettingsObserver.self, on: self.processQueue) {
+                    $0.pumpSettingsDidChange(broadcastLimits)
                 }
-                return BasalProfileEntry(start: entry.start, minutes: entry.minutes, rate: rate)
-            }
-            storage.save(rescaledProfile, as: OpenAPS.Settings.basalProfile)
-            broadcaster.notify(BasalProfileObserver.self, on: .main) {
-                $0.basalProfileDidChange(rescaledProfile)
             }
 
-            guard let connectedPump = pump else {
-                throw NSError(
-                    domain: "UnitsLimitsSettings",
-                    code: 1,
-                    userInfo: [
-                        NSLocalizedDescriptionKey: String(
-                            localized: "No pump is connected, so the pump's fallback basal schedule still uses the previous concentration."
-                        )
-                    ]
-                )
-            }
-
-            let syncValues = rescaledProfile.map {
-                RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate))
-            }
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                connectedPump.syncBasalRateSchedule(items: syncValues) { result in
-                    switch result {
-                    case .success:
-                        continuation.resume()
-                    case let .failure(error):
-                        continuation.resume(throwing: error)
+            // Basal profile: pumped units per hour. Rescale exactly, snap to
+            // the pump's supported rates via the loss-free string path, and
+            // flag any slot the pump grid visibly clamps or floors to zero.
+            let pump = deviceManager?.pumpManager
+            let profile = storage.retrieve(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self) ?? []
+            var clampedSlots: [String] = []
+            var rescaledProfile: [BasalProfileEntry] = []
+            if profile.isNotEmpty {
+                rescaledProfile = profile.map { entry -> BasalProfileEntry in
+                    let target = entry.rate * rescale.amountScale
+                    var rate = target
+                    if let pump = pump {
+                        // .decimal converts through the value's string form, so no
+                        // binary Double noise lands in the stored profile.
+                        rate = pump.roundToSupportedBasalRate(unitsPerHour: Double(target)).decimal ?? target
+                    }
+                    if (rate == 0 && target > 0) || abs(rate - target) > Decimal(0.1) {
+                        clampedSlots.append("\(entry.start): \(target) → \(rate) U/hr")
+                    }
+                    return BasalProfileEntry(start: entry.start, minutes: entry.minutes, rate: rate)
+                }
+                storage.save(rescaledProfile, as: OpenAPS.Settings.basalProfile)
+                let broadcastProfile = rescaledProfile
+                DispatchQueue.main.async {
+                    self.broadcaster.notify(BasalProfileObserver.self, on: .main) {
+                        $0.basalProfileDidChange(broadcastProfile)
                     }
                 }
             }
+
+            if clampedSlots.isNotEmpty {
+                warnings.append(String(
+                    localized: "The pump cannot deliver some rescaled basal rates and they were clamped: \(clampedSlots.joined(separator: ", ")). Review your basal profile."
+                ))
+            }
+
+            // Pump programming — failures are warnings, never partial storage.
+            warnings.append(contentsOf: await programPump())
+            return warnings
+        }
+
+        /// Pushes the currently stored basal schedule and delivery limits to
+        /// the pump. Storage is never modified on failure — only the pump's
+        /// own fallback programming can be stale, and every failure comes back
+        /// as a user-facing warning string so it can be retried.
+        func programPump() async -> [String] {
+            guard let pump = deviceManager?.pumpManager else {
+                return [String(
+                    localized: "No pump is connected, so the pump's fallback basal schedule and delivery limits still use the previous concentration."
+                )]
+            }
+
+            var warnings: [String] = []
+
+            let profile = storage.retrieve(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self) ?? []
+            if profile.isNotEmpty {
+                let syncValues = profile.map {
+                    RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate))
+                }
+                do {
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                        pump.syncBasalRateSchedule(items: syncValues) { result in
+                            switch result {
+                            case .success:
+                                continuation.resume()
+                            case let .failure(error):
+                                continuation.resume(throwing: error)
+                            }
+                        }
+                    }
+                } catch {
+                    warnings.append(String(
+                        localized: "Re-programming the pump's basal schedule failed: \(error.localizedDescription)"
+                    ))
+                }
+            }
+
+            do {
+                for try await _ in save(settings: settings()).values { break }
+            } catch {
+                warnings.append(String(
+                    localized: "Re-programming the pump's delivery limits failed: \(error.localizedDescription)"
+                ))
+            }
+
+            return warnings
         }
     }
 }

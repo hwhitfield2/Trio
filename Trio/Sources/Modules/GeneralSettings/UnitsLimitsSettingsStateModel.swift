@@ -31,6 +31,35 @@ extension UnitsLimitsSettings {
         /// or trigger a rescale.
         private var isReplayingStoredSettings = true
 
+        /// Every write to the stored delivery limits — concentration
+        /// migrations, retries, and the limits editor's own save — is strictly
+        /// serialized through this chain, so each one reads storage only after
+        /// the previous has finished (including its multi-second pump sync)
+        /// and can never apply its scale to a stale snapshot.
+        ///
+        /// Type-level, not per-instance: the screen can be left and re-entered
+        /// mid-migration, which destroys the StateModel but not the in-flight
+        /// work it started.
+        @MainActor private static var settingsWriteChain: Task<Void, Never>?
+
+        /// Appends `work` to the serialized chain of stored-limit writes. The
+        /// read-modify-write of the chain itself happens on the main actor, so
+        /// callers on any queue (setting subscriptions fire wherever the value
+        /// was set) enqueue safely and in order.
+        private func serialized(_ work: @escaping @MainActor() async -> Void) {
+            Task { @MainActor in
+                let previous = Self.settingsWriteChain
+                Self.settingsWriteChain = Task { @MainActor in
+                    await previous?.value
+                    await work()
+                }
+            }
+        }
+
+        /// A failed pump re-programming outlives this screen: the warning is
+        /// persisted and restored on re-entry until a retry succeeds.
+        @Persisted(key: "UnitsLimitsSettings.concentrationSyncWarning") private var persistedSyncWarning: String = ""
+
         var preferences: Preferences {
             settingsManager.preferences
         }
@@ -54,6 +83,8 @@ extension UnitsLimitsSettings {
             subscribePreferencesSetting(\.threshold_setting, on: $threshold_setting) { threshold_setting = $0 }
 
             refreshDisplayedPumpLimits()
+
+            concentrationSyncMessage = persistedSyncWarning.isEmpty ? nil : persistedSyncWarning
 
             lastAppliedConcentration = settingsManager.settings.insulinConcentrationFactorDecimal
 
@@ -84,24 +115,28 @@ extension UnitsLimitsSettings {
         /// units — the grids get proportionally finer under dilution so values
         /// like a real Max IOB of 1.5 U stay selectable.
         var maxIOBPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxIOB)
+            scaledToReal(PickerSettingsProvider.shared.settings.maxIOB, coveringCurrent: maxIOB)
         }
 
         var maxBolusPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxBolus)
+            scaledToReal(PickerSettingsProvider.shared.settings.maxBolus, coveringCurrent: maxBolus)
         }
 
         var maxBasalPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxBasal)
+            scaledToReal(PickerSettingsProvider.shared.settings.maxBasal, coveringCurrent: maxBasal)
         }
 
-        private func scaledToReal(_ setting: PickerSetting) -> PickerSetting {
+        /// A concentration rescale preserves the real value, which can exceed
+        /// the scaled grid's default ceiling (e.g. real Max Bolus 10 U vs a
+        /// U-10 ceiling of 3 U) — extend the grid so the stored value stays
+        /// visible and re-selectable instead of silently snapping down.
+        private func scaledToReal(_ setting: PickerSetting, coveringCurrent current: Decimal) -> PickerSetting {
             var setting = setting
             let settings = settingsManager.settings
             setting.value = settings.realInsulinAmount(fromVolume: setting.value)
             setting.step = settings.realInsulinAmount(fromVolume: setting.step)
-            setting.min = settings.realInsulinAmount(fromVolume: setting.min)
-            setting.max = settings.realInsulinAmount(fromVolume: setting.max)
+            setting.min = Swift.min(settings.realInsulinAmount(fromVolume: setting.min), Swift.max(current, 0))
+            setting.max = Swift.max(settings.realInsulinAmount(fromVolume: setting.max), current)
             return setting
         }
 
@@ -122,46 +157,20 @@ extension UnitsLimitsSettings {
 
             let rescale = InsulinConcentrationRescale(from: oldFactor, to: newFactor)
 
-            // Max IOB (preferences) — displayed real value is invariant.
+            // Max IOB (preferences): synchronous, so consecutive changes
+            // compose here the same way the chained file rescales do below.
             var prefs = settingsManager.preferences
             prefs.maxIOB *= rescale.amountScale
             settingsManager.preferences = prefs
 
-            // Pump delivery limits — the existing save path also syncs the pump.
-            let stored = provider.settings()
-            let rescaledLimits = PumpSettings(
-                insulinActionCurve: stored.insulinActionCurve,
-                maxBolus: stored.maxBolus * rescale.amountScale,
-                maxBasal: stored.maxBasal * rescale.amountScale
-            )
-
-            Task { @MainActor in
-                var syncErrors: [String] = []
-
-                do {
-                    try await provider.rescaleTherapySettings(rescale)
-                } catch {
-                    syncErrors.append(error.localizedDescription)
-                }
-
-                do {
-                    for try await _ in provider.save(settings: rescaledLimits).values { break }
-                } catch {
-                    syncErrors.append(error.localizedDescription)
-                }
-
-                refreshDisplayedPumpLimits()
-
-                if syncErrors.isEmpty {
-                    concentrationSyncMessage = nil
-                } else {
-                    concentrationSyncMessage = String(
-                        localized: "Updating the pump for the new insulin concentration failed: \(syncErrors.joined(separator: " ")) Do not rely on automated dosing until you have re-saved your basal profile and delivery limits with the pump connected."
-                    )
-                }
+            serialized { [self] in
+                // All storage reads happen inside rescaleTherapySettings, which
+                // now runs only after any previously queued write finished.
+                let warnings = await provider.rescaleTherapySettings(rescale)
+                finishPumpSync(warnings: warnings)
 
                 // The loop reads the rescaled profile files on its next cycle;
-                // the observer broadcasts above cover in-memory listeners.
+                // the observer broadcasts in the provider cover in-memory listeners.
                 Task.detached(priority: .low) {
                     do {
                         try await self.nightscout.uploadProfiles()
@@ -175,29 +184,69 @@ extension UnitsLimitsSettings {
             }
         }
 
+        /// Re-attempts programming the pump (basal schedule + delivery limits)
+        /// from the current stored settings after an earlier failure.
+        func retryPumpSync() {
+            serialized { [self] in
+                let warnings = await provider.programPump()
+                finishPumpSync(warnings: warnings)
+            }
+        }
+
+        @MainActor private func finishPumpSync(warnings: [String]) {
+            refreshDisplayedPumpLimits()
+
+            if warnings.isEmpty {
+                concentrationSyncMessage = nil
+                persistedSyncWarning = ""
+            } else {
+                let message = String(
+                    localized: "Updating the pump for the new insulin concentration reported problems: \(warnings.joined(separator: " ")) Do not rely on automated dosing until the pump has been re-programmed — retry below or re-save your basal profile with the pump connected."
+                )
+                concentrationSyncMessage = message
+                persistedSyncWarning = message
+            }
+        }
+
         var isPumpSettingUnchanged: Bool {
             let stored = provider.settings()
             return settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBasal) == maxBasal &&
                 settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBolus) == maxBolus
         }
 
+        /// Persists the edited limits. The displayed values are actual insulin
+        /// units, whose meaning a concentration migration deliberately
+        /// preserves, so the conversion to volume — and the comparison against
+        /// storage — must happen *after* any queued migration completes,
+        /// using the factor and stored values in force by then.
         func saveIfChanged() {
-            if !isPumpSettingUnchanged {
-                let settings = PumpSettings(
-                    insulinActionCurve: pumpSettings.insulinActionCurve,
-                    maxBolus: settingsManager.settings.volumeInsulinAmount(fromReal: maxBolus),
-                    maxBasal: settingsManager.settings.volumeInsulinAmount(fromReal: maxBasal)
-                )
-                provider.save(settings: settings)
-                    .receive(on: DispatchQueue.main)
-                    .sink { _ in
-                        self.refreshDisplayedPumpLimits()
+            let desiredRealBolus = maxBolus
+            let desiredRealBasal = maxBasal
 
-                        Task.detached(priority: .low) {
-                            await self.tidepoolManager.uploadSettings()
-                        }
-                    } receiveValue: {}
-                    .store(in: &lifetime)
+            serialized { [self] in
+                let currentSettings = settingsManager.settings
+                let volumeBolus = currentSettings.volumeInsulinAmount(fromReal: desiredRealBolus)
+                let volumeBasal = currentSettings.volumeInsulinAmount(fromReal: desiredRealBasal)
+                let stored = provider.settings()
+                guard volumeBolus != stored.maxBolus || volumeBasal != stored.maxBasal else { return }
+
+                let settings = PumpSettings(
+                    insulinActionCurve: stored.insulinActionCurve,
+                    maxBolus: volumeBolus,
+                    maxBasal: volumeBasal
+                )
+
+                do {
+                    for try await _ in provider.save(settings: settings).values { break }
+                } catch {
+                    debug(.service, "Failed to save delivery limits: \(error)")
+                }
+
+                refreshDisplayedPumpLimits()
+
+                Task.detached(priority: .low) {
+                    await self.tidepoolManager.uploadSettings()
+                }
             }
         }
     }

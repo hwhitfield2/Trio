@@ -1,3 +1,4 @@
+import CoreData
 import Foundation
 
 /// Support for diluted insulin (e.g. U-10: 1 part U-100 insulin + 9 parts
@@ -112,5 +113,35 @@ struct InsulinConcentrationRescale {
 
     var isIdentity: Bool {
         amountScale == 1
+    }
+
+    /// Multiplies every stored TDD record by the amount scale so insulin
+    /// history spanning a concentration switch stays in one consistent volume
+    /// unit — TDD feeds dynamic ISF and the ISF/CR calculator for up to 10
+    /// days. Returns a user-facing warning string on failure, nil on success.
+    func rescaleTDDHistory() async -> String? {
+        guard !isIdentity else { return nil }
+        let context = CoreDataStack.shared.newTaskContext()
+        let scale = amountScale as NSDecimalNumber
+        return await context.perform {
+            do {
+                let records = try context.fetch(TDDStored.fetchRequest())
+                for record in records {
+                    record.total = record.total?.multiplying(by: scale)
+                    record.bolus = record.bolus?.multiplying(by: scale)
+                    record.tempBasal = record.tempBasal?.multiplying(by: scale)
+                    record.scheduledBasal = record.scheduledBasal?.multiplying(by: scale)
+                    record.weightedAverage = record.weightedAverage?.multiplying(by: scale)
+                }
+                if context.hasChanges {
+                    try context.save()
+                }
+                return nil
+            } catch {
+                return String(
+                    localized: "Rescaling stored TDD statistics failed: \(error.localizedDescription). Insulin-history-based recommendations may be skewed for up to 10 days."
+                )
+            }
+        }
     }
 }

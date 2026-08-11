@@ -88,6 +88,15 @@ extension UnitsLimitsSettings {
                                 Spacer()
                             }
                             .padding(.top, 2)
+
+                            Button {
+                                state.retryPumpSync()
+                            } label: {
+                                Text("Retry Pump Sync")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .padding(.top, 4)
                         }
 
                         HStack(alignment: .center) {

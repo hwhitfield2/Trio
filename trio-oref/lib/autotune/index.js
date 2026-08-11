@@ -412,7 +412,10 @@ function tuneAllTheThings (inputs) {
     var maxCR = pumpCarbRatio * autotuneMax;
     if (maxCR > 150) { maxCR = 150 }
     var minCR = pumpCarbRatio * autotuneMin;
-    if (minCR < 1) { minCR = 1 }
+    // CR is g per PUMPED unit; with U-10 dilution real CR is stored /10, so
+    // the absolute floor must sit below the CR editor real minimum
+    // (1 g/U -> 0.1 stored at U-10).
+    if (minCR < 0.1) { minCR = 0.1 }
     // safety cap fullNewCR
     if (typeof(pumpCarbRatio) !== 'undefined') {
         if (fullNewCR > maxCR) {

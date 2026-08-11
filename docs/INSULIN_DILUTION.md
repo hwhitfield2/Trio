@@ -39,13 +39,29 @@ preserved, then re-programs the pump:
 
 - basal profile ×, ISF ÷, carb ratio ÷, Max Bolus/Basal/IOB ×, delivery caps ×
   (by the ratio of old to new factor, with basal rates snapped to the pump's
-  supported volume rates),
-- the pump's fallback basal schedule and delivery limits are re-synced (a
-  failure surfaces a warning to re-save the basal profile with the pump
-  connected),
+  supported volume rates; any rate the pump clamps or floors to zero is
+  called out in a warning),
+- stored TDD statistics are rescaled in place so dynamic ISF and the ISF/CR
+  calculator never mix volume scales across the switch,
+- storage is always rescaled first and consecutive changes are serialized —
+  a pump failure can never leave the files half-migrated,
+- the pump's fallback basal schedule and delivery limits are re-synced; a
+  failure surfaces a **persistent** warning (it survives leaving the screen)
+  with a Retry Pump Sync button,
 - stored Autotune output is discarded — it was derived from history recorded
   in the old volume units — and regenerates from fresh data,
 - profiles are re-uploaded to Nightscout/Tidepool.
+
+Settings-backup **import** runs the same migration when the backup carries a
+different concentration than the device: delivery caps, TDD statistics, and
+autotune (which are not part of the backup) are rescaled/reset to match the
+imported concentration, and the imported basal profile is always stored even
+if re-programming the pump fails.
+
+oref's stored-unit sanity floors are widened for dilution (ISF ≥ 0.5 mg/dL
+per pumped unit, CR ≥ 0.1 g per pumped unit, autotune CR clamp likewise), so
+legitimately diluted values — e.g. real ISF 45 storing as 4.5 under U-10 —
+no longer kill profile generation or COB math.
 
 ## Example: U-10 with a real basal of 0.05 U/hr, ISF 500, CR 100
 
@@ -79,8 +95,9 @@ volume cap can deliver at most 3 U/hr of actual insulin.
   diluted insulin. A mismatch causes dosing that is 2–10× off.
 - **Switch with IOB near zero.** Pump history recorded before the switch is
   denominated in the old volume units; IOB spanning the switch is
-  misinterpreted by the factor ratio for up to DIA hours. The same applies to
-  TDD statistics and dynamic-ISF/Autotune inputs for ~24 h.
+  misinterpreted by the factor ratio for up to DIA hours. (TDD statistics
+  and autotune are rescaled/reset automatically; live IOB from recent
+  history is the one thing that cannot be.)
 - Exported settings embed the concentration alongside the volume-unit
   profiles, so export/import round-trips consistently.
 - History: an earlier implementation instead kept everything in actual

@@ -122,4 +122,51 @@ import Testing
         #expect(stored * first.amountScale * second.amountScale == stored * direct.amountScale)
         #expect(stored * first.ratioScale * second.ratioScale == stored * direct.ratioScale)
     }
+
+    // MARK: - Picker-wheel Double round-trip resilience
+
+    /// The therapy editor wheel round-trips every selection through Double
+    /// (tag Double(value), binding Decimal(Double)). On the factor-scaled
+    /// real-unit basal grids the exact Decimal comes back unequal for ~5% of
+    /// values, so grid lookups must snap to the closest value, never fall
+    /// back to index 0 (the minimum rate).
+    @Test(
+        "every factor-scaled basal grid value survives the wheel's Double round trip via closest-index snapping"
+    ) func testWheelRoundTripSnapsToSameGridSlot() {
+        // The pump-supported volume grid as Trio builds it: Decimal(Double).
+        let volumeGrid: [Decimal] = stride(from: 0.05, through: 10.0, by: 0.05).map { Decimal($0) }
+
+        for factor in [Decimal(1), 0.5, 0.2, 0.1] {
+            let realGrid = volumeGrid.map { $0 * factor }
+            for (index, gridValue) in realGrid.enumerated() {
+                // What the wheel hands back after tag/binding round trip.
+                let roundTripped = Decimal(Double(truncating: gridValue as NSNumber))
+                let resolved = realGrid.firstIndex(of: roundTripped)
+                    ?? realGrid.findClosestIndex(to: roundTripped) ?? 0
+                #expect(
+                    resolved == index,
+                    "factor \(factor): grid[\(index)] = \(gridValue) resolved to \(resolved)"
+                )
+            }
+        }
+    }
+
+    /// A rescale performed with no pump connected cannot snap to supported
+    /// rates, so stored rates can be off the editor grid (e.g. U-50→U-20:
+    /// 0.15 × 2.5 = 0.375). The editor's load path must resolve them to the
+    /// closest grid slot rather than the minimum rate.
+    @Test("off-grid stored rates resolve to the closest grid slot") func testOffGridRatesSnapClosest() {
+        let volumeGrid: [Decimal] = stride(from: 0.05, through: 10.0, by: 0.05).map { Decimal($0) }
+        let u20 = settings(allowDilution: true, concentration: 0.2)
+        let realGrid = volumeGrid.map { u20.realInsulinAmount(fromVolume: $0) }
+
+        // Stored 0.375 volume (rescaled U-50→U-20 from 0.15) → real 0.075.
+        let realRate = u20.realInsulinAmount(fromVolume: 0.375)
+        let resolved = realGrid.firstIndex(of: realRate) ?? realGrid.findClosestIndex(to: realRate) ?? 0
+        // Closest real grid values are 0.07 and 0.08 (grid step 0.01) — must
+        // be one of the neighbors (within half a step plus grid noise), never
+        // index 0 (= 0.01 real U/hr).
+        #expect(resolved != 0)
+        #expect(abs(realGrid[resolved] - realRate) <= Decimal(0.006))
+    }
 }

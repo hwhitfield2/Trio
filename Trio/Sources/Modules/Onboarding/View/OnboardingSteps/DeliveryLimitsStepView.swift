@@ -25,21 +25,21 @@ struct DeliveryLimitsStepView: View {
                 deliveryLimitInputSection(
                     label: substep.title,
                     displayPicker: $shouldDisplayPicker,
-                    setting: settingsProvider.settings.maxIOB,
+                    setting: state.maxIOBPickerSetting,
                     decimalValue: $state.maxIOB
                 )
             case .maxBolus:
                 deliveryLimitInputSection(
                     label: substep.title,
                     displayPicker: $shouldDisplayPicker,
-                    setting: settingsProvider.settings.maxBolus,
+                    setting: state.maxBolusPickerSetting,
                     decimalValue: $state.maxBolus
                 )
             case .maxBasal:
                 deliveryLimitInputSection(
                     label: substep.title,
                     displayPicker: $shouldDisplayPicker,
-                    setting: settingsProvider.settings.maxBasal,
+                    setting: state.maxBasalPickerSetting,
                     decimalValue: $state.maxBasal
                 )
             case .maxCOB:

@@ -16,12 +16,21 @@ extension DeliveryCapEditor {
             0.05 * settingsManager.settings.insulinConcentrationFactor
         }
 
+        /// At least 10 pump-volume units expressed in actual insulin units,
+        /// extended to cover the largest loaded value so caps rescaled by a
+        /// concentration change stay in range — SwiftUI's Stepper clamps an
+        /// out-of-range value into its bounds on the first tap, which would
+        /// silently collapse (and auto-save) a safety cap.
         var maxBasalUpperBound: Double {
-            10 * settingsManager.settings.insulinConcentrationFactor
+            let staticBound = 10 * settingsManager.settings.insulinConcentrationFactor
+            let largestLoaded = windows.map { Double(truncating: $0.maxBasalRate as NSDecimalNumber) }.max() ?? 0
+            return max(staticBound, largestLoaded)
         }
 
         var maxSMBUpperBound: Double {
-            5 * settingsManager.settings.insulinConcentrationFactor
+            let staticBound = 5 * settingsManager.settings.insulinConcentrationFactor
+            let largestLoaded = windows.map { Double(truncating: $0.maxSMB as NSDecimalNumber) }.max() ?? 0
+            return max(staticBound, largestLoaded)
         }
 
         override func subscribe() {

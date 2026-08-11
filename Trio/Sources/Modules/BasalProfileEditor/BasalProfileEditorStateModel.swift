@@ -42,7 +42,12 @@ extension BasalProfileEditor {
         func updateFromTherapyItems(_ therapyItems: [TherapySettingItem]) {
             items = therapyItems.map { therapyItem in
                 let timeIndex = timeValues.firstIndex(where: { abs($0 - therapyItem.time) < 1 }) ?? 0
-                let rateIndex = rateValues.firstIndex(of: therapyItem.value) ?? 0
+                // Snap to the closest grid value — the picker wheel round-trips
+                // values through Double, so an exact Decimal match can fail
+                // (especially on the factor-scaled real-unit grid) and must
+                // never silently fall back to index 0, the minimum rate.
+                let rateIndex = rateValues.firstIndex(of: therapyItem.value)
+                    ?? rateValues.findClosestIndex(to: therapyItem.value) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
         }
@@ -57,7 +62,12 @@ extension BasalProfileEditor {
             items = provider.profile.map { value in
                 let timeIndex = timeValues.firstIndex(of: Double(value.minutes * 60)) ?? 0
                 let realRate = settings.realInsulinAmount(fromVolume: value.rate)
-                let rateIndex = rateValues.firstIndex(of: realRate) ?? 0
+                // Snap stored rates that are off the grid (Decimal(Double)
+                // noise, or a concentration rescale done without a pump to
+                // round against) to the closest supported value instead of
+                // silently collapsing to the minimum rate.
+                let rateIndex = rateValues.firstIndex(of: realRate)
+                    ?? rateValues.findClosestIndex(to: realRate) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
 
