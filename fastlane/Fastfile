@@ -259,7 +259,7 @@ platform :ios do
     ENV["MATCH_READONLY"] = false.to_s
     BUNDLE_ID = ENV["BUNDLE_ID"]
     
-    api_key = app_store_connect_api_key(
+    app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
@@ -302,25 +302,34 @@ platform :ios do
     ])
 
     # Create the App Store Connect app record for the follower so TestFlight
-    # uploads work on the first build. Best-effort: never fail the identifiers
-    # lane for users who don't build the follower.
+    # uploads work on the first build.
     #
-    # api_key has to be passed explicitly: produce does not read the key from
-    # the lane context and otherwise falls back to Apple ID auth, failing with
-    # "No value found for 'username'". The bundle id itself is already created
-    # by configure_bundle_id above, hence skip_devcenter.
+    # This deliberately does not use produce: that action has no api_key option
+    # (fastlane 2.235.0) and falls back to Apple ID auth, which CI has no
+    # credentials for — it just fails with "No value found for 'username'".
+    # Spaceship uses the App Store Connect API key installed above, the same
+    # way configure_bundle_id does.
+    #
+    # Best-effort: never fail the identifiers lane for users who don't build
+    # the follower. Note that app names are unique across the whole App Store,
+    # so "Trio Follower" can legitimately be rejected as already taken.
     begin
-      produce(
-        api_key: api_key,
-        app_identifier: "#{BUNDLE_ID}follower",
-        app_name: "Trio Follower",
-        language: "en-US",
-        sku: "#{BUNDLE_ID}follower",
-        skip_devcenter: true,
-        skip_itc: false
-      )
+      follower_bundle_id = "#{BUNDLE_ID}follower"
+      if Spaceship::ConnectAPI::App.find(follower_bundle_id)
+        UI.message("App Store Connect record for #{follower_bundle_id} already exists")
+      else
+        Spaceship::ConnectAPI::App.create(
+          name: "Trio Follower",
+          version_string: "1.0",
+          sku: follower_bundle_id,
+          primary_locale: "en-US",
+          bundle_id: follower_bundle_id,
+          platforms: ["IOS"]
+        )
+        UI.success("Created App Store Connect record for #{follower_bundle_id}")
+      end
     rescue => e
-      UI.message("Skipping follower app record creation: #{e.message}")
+      UI.important("Skipping follower app record creation: #{e.message}")
     end
 
   end
