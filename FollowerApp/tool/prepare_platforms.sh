@@ -93,6 +93,66 @@ if [ -n "${MAIN_ACTIVITY:-}" ] && grep -q 'FlutterActivity' "$MAIN_ACTIVITY" && 
   sed -i.bak 's/FlutterActivity/FlutterFragmentActivity/g' "$MAIN_ACTIVITY" && rm -f "$MAIN_ACTIVITY.bak"
 fi
 
+# Some plugins (e.g. push) still pin an old compileSdk that current AndroidX
+# libraries reject; force every Android subproject to a modern compileSdk.
+python3 - <<'PY'
+import os
+
+MARKER = 'Force plugin subprojects to a modern compileSdk'
+
+kts = 'android/build.gradle.kts'
+groovy = 'android/build.gradle'
+
+if os.path.exists(kts):
+    with open(kts) as f:
+        content = f.read()
+    if MARKER not in content:
+        content += '''
+// Force plugin subprojects to a modern compileSdk (some plugins still pin an
+// old one that current AndroidX libraries no longer accept).
+subprojects {
+    afterEvaluate {
+        extensions.findByName("android")?.let { androidExt ->
+            val methods = androidExt.javaClass.methods
+            val setCompileSdk = methods.firstOrNull { it.name == "setCompileSdk" }
+            val compileSdkVersion = methods.firstOrNull {
+                it.name == "compileSdkVersion" && it.parameterTypes.size == 1 &&
+                    it.parameterTypes[0] == Int::class.javaPrimitiveType
+            }
+            if (setCompileSdk != null) {
+                setCompileSdk.invoke(androidExt, 36)
+            } else {
+                compileSdkVersion?.invoke(androidExt, 36)
+            }
+        }
+    }
+}
+'''
+        with open(kts, 'w') as f:
+            f.write(content)
+        print('compileSdk override appended to build.gradle.kts')
+elif os.path.exists(groovy):
+    with open(groovy) as f:
+        content = f.read()
+    if MARKER not in content:
+        content += '''
+// Force plugin subprojects to a modern compileSdk (some plugins still pin an
+// old one that current AndroidX libraries no longer accept).
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android")) {
+            project.android {
+                compileSdkVersion 36
+            }
+        }
+    }
+}
+'''
+        with open(groovy, 'w') as f:
+            f.write(content)
+        print('compileSdk override appended to build.gradle')
+PY
+
 # Optional: Firebase config for FCM status pushes on Android. CI provides the
 # file contents via a secret; local builds can drop the file in manually.
 if [ -n "${FOLLOWER_GOOGLE_SERVICES_JSON:-}" ]; then
