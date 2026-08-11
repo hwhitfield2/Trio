@@ -94,22 +94,23 @@ if [ -n "${MAIN_ACTIVITY:-}" ] && grep -q 'FlutterActivity' "$MAIN_ACTIVITY" && 
 fi
 
 # Some plugins (e.g. push) still pin an old compileSdk that current AndroidX
-# libraries reject; force every Android subproject to a modern compileSdk.
+# libraries reject; force those plugin subprojects to a modern compileSdk.
 python3 - <<'PY'
 import os
 
-MARKER = 'Force plugin subprojects to a modern compileSdk'
+# Delimits the block this script appends, so a re-run replaces an outdated
+# version of it instead of leaving the stale one in place.
+SENTINEL = '// >>> trio-follower: plugin compileSdk override (generated)'
+# The pre-sentinel form of the block, so existing checkouts get migrated.
+LEGACY_MARKER = '// Force plugin subprojects to a modern compileSdk'
 
-kts = 'android/build.gradle.kts'
-groovy = 'android/build.gradle'
-
-if os.path.exists(kts):
-    with open(kts) as f:
-        content = f.read()
-    if MARKER not in content:
-        content += '''
-// Force plugin subprojects to a modern compileSdk (some plugins still pin an
-// old one that current AndroidX libraries no longer accept).
+# :app is deliberately left alone: the Flutter template's
+# `subprojects { evaluationDependsOn(":app") }` force-evaluates it before this
+# block runs, and AGP locks compileSdk as soon as it has been read, so assigning
+# it again throws AgpDslLockedException. :app already gets a modern compileSdk
+# from `flutter.compileSdkVersion` — only the plugin subprojects, which are
+# still pending evaluation at this point, need patching.
+KTS_BLOCK = SENTINEL + '''
 fun forceCompileSdk(project: org.gradle.api.Project) {
     project.extensions.findByName("android")?.let { androidExt ->
         val methods = androidExt.javaClass.methods
@@ -126,38 +127,43 @@ fun forceCompileSdk(project: org.gradle.api.Project) {
     }
 }
 subprojects {
-    // The Flutter template forces early evaluation of :app, so afterEvaluate
-    // would throw "project is already evaluated" there — apply immediately in
-    // that case.
-    if (state.executed) forceCompileSdk(this) else afterEvaluate { forceCompileSdk(this) }
+    // Skip anything already evaluated (notably :app) — see the note above.
+    if (!state.executed) afterEvaluate { forceCompileSdk(this) }
 }
 '''
-        with open(kts, 'w') as f:
-            f.write(content)
-        print('compileSdk override appended to build.gradle.kts')
-elif os.path.exists(groovy):
-    with open(groovy) as f:
-        content = f.read()
-    if MARKER not in content:
-        content += '''
-// Force plugin subprojects to a modern compileSdk (some plugins still pin an
-// old one that current AndroidX libraries no longer accept).
+
+GROOVY_BLOCK = SENTINEL + '''
 def forceCompileSdk = { project ->
     if (project.hasProperty("android")) {
         project.android.compileSdkVersion 36
     }
 }
 subprojects { project ->
-    if (project.state.executed) {
-        forceCompileSdk(project)
-    } else {
+    // Skip anything already evaluated (notably :app) — see the note above.
+    if (!project.state.executed) {
         project.afterEvaluate { forceCompileSdk(it) }
     }
 }
 '''
-        with open(groovy, 'w') as f:
-            f.write(content)
-        print('compileSdk override appended to build.gradle')
+
+
+def patch(path, block):
+    with open(path) as f:
+        content = f.read()
+    for marker in (SENTINEL, LEGACY_MARKER):
+        index = content.find(marker)
+        if index != -1:
+            content = content[:index]
+            break
+    with open(path, 'w') as f:
+        f.write(content.rstrip() + '\n\n' + block)
+    print('compileSdk override written to ' + path)
+
+
+if os.path.exists('android/build.gradle.kts'):
+    patch('android/build.gradle.kts', KTS_BLOCK)
+elif os.path.exists('android/build.gradle'):
+    patch('android/build.gradle', GROOVY_BLOCK)
 PY
 
 # Optional: Firebase config for FCM status pushes on Android. CI provides the
