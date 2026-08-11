@@ -1,0 +1,148 @@
+name: 5. Build Trio Follower
+
+# Builds the Trio Follower companion app (FollowerApp/, Flutter):
+#   - iOS: signed with the same fastlane/match setup as Trio and uploaded to
+#     TestFlight (bundle id: org.nightscout.<TEAMID>.triofollower)
+#   - Android: release APK attached as a workflow artifact for sideloading
+#
+# Uses the same repository secrets as "4. Build Trio". Run "2. Add
+# Identifiers" once first — it now also creates the follower bundle id (with
+# push notifications) and its App Store Connect app record.
+#
+# Serialize TestFlight uploads: concurrent runs race on
+# latest_testflight_build_number.
+concurrency:
+  group: build-follower-testflight
+  cancel-in-progress: false
+run-name: Build Trio Follower (${{ github.ref_name }})
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'FollowerApp/**'
+      - '.github/workflows/build_follower.yml'
+      - 'fastlane/**'
+
+jobs:
+  validate:
+    name: Validate
+    uses: ./.github/workflows/validate_secrets.yml
+    secrets: inherit
+
+  build_ios:
+    name: Build and upload to TestFlight
+    needs: validate
+    runs-on: macos-26
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout Repo
+        uses: actions/checkout@v5
+
+      # Patch Fastlane Match to not print tables
+      - name: Patch Match Tables
+        run: |
+          TABLE_PRINTER_PATH=$(ruby -e 'puts Gem::Specification.find_by_name("fastlane").gem_dir')/match/lib/match/table_printer.rb
+          if [ -f "$TABLE_PRINTER_PATH" ]; then
+            sed -i "" "/puts(Terminal::Table.new(params))/d" "$TABLE_PRINTER_PATH"
+          else
+            echo "table_printer.rb not found"
+            exit 1
+          fi
+
+      - name: Install Project Dependencies
+        run: bundle install
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # Sync the GitHub runner clock with the Windows time server (workaround as suggested in https://github.com/actions/runner/issues/2996)
+      - name: Sync clock
+        run: sudo sntp -sS time.windows.com
+
+      - name: Prepare platform shells
+        run: ./FollowerApp/tool/prepare_platforms.sh
+
+      - name: Fastlane Build & Archive
+        run: bundle exec fastlane build_follower
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+
+      - name: Fastlane upload to TestFlight
+        run: bundle exec fastlane release_follower
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trio-follower-ios-artifacts
+          path: |
+            artifacts
+            buildlog
+          retention-days: 30
+
+  build_android:
+    name: Build Android APK
+    needs: validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FollowerApp
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare platform shells
+        run: ./tool/prepare_platforms.sh
+        env:
+          FOLLOWER_GOOGLE_SERVICES_JSON: ${{ secrets.FOLLOWER_GOOGLE_SERVICES_JSON }}
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trio-follower-android
+          path: FollowerApp/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          echo "## 📱 Trio Follower Android APK" >> $GITHUB_STEP_SUMMARY
+          echo "Download \`trio-follower-android\` from this run's artifacts and install it on the follower device." >> $GITHUB_STEP_SUMMARY
+          if [ -f android/app/google-services.json ]; then
+            echo "FCM: **enabled** (status pushes will work)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "FCM: **not configured** — add the \`FOLLOWER_GOOGLE_SERVICES_JSON\` repository secret to enable live status on Android." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -58,19 +58,42 @@ biometric or device credential where available.
 
 ## Building
 
+### CI/CD (recommended)
+
+The repository's GitHub Actions build the follower for you:
+
+- **"5. Build Trio Follower"** (`build_follower.yml`) — run it from the
+  Actions tab (or push to `main` touching `FollowerApp/`). It ships the iOS
+  app to **TestFlight** using the same fastlane/match secrets as "4. Build
+  Trio", and attaches an installable **Android APK** as a workflow artifact.
+  One-time prerequisites:
+  1. Run **"2. Add Identifiers"** once — it now also creates the follower
+     bundle id (`org.nightscout.<TEAMID>.triofollower`, with push
+     notifications) and its App Store Connect app record.
+  2. Optional, Android live status: add a repository secret
+     `FOLLOWER_GOOGLE_SERVICES_JSON` containing your Firebase project's
+     `google-services.json` contents.
+- **"Follower CI"** (`follower_ci.yml`) — runs automatically on changes to
+  `FollowerApp/`: analyzer, protocol/crypto tests, an Android APK build, and
+  an unsigned iOS compile check.
+
+### Local builds
+
 Prerequisites: [Flutter](https://docs.flutter.dev/get-started/install) ≥ 3.22.
 
 The repository intentionally contains only the Dart code and project
-metadata; generate the platform shells once after cloning:
+metadata. One script generates the platform shells **and applies every
+required platform patch** (permissions, background modes, entitlements,
+FlutterFragmentActivity, optional Firebase config):
 
 ```bash
 cd FollowerApp
-flutter create . --platforms=ios,android --project-name trio_follower --org org.nightscout
+./tool/prepare_platforms.sh
 flutter pub get
 flutter test
 ```
 
-Then add the required platform permissions:
+The details it takes care of (for reference, or if you prefer manual setup):
 
 **iOS — `ios/Runner/Info.plist`:**
 

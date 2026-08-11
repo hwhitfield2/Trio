@@ -155,6 +155,104 @@ platform :ios do
     )
   end
 
+  desc "Build Trio Follower (Flutter iOS) and sign for TestFlight"
+  lane :build_follower do
+    setup_ci if ENV['CI']
+    FOLLOWER_BUNDLE_ID = "#{ENV['BUNDLE_ID']}follower"
+    follower_dir = "#{GITHUB_WORKSPACE}/FollowerApp"
+
+    api_key = app_store_connect_api_key(
+      key_id: "#{FASTLANE_KEY_ID}",
+      issuer_id: "#{FASTLANE_ISSUER_ID}",
+      key_content: "#{FASTLANE_KEY}"
+    )
+
+    previous_build_number = begin
+      latest_testflight_build_number(
+        app_identifier: FOLLOWER_BUNDLE_ID,
+        api_key: api_key
+      )
+    rescue => e
+      UI.message("No previous TestFlight build found (#{e.message}); starting at 0")
+      0
+    end
+    current_build_number = previous_build_number + 1
+
+    # Compile the Flutter app once without signing; gym re-archives the
+    # generated workspace with distribution signing below.
+    Dir.chdir(follower_dir) do
+      sh("flutter", "pub", "get")
+      sh("flutter", "build", "ios", "--release", "--no-codesign", "--build-number=#{current_build_number}")
+    end
+
+    update_project_team(
+      path: "#{follower_dir}/ios/Runner.xcodeproj",
+      teamid: "#{TEAMID}"
+    )
+
+    # Point the Runner target at the entitlements written by
+    # tool/prepare_platforms.sh so the binary carries aps-environment.
+    require 'xcodeproj'
+    project = Xcodeproj::Project.open("#{follower_dir}/ios/Runner.xcodeproj")
+    project.targets.select { |t| t.name == "Runner" }.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "Runner/Runner.entitlements"
+      end
+    end
+    project.save
+
+    match(
+      type: "appstore",
+      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
+      app_identifier: [FOLLOWER_BUNDLE_ID]
+    )
+
+    mapping = Actions.lane_context[
+      SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING
+    ]
+
+    update_code_signing_settings(
+      path: "#{follower_dir}/ios/Runner.xcodeproj",
+      use_automatic_signing: false,
+      profile_name: mapping[FOLLOWER_BUNDLE_ID],
+      code_sign_identity: "iPhone Distribution",
+      bundle_identifier: FOLLOWER_BUNDLE_ID,
+      targets: ["Runner"]
+    )
+
+    gym(
+      workspace: "#{follower_dir}/ios/Runner.xcworkspace",
+      export_method: "app-store",
+      scheme: "Runner",
+      output_name: "TrioFollower.ipa",
+      configuration: "Release",
+      destination: 'generic/platform=iOS',
+      buildlog_path: 'buildlog'
+    )
+
+    copy_artifacts(
+      target_path: "artifacts",
+      artifacts: ["*.mobileprovision", "*.ipa", "*.dSYM.zip"]
+    )
+  end
+
+  desc "Push Trio Follower to TestFlight"
+  lane :release_follower do
+    api_key = app_store_connect_api_key(
+      key_id: "#{FASTLANE_KEY_ID}",
+      issuer_id: "#{FASTLANE_ISSUER_ID}",
+      key_content: "#{FASTLANE_KEY}"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_submission: false,
+      ipa: "TrioFollower.ipa",
+      skip_waiting_for_build_processing: true,
+      changelog: git_branch+" "+last_git_commit[:abbreviated_commit_hash],
+    )
+  end
+
   desc "Provision Identifiers and Certificates"
   lane :identifiers do
     setup_ci if ENV['CI']
@@ -196,7 +294,28 @@ platform :ios do
     ])
 
     configure_bundle_id("Trio LiveActivity", "#{BUNDLE_ID}.LiveActivity", [])
-    
+
+    # Trio Follower companion app (FollowerApp/): needs push notifications so
+    # the host can deliver encrypted status snapshots to it.
+    configure_bundle_id("Trio Follower", "#{BUNDLE_ID}follower", [
+      Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS
+    ])
+
+    # Create the App Store Connect app record for the follower so TestFlight
+    # uploads work on the first build. Best-effort: never fail the identifiers
+    # lane for users who don't build the follower.
+    begin
+      produce(
+        app_identifier: "#{BUNDLE_ID}follower",
+        app_name: "Trio Follower",
+        language: "en-US",
+        sku: "#{BUNDLE_ID}follower",
+        skip_itc: false
+      )
+    rescue => e
+      UI.message("Skipping follower app record creation: #{e.message}")
+    end
+
   end
 
   desc "Provision Certificates"

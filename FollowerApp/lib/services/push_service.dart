@@ -35,7 +35,15 @@ class PushService {
     }
   }
 
-  Future<String?> get token => Push.instance.token;
+  Future<String?> get token async {
+    try {
+      return await Push.instance.token;
+    } catch (_) {
+      // e.g. Android without a google-services.json: commands still work,
+      // only status pushes are unavailable.
+      return null;
+    }
+  }
 
   /// Fires when the OS rotates the push token; the host must be re-registered.
   void onNewToken(void Function(String token) handler) {
