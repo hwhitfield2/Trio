@@ -43,10 +43,11 @@ extension Treatments {
         }
 
         private var bolusProgressFormatter: NumberFormatter {
-            // Enough fraction digits for the increment, e.g. 0.1 → 1, 0.025 → 3,
-            // 0.005 (diluted insulin) → 3.
-            let increment = state.settingsManager.preferences.bolusIncrement
-            let fractionDigits = min(4, max(1, -increment.exponent))
+            let fractionDigits: Int = switch state.settingsManager.preferences.bolusIncrement {
+            case 0.1: 1
+            case 0.025: 3
+            default: 2
+            }
 
             let formatter = NumberFormatter()
             formatter.numberStyle = .decimal

@@ -6,9 +6,9 @@ import Testing
 @testable import Trio
 
 /// Pins the `PumpSettings` → `DeliveryLimits` mapping that
-/// `BaseDeviceDataManager.pumpManager.didSet` performs (via
-/// `pumpDeliveryLimits(insulinConcentration:)`) before calling
-/// `pumpManager.syncDeliveryLimits`, so a regression that re-introduces
+/// `BaseDeviceDataManager.pumpManager.didSet` performs inline before calling
+/// `pumpManager.syncDeliveryLimits`. Keep this builder identical to the inline
+/// expression in `DeviceDataManager.swift` so a regression that re-introduces
 /// the default-collapse bug breaks here too.
 @Suite("Delivery Limits Sync Tests") struct DeliveryLimitsSyncTests {
     private let basalUnit = HKUnit.internationalUnitsPerHour
@@ -19,7 +19,10 @@ import Testing
     }
 
     private func deliveryLimits(from settings: PumpSettings) -> DeliveryLimits {
-        settings.pumpDeliveryLimits(insulinConcentration: 1)
+        DeliveryLimits(
+            maximumBasalRate: HKQuantity(unit: .internationalUnitsPerHour, doubleValue: Double(settings.maxBasal)),
+            maximumBolus: HKQuantity(unit: .internationalUnit(), doubleValue: Double(settings.maxBolus))
+        )
     }
 
     @Test("maxBasal maps to maximumBasalRate in U/hr") func testMaxBasalMapping() {

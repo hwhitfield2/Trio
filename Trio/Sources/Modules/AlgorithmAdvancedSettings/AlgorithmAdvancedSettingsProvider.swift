@@ -8,7 +8,6 @@ extension AlgorithmAdvancedSettings {
     final class Provider: BaseProvider, AlgorithmAdvancedSettingsProvider {
         private let processQueue = DispatchQueue(label: "AlgorithmAdvancedSettingsProvider.processQueue")
         @Injected() private var broadcaster: Broadcaster!
-        @Injected() private var settingsManager: SettingsManager!
 
         func settings() -> PumpSettings {
             storage.retrieve(OpenAPS.Settings.settings, as: PumpSettings.self)
@@ -39,9 +38,10 @@ extension AlgorithmAdvancedSettings {
                 save(settings)
                 return Just(()).setFailureType(to: Error.self).eraseToAnyPublisher()
             }
-            // The pump expects limits in volume units; stored limits are actual insulin units.
-            let concentration = settingsManager.settings.insulinConcentrationFactor
-            let limits = settings.pumpDeliveryLimits(insulinConcentration: concentration)
+            let limits = DeliveryLimits(
+                maximumBasalRate: HKQuantity(unit: .internationalUnitsPerHour, doubleValue: Double(settings.maxBasal)),
+                maximumBolus: HKQuantity(unit: .internationalUnit(), doubleValue: Double(settings.maxBolus))
+            )
             return Future { promise in
                 self.processQueue.async {
                     pump.syncDeliveryLimits(limits: limits) { result in
@@ -50,7 +50,17 @@ extension AlgorithmAdvancedSettings {
                             // Store the limits from the pumpManager to ensure the correct values
                             // Example: Dana pumps don't allow to set these limits, only to fetch them
                             // This will ensure we always have the correct values stored
-                            save(settings.applyingPumpReported(limits: actual, insulinConcentration: concentration))
+                            save(PumpSettings(
+                                insulinActionCurve: settings.insulinActionCurve,
+                                maxBolus: Decimal(
+                                    actual.maximumBolus?
+                                        .doubleValue(for: .internationalUnit()) ?? Double(settings.maxBolus)
+                                ),
+                                maxBasal: Decimal(
+                                    actual.maximumBasalRate?
+                                        .doubleValue(for: .internationalUnitsPerHour) ?? Double(settings.maxBasal)
+                                )
+                            ))
                             promise(.success(()))
                         case let .failure(error):
                             promise(.failure(error))

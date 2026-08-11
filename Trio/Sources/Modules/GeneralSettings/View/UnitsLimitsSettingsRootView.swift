@@ -16,38 +16,6 @@ extension UnitsLimitsSettings {
         @EnvironmentObject var appIcons: Icons
         @Environment(AppState.self) var appState
 
-        private var dilutionVerboseHint: some View {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Default: OFF (standard U-100 insulin)").bold()
-
-                Text(
-                    "Only use diluted insulin under the guidance of your care team, and only enable this setting when the reservoir actually contains diluted insulin. A mismatch between this setting and the reservoir contents will cause dosing that is 2–10× too high or too low."
-                )
-                .bold()
-                .foregroundStyle(Color.orange)
-
-                Text(
-                    "Diluted insulin is used for very small insulin needs, e.g. in young children. U-10 means 1 part U-100 insulin mixed with 9 parts diluent: the fluid contains one tenth of the insulin, so 10 pumped units equal 1 unit of actual insulin."
-                )
-
-                Text(
-                    "With this setting enabled, everything you enter and see in Trio — basal rates, ISF, carb ratio, boluses, IOB, TDD, Maximum Bolus and Maximum Basal Rate — stays in actual insulin units. Trio automatically commands the pump with the larger fluid volume and scales the pump's records back to actual insulin."
-                )
-
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Practical effects with U-10:")
-                    Text("• Dosing resolution improves 10×: a pump with 0.05 U steps can deliver 0.005 U of insulin.")
-                    Text("• The pump's maximum deliverable amounts shrink 10×: a pump limited to 30 U/hr of volume can deliver at most 3 U/hr of actual insulin.")
-                    Text("• The reservoir display and the pump's own screens still show fluid volume, not actual insulin units.")
-                }
-
-                Text(
-                    "When you change this setting, Trio re-programs the pump's basal schedule, delivery limits, and bolus increment for the new concentration. Fill a fresh reservoir or pod with the diluted insulin at the same time."
-                )
-            }
-            .fixedSize(horizontal: false, vertical: true)
-        }
-
         var body: some View {
             List {
                 Section(
@@ -163,69 +131,6 @@ extension UnitsLimitsSettings {
                         )
                     }
                 )
-
-                Section(
-                    header: Text("Insulin Dilution"),
-                    content: {
-                        VStack {
-                            Toggle(isOn: $state.allowDilution) {
-                                Text("Use Diluted Insulin")
-                            }.padding(.top)
-
-                            if state.allowDilution {
-                                Picker("Concentration", selection: $state.insulinConcentrationOption) {
-                                    ForEach(InsulinConcentrationOption.allCases.filter { $0 != .u100 }) { option in
-                                        Text(option.displayName).tag(option)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
-                                .padding(.top, 4)
-
-                                if let recipe = state.insulinConcentrationOption.dilutionRecipe {
-                                    HStack {
-                                        Text(recipe)
-                                            .font(.footnote)
-                                            .foregroundColor(.secondary)
-                                        Spacer()
-                                    }
-                                    .padding(.top, 2)
-                                }
-                            }
-
-                            if let syncMessage = state.concentrationSyncMessage {
-                                HStack {
-                                    Text(syncMessage)
-                                        .font(.footnote)
-                                        .foregroundColor(.red)
-                                    Spacer()
-                                }
-                                .padding(.top, 2)
-                            }
-
-                            HStack(alignment: .center) {
-                                Text(
-                                    "Tell Trio the reservoir holds diluted insulin, e.g. U-10 = 1 part insulin + 9 parts diluent."
-                                )
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
-                                .lineLimit(nil)
-                                Spacer()
-                                Button(
-                                    action: {
-                                        shouldDisplayHint.toggle()
-                                        selectedVerboseHint = shouldDisplayHint ? AnyView(dilutionVerboseHint) : nil
-                                        hintLabel = String(localized: "Use Diluted Insulin")
-                                    },
-                                    label: {
-                                        HStack {
-                                            Image(systemName: "questionmark.circle")
-                                        }
-                                    }
-                                ).buttonStyle(BorderlessButtonStyle())
-                            }.padding(.vertical)
-                        }
-                    }
-                ).listRowBackground(Color.chart)
 
                 SettingInputSection(
                     decimalValue: $state.maxCOB,

@@ -89,10 +89,8 @@ extension AutotuneConfig {
                     debug(.service, "Basals have been replaced with Autotuned Basals by user.")
                     return
                 }
-                // Autotuned rates are actual insulin units; the pump schedule is volume.
-                let concentration = settingsManager.settings.insulinConcentrationFactor
                 let syncValues = basals.map {
-                    RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate) / concentration)
+                    RepeatingScheduleValue(startTime: TimeInterval($0.minutes * 60), value: Double($0.rate))
                 }
                 pump.syncBasalRateSchedule(items: syncValues) { result in
                     switch result {
