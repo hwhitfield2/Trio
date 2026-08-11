@@ -301,35 +301,31 @@ platform :ios do
       Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS
     ])
 
-    # Create the App Store Connect app record for the follower so TestFlight
-    # uploads work on the first build.
+    # Report whether the follower has an App Store Connect app record, which
+    # "5. Build Trio Follower" needs before it can upload to TestFlight.
     #
-    # This deliberately does not use produce: that action has no api_key option
-    # (fastlane 2.235.0) and falls back to Apple ID auth, which CI has no
-    # credentials for — it just fails with "No value found for 'username'".
-    # Spaceship uses the App Store Connect API key installed above, the same
-    # way configure_bundle_id does.
+    # This cannot be automated with the credentials CI has. Apple's App Store
+    # Connect API does not support creating apps at all ("The resource 'apps'
+    # does not allow 'CREATE'"), and produce, which can, has no api_key option
+    # in fastlane 2.235.0 — it only speaks Apple ID auth. So the record has to
+    # be created once by hand; everything else here is automated.
     #
-    # Best-effort: never fail the identifiers lane for users who don't build
-    # the follower. Note that app names are unique across the whole App Store,
-    # so "Trio Follower" can legitimately be rejected as already taken.
+    # Best-effort: never fail the lane for users who don't build the follower.
     begin
       follower_bundle_id = "#{BUNDLE_ID}follower"
       if Spaceship::ConnectAPI::App.find(follower_bundle_id)
-        UI.message("App Store Connect record for #{follower_bundle_id} already exists")
+        UI.success("App Store Connect record for #{follower_bundle_id} is present")
       else
-        Spaceship::ConnectAPI::App.create(
-          name: "Trio Follower",
-          version_string: "1.0",
-          sku: follower_bundle_id,
-          primary_locale: "en-US",
-          bundle_id: follower_bundle_id,
-          platforms: ["IOS"]
-        )
-        UI.success("Created App Store Connect record for #{follower_bundle_id}")
+        UI.important("No App Store Connect app record for #{follower_bundle_id}.")
+        UI.important("\"5. Build Trio Follower\" will build but fail to upload to TestFlight.")
+        UI.important("Create it once at https://appstoreconnect.apple.com → Apps → +:")
+        UI.important("  Platform: iOS")
+        UI.important("  Bundle ID: #{follower_bundle_id}")
+        UI.important("  SKU: #{follower_bundle_id}")
+        UI.important("  Name: anything free in the App Store, e.g. \"Trio Follower\"")
       end
     rescue => e
-      UI.important("Skipping follower app record creation: #{e.message}")
+      UI.important("Could not check the follower app record: #{e.message}")
     end
 
   end

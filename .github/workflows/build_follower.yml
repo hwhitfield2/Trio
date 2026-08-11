@@ -5,12 +5,15 @@ name: 5. Build Trio Follower
 #     TestFlight (bundle id: org.nightscout.<TEAMID>.triofollower)
 #   - Android: release APK attached as a workflow artifact for sideloading
 #
-# Uses the same repository secrets as "4. Build Trio". Run "2. Add
-# Identifiers" once first — it now also creates the follower bundle id (with
-# push notifications) and its App Store Connect app record — then "3. Create
-# Certificates", which provisions the follower's signing profile. This workflow
-# runs match in read-only mode (setup_ci forces it), so that profile must
-# already exist.
+# Uses the same repository secrets as "4. Build Trio". One-time setup, in
+# order (see FollowerApp/README.md):
+#   1. "2. Add Identifiers" — creates the follower bundle id with push
+#      notifications.
+#   2. Create the follower's App Store Connect app record by hand; Apple's API
+#      cannot create apps, and without the record TestFlight upload fails.
+#   3. "3. Create Certificates" — provisions the follower's signing profile.
+#      This workflow runs match in read-only mode (setup_ci forces it), so the
+#      profile must already exist.
 #
 # Serialize TestFlight uploads: concurrent runs race on
 # latest_testflight_build_number.

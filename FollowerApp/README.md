@@ -67,14 +67,22 @@ The repository's GitHub Actions build the follower for you:
   app to **TestFlight** using the same fastlane/match secrets as "4. Build
   Trio", and attaches an installable **Android APK** as a workflow artifact.
   One-time prerequisites:
-  1. Run **"2. Add Identifiers"** once — it now also creates the follower
-     bundle id (`org.nightscout.<TEAMID>.triofollower`, with push
-     notifications) and its App Store Connect app record.
-  2. Run **"3. Create Certificates"** afterwards — it provisions the follower's
-     signing profile. The follower build runs fastlane match in read-only mode
-     and cannot create the profile itself, so it has to exist beforehand. Run
-     this even if you already created certificates before the follower existed.
-  3. Optional, Android live status: add a repository secret
+  1. Run **"2. Add Identifiers"** once — it also creates the follower bundle id
+     (`org.nightscout.<TEAMID>.triofollower`) with push notifications, and
+     reports whether the App Store Connect app record below exists.
+  2. Create the follower's **App Store Connect app record** by hand, once, at
+     [App Store Connect](https://appstoreconnect.apple.com) → Apps → **+**:
+     platform **iOS**, bundle id `org.nightscout.<TEAMID>.triofollower`, the
+     same string as the SKU, and any app name still available in the App Store.
+     This one step cannot be automated — Apple's App Store Connect API does not
+     allow creating apps (`The resource 'apps' does not allow 'CREATE'`), and
+     fastlane's `produce`, which can, only supports Apple ID authentication.
+     Without the record the build succeeds but the TestFlight upload fails.
+  3. Run **"3. Create Certificates"** — it provisions the follower's signing
+     profile. The follower build runs fastlane match in read-only mode and
+     cannot create the profile itself, so it has to exist beforehand. Run this
+     even if you already created certificates before the follower existed.
+  4. Optional, Android live status: add a repository secret
      `FOLLOWER_GOOGLE_SERVICES_JSON` containing your Firebase project's
      `google-services.json` contents.
 - **"Follower CI"** (`follower_ci.yml`) — runs automatically on changes to
