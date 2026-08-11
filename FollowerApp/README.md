@@ -70,7 +70,11 @@ The repository's GitHub Actions build the follower for you:
   1. Run **"2. Add Identifiers"** once — it now also creates the follower
      bundle id (`org.nightscout.<TEAMID>.triofollower`, with push
      notifications) and its App Store Connect app record.
-  2. Optional, Android live status: add a repository secret
+  2. Run **"3. Create Certificates"** afterwards — it provisions the follower's
+     signing profile. The follower build runs fastlane match in read-only mode
+     and cannot create the profile itself, so it has to exist beforehand. Run
+     this even if you already created certificates before the follower existed.
+  3. Optional, Android live status: add a repository secret
      `FOLLOWER_GOOGLE_SERVICES_JSON` containing your Firebase project's
      `google-services.json` contents.
 - **"Follower CI"** (`follower_ci.yml`) — runs automatically on changes to

@@ -7,7 +7,10 @@ name: 5. Build Trio Follower
 #
 # Uses the same repository secrets as "4. Build Trio". Run "2. Add
 # Identifiers" once first — it now also creates the follower bundle id (with
-# push notifications) and its App Store Connect app record.
+# push notifications) and its App Store Connect app record — then "3. Create
+# Certificates", which provisions the follower's signing profile. This workflow
+# runs match in read-only mode (setup_ci forces it), so that profile must
+# already exist.
 #
 # Serialize TestFlight uploads: concurrent runs race on
 # latest_testflight_build_number.

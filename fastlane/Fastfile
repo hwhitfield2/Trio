@@ -339,7 +339,11 @@ platform :ios do
         "#{BUNDLE_ID}",
         "#{BUNDLE_ID}.watchkitapp",
         "#{BUNDLE_ID}.watchkitapp.TrioWatchComplication",
-        "#{BUNDLE_ID}.LiveActivity"
+        "#{BUNDLE_ID}.LiveActivity",
+        # Trio Follower: build_follower calls setup_ci, which forces
+        # MATCH_READONLY, so its match run can only fetch an existing profile —
+        # this lane is the only place the follower profile gets created.
+        "#{BUNDLE_ID}follower"
       ]
     )
   end
