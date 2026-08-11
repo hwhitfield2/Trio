@@ -47,7 +47,7 @@ class PushService {
 
   /// Fires when the OS rotates the push token; the host must be re-registered.
   void onNewToken(void Function(String token) handler) {
-    Push.instance.addOnNewToken(handler);
+    Push.instance.onNewToken.listen(handler);
   }
 
   /// Fires for pushes received while the app is running (foreground or

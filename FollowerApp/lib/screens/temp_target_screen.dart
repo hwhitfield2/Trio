@@ -18,6 +18,14 @@ class _TempTargetScreenState extends State<TempTargetScreen> {
   int _durationMinutes = 60;
   bool _sending = false;
 
+  Future<void> _send(TrioCommand command) async {
+    setState(() => _sending = true);
+    final sent = await confirmAndSend(context, command);
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (sent) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -73,35 +81,16 @@ class _TempTargetScreenState extends State<TempTargetScreen> {
           FilledButton.icon(
             onPressed: _sending
                 ? null
-                : () async {
-                    setState(() => _sending = true);
-                    final sent = await confirmAndSend(
-                      context,
-                      TrioCommand.tempTarget(
-                        targetMgdl: _targetMgdl.round(),
-                        durationMinutes: _durationMinutes,
-                      ),
-                    );
-                    if (mounted) {
-                      setState(() => _sending = false);
-                      if (sent) Navigator.of(context).pop();
-                    }
-                  },
+                : () => _send(TrioCommand.tempTarget(
+                      targetMgdl: _targetMgdl.round(),
+                      durationMinutes: _durationMinutes,
+                    )),
             icon: const Icon(Icons.gps_fixed),
             label: Text(_sending ? 'Sending…' : 'Start temp target'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: _sending
-                ? null
-                : () async {
-                    setState(() => _sending = true);
-                    final sent = await confirmAndSend(context, TrioCommand.cancelTempTarget());
-                    if (mounted) {
-                      setState(() => _sending = false);
-                      if (sent) Navigator.of(context).pop();
-                    }
-                  },
+            onPressed: _sending ? null : () => _send(TrioCommand.cancelTempTarget()),
             icon: const Icon(Icons.cancel_outlined),
             label: const Text('Cancel active temp target'),
           ),
