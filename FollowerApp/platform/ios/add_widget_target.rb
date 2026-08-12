@@ -5,7 +5,12 @@
 # work. Idempotent: re-running refreshes the settings of an existing target
 # instead of adding a second one.
 #
-#   usage: add_widget_target.rb <app-group-id> <widget-bundle-id>
+#   usage: add_widget_target.rb <app-group-id>
+#
+# The widget's bundle id is derived from Runner's, since an embedded extension
+# must be prefixed with its host app's identifier. At this point Runner still
+# carries the id flutter create gave it; fastlane renames both to the team's
+# identifiers at archive time.
 #
 # Run from FollowerApp/ after `flutter create` has produced the iOS shell.
 
@@ -16,16 +21,21 @@ TARGET_NAME = 'TrioFollowerWidgetExtension'.freeze
 GROUP_NAME = 'TrioFollowerWidget'.freeze
 DEPLOYMENT_TARGET = '17.0'.freeze
 
-app_group_id, bundle_id = ARGV
-if app_group_id.to_s.empty? || bundle_id.to_s.empty?
-  abort('usage: add_widget_target.rb <app-group-id> <widget-bundle-id>')
-end
+app_group_id = ARGV[0]
+abort('usage: add_widget_target.rb <app-group-id>') if app_group_id.to_s.empty?
 
 abort("#{PROJECT_PATH} not found; run flutter create first") unless File.exist?(PROJECT_PATH)
 
 project = Xcodeproj::Project.open(PROJECT_PATH)
 runner = project.targets.find { |t| t.name == 'Runner' }
 abort('Runner target not found') if runner.nil?
+
+runner_bundle_id = runner.build_configurations
+                        .map { |config| config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] }
+                        .compact
+                        .first
+abort('Runner has no PRODUCT_BUNDLE_IDENTIFIER') if runner_bundle_id.to_s.empty?
+bundle_id = "#{runner_bundle_id}.widget"
 
 target = project.targets.find { |t| t.name == TARGET_NAME }
 if target

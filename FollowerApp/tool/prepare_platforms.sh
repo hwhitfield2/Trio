@@ -25,7 +25,6 @@ cd "$(dirname "$0")/.."
 # so builders do not have to create a second group. Keep in sync with
 # TRIO_APP_GROUP_ID in Config.xcconfig.
 APP_GROUP_ID="group.org.nightscout.${TEAMID:-}.trio.trio-app-group"
-WIDGET_BUNDLE_ID="org.nightscout.${TEAMID:-}.triofollower.widget"
 
 echo "==> flutter create (platform shells)"
 flutter create . --platforms=ios,android --project-name trio_follower --org org.nightscout
@@ -105,7 +104,7 @@ if [ -f ios/Runner.xcodeproj/project.pbxproj ]; then
       sed "s|__APP_GROUP_ID__|${APP_GROUP_ID}|g" "$file" > "ios/TrioFollowerWidget/$name"
     done
 
-    ruby platform/ios/add_widget_target.rb "$APP_GROUP_ID" "$WIDGET_BUNDLE_ID"
+    ruby platform/ios/add_widget_target.rb "$APP_GROUP_ID"
   fi
 fi
 
