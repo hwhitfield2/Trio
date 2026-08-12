@@ -6,17 +6,10 @@ struct LiveActivityIOBLabelView: View {
     var context: ActivityViewContext<LiveActivityAttributes>
     var additionalState: LiveActivityAttributes.ContentAdditionalState
 
-    private var bolusFormatter: NumberFormatter {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 1
-        return formatter
-    }
-
     var body: some View {
         VStack(spacing: 2) {
             HStack {
-                Text(bolusFormatter.string(from: additionalState.iob as NSNumber) ?? "--")
+                Text(NumberFormatter.insulinFormatter.string(from: additionalState.iob as NSNumber) ?? "--")
                     .fontWeight(.bold)
                     .font(.title3)
                     .foregroundStyle(context.isStale ? .secondary : .primary)

@@ -67,6 +67,90 @@ extension NumberFormatter {
         formatter.maximumFractionDigits = 1
         return formatter
     }()
+
+    /// Formatter for insulin amounts, i.e. IOB and total daily dose.
+    static let insulinFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }()
+}
+
+extension DateFormatter {
+    /// Formatter for the "updated" timestamps shown in the live activity and the widgets.
+    static let updatedTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
+extension LiveActivityAttributes.ContentState {
+    /// Whether the user picked the static (red / green / orange) glucose color scheme.
+    var hasStaticColorScheme: Bool {
+        glucoseColorScheme == GlucoseColorScheme.staticColor.rawValue
+    }
+
+    /// The color of the currently displayed glucose value.
+    ///
+    /// Shared by the lock screen live activity, the dynamic island and the widgets so that they can
+    /// never disagree about what "in range" looks like.
+    var glucoseColor: Color {
+        let isMgdL = unit == GlucoseUnits.mgdL.rawValue
+
+        // TODO: workaround for now: set low value to 55, to have dynamic color shades between 55 and user-set low (approx. 70); same for high glucose
+        let hardCodedLow = isMgdL ? Decimal(55) : 55.asMmolL
+        let hardCodedHigh = isMgdL ? Decimal(220) : 220.asMmolL
+
+        return Color.getDynamicGlucoseColor(
+            glucoseValue: Decimal(string: bg) ?? 100,
+            highGlucoseColorValue: !hasStaticColorScheme ? hardCodedHigh : (isMgdL ? highGlucose : highGlucose.asMmolL),
+            lowGlucoseColorValue: !hasStaticColorScheme ? hardCodedLow : (isMgdL ? lowGlucose : lowGlucose.asMmolL),
+            targetGlucose: isMgdL ? target : target.asMmolL,
+            glucoseColorScheme: glucoseColorScheme
+        )
+    }
+
+    /// The glucose delta with the padding the live activity formatter adds stripped off.
+    var trimmedChange: String {
+        change.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The timestamp shown in the "updated" label, or a placeholder if there is no determination yet.
+    var formattedUpdatedTime: String {
+        guard let date else { return "--" }
+
+        return DateFormatter.updatedTimeFormatter.string(from: date)
+    }
+}
+
+extension LiveActivityAttributes.ContentAdditionalState {
+    /// The predicted eventual glucose, formatted for the given glucose unit.
+    ///
+    /// Matches the caps used for the non-carb forecast curves so a runaway carb forecast cannot
+    /// surface an absurd value. Out-of-range values keep an explicit ≤/≥ marker in both directions -
+    /// a predicted severe low must not silently render as a near-normal 39.
+    func formattedEventualBG(unit: String) -> String {
+        guard let eventualBG else { return "--" }
+
+        let clamped = min(max(eventualBG, 39), 401)
+        let prefix = eventualBG < 39 ? "≤" : (eventualBG > 401 ? "≥" : "")
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.roundingMode = .halfUp
+
+        if unit == GlucoseUnits.mgdL.rawValue {
+            formatter.maximumFractionDigits = 0
+            return prefix + (formatter.string(from: clamped as NSDecimalNumber) ?? "--")
+        } else {
+            formatter.minimumFractionDigits = 1
+            formatter.maximumFractionDigits = 1
+            return prefix + (formatter.string(from: clamped.asMmolL as NSDecimalNumber) ?? "--")
+        }
+    }
 }
 
 extension Color {

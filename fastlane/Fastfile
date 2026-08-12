@@ -301,7 +301,11 @@ platform :ios do
       Spaceship::ConnectAPI::BundleIdCapability::Type::HEALTHKIT
     ])
 
-    configure_bundle_id("Trio LiveActivity", "#{BUNDLE_ID}.LiveActivity", [])
+    # The widget extension reads the glucose snapshot Trio publishes into the shared app group,
+    # so its bundle ID needs the app group capability alongside the Live Activity.
+    configure_bundle_id("Trio LiveActivity", "#{BUNDLE_ID}.LiveActivity", [
+      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
+    ])
 
     # Trio Follower companion app (FollowerApp/): needs push notifications so
     # the host can deliver encrypted status snapshots to it.

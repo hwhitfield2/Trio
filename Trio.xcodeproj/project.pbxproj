@@ -37,6 +37,10 @@
 		AB0400000000000000000B0B /* FoodUsageStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A0B /* FoodUsageStored+CoreDataProperties.swift */; };
 		AB0400000000000000000B0C /* FoodLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0400000000000000000A0C /* FoodLibraryTests.swift */; };
 		AB0500000000000000000B01 /* SiteTrackerDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A01 /* SiteTrackerDataFlow.swift */; };
+		AB0700000000000000000B01 /* TrioWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0700000000000000000A01 /* TrioWidgetSnapshot.swift */; };
+		AB0700000000000000000B02 /* TrioWidgetSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0700000000000000000A02 /* TrioWidgetSnapshotStore.swift */; };
+		AB0700000000000000000B11 /* TrioWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0700000000000000000A01 /* TrioWidgetSnapshot.swift */; };
+		AB0700000000000000000B12 /* TrioWidgetSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0700000000000000000A02 /* TrioWidgetSnapshotStore.swift */; };
 		AB0500000000000000000B02 /* SiteTrackerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A02 /* SiteTrackerProvider.swift */; };
 		AB0500000000000000000B03 /* SiteTrackerStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A03 /* SiteTrackerStateModel.swift */; };
 		AB0500000000000000000B04 /* SiteTrackerRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0500000000000000000A04 /* SiteTrackerRootView.swift */; };
@@ -1043,6 +1047,9 @@
 		AB0400000000000000000A0B /* FoodUsageStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FoodUsageStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		AB0400000000000000000A0C /* FoodLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLibraryTests.swift; sourceTree = "<group>"; };
 		AB0500000000000000000A01 /* SiteTrackerDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerDataFlow.swift; sourceTree = "<group>"; };
+		AB0700000000000000000A01 /* TrioWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrioWidgetSnapshot.swift; sourceTree = "<group>"; };
+		AB0700000000000000000A02 /* TrioWidgetSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrioWidgetSnapshotStore.swift; sourceTree = "<group>"; };
+		AB0700000000000000000A03 /* LiveActivity.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LiveActivity.entitlements; sourceTree = "<group>"; };
 		AB0500000000000000000A02 /* SiteTrackerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerProvider.swift; sourceTree = "<group>"; };
 		AB0500000000000000000A03 /* SiteTrackerStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerStateModel.swift; sourceTree = "<group>"; };
 		AB0500000000000000000A04 /* SiteTrackerRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteTrackerRootView.swift; sourceTree = "<group>"; };
@@ -2621,6 +2628,15 @@
 			path = View;
 			sourceTree = "<group>";
 		};
+		AB0700000000000000000C01 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				AB0700000000000000000A01 /* TrioWidgetSnapshot.swift */,
+				AB0700000000000000000A02 /* TrioWidgetSnapshotStore.swift */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
 		3811DE9125C9D88200A708ED /* Services */ = {
 			isa = PBXGroup;
 			children = (
@@ -2650,6 +2666,7 @@
 				3811DEA525C9D88300A708ED /* UnlockManager */,
 				38E87406274F9AA500975559 /* UserNotifications */,
 				38E8754D275556E100975559 /* WatchManager */,
+				AB0700000000000000000C01 /* Widgets */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -3398,6 +3415,7 @@
 				6B1A8D232B14D91700E76752 /* Assets.xcassets */,
 				6B1A8D252B14D91700E76752 /* Info.plist */,
 				DDCEBF5A2CC1B76400DF4C36 /* LiveActivity+Helper.swift */,
+				AB0700000000000000000A03 /* LiveActivity.entitlements */,
 			);
 			path = LiveActivity;
 			sourceTree = "<group>";
@@ -5583,6 +5601,8 @@
 				AB0400000000000000000B0A /* FoodUsageStored+CoreDataClass.swift in Sources */,
 				AB0400000000000000000B0B /* FoodUsageStored+CoreDataProperties.swift in Sources */,
 				AB0500000000000000000B01 /* SiteTrackerDataFlow.swift in Sources */,
+				AB0700000000000000000B01 /* TrioWidgetSnapshot.swift in Sources */,
+				AB0700000000000000000B02 /* TrioWidgetSnapshotStore.swift in Sources */,
 				AB0500000000000000000B02 /* SiteTrackerProvider.swift in Sources */,
 				AB0500000000000000000B03 /* SiteTrackerStateModel.swift in Sources */,
 				AB0500000000000000000B04 /* SiteTrackerRootView.swift in Sources */,
@@ -5793,6 +5813,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				6BCF84DE2B16843A003AD46E /* LiveActitiyAttributes.swift in Sources */,
+				AB0700000000000000000B11 /* TrioWidgetSnapshot.swift in Sources */,
+				AB0700000000000000000B12 /* TrioWidgetSnapshotStore.swift in Sources */,
 				DDCEBF5B2CC1B76400DF4C36 /* LiveActivity+Helper.swift in Sources */,
 				6B1A8D1E2B14D91600E76752 /* LiveActivityBundle.swift in Sources */,
 				6B1A8D202B14D91600E76752 /* LiveActivity.swift in Sources */,
@@ -6150,6 +6172,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGN_ENTITLEMENTS = LiveActivity/LiveActivity.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(APP_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";
@@ -6184,6 +6207,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGN_ENTITLEMENTS = LiveActivity/LiveActivity.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(APP_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = "$(DEVELOPER_TEAM)";

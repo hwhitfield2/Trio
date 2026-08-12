@@ -8,15 +8,8 @@ struct LiveActivityUpdatedLabelView: View {
     var context: ActivityViewContext<LiveActivityAttributes>
     var isDetailedLayout: Bool
 
-    private var dateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }
-
     var body: some View {
-        let dateText = Text("\((context.state.date != nil) ? dateFormatter.string(from: context.state.date!) : "--")")
+        let dateText = Text(context.state.formattedUpdatedTime)
 
         if isWatchOS {
             dateText

@@ -176,8 +176,9 @@ _Referring to the table below, tap on each **IDENTIFIER** that has a different *
 > If you have previously built Trio as a beta tester (between May 13th, 2024, and today), you will already have an app group (`Loop App Group`) created and configured for your bundle identifiers. In this case, please *do not* skip this section; you are required to create the `Trio App Group` and configure it for your identifiers, as described below.
 
 1. Go to [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list) on the Apple developer site.
-1. Repeat this step for these three Identifier **NAMES** - refer to the [Table](#table-of-identifiers) above if your Names look different; if they do, see [Optional: Identifier Description Modification](#optional-identifier-description-modification)
+1. Repeat this step for these four Identifier **NAMES** - refer to the [Table](#table-of-identifiers) above if your Names look different; if they do, see [Optional: Identifier Description Modification](#optional-identifier-description-modification)
     * Trio
+    * Trio LiveActivity
     * Trio Watch App
     * Trio Watch Complication
 1. Click on the **IDENTIFIER** row.
@@ -186,11 +187,9 @@ _Referring to the table below, tap on each **IDENTIFIER** that has a different *
 1. Click "Continue".
 1. Click "Save".
 1. Click "Confirm".
-1. Remember to do this for each of three identifiers listed under step 2.
+1. Remember to do this for each of four identifiers listed under step 2.
 
-There is an additional identifier, but it does not need the App Group added to it:
-
-* Trio LiveActivity
+> If you built Trio before the home screen widgets were added, `Trio LiveActivity` is the one identifier that did not previously need the App Group. Add it now as described above, then run the "2. Add Identifiers" and "3. Create Certificates" workflows again so the widget extension gets a provisioning profile that allows it to read Trio's data. If "4. Build Trio" still fails with a provisioning profile or entitlement error for `Trio LiveActivity`, delete that identifier's profile on the Apple developer site and run "3. Create Certificates" once more.
 
 ## Create Trio App in App Store Connect
 

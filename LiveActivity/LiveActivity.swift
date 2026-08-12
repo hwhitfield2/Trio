@@ -8,26 +8,8 @@ struct LiveActivity: Widget {
             LiveActivityView(context: context)
                 .addIsWatchOS()
         } dynamicIsland: { context in
-            let hasStaticColorScheme = context.state.glucoseColorScheme == "staticColor"
-
-            var glucoseColor: Color {
-                let state = context.state
-                let isMgdL = state.unit == "mg/dL"
-
-                // TODO: workaround for now: set low value to 55, to have dynamic color shades between 55 and user-set low (approx. 70); same for high glucose
-                let hardCodedLow = isMgdL ? Decimal(55) : 55.asMmolL
-                let hardCodedHigh = isMgdL ? Decimal(220) : 220.asMmolL
-
-                return Color.getDynamicGlucoseColor(
-                    glucoseValue: Decimal(string: state.bg) ?? 100,
-                    highGlucoseColorValue: !hasStaticColorScheme
-                        ? hardCodedHigh : state.highGlucose,
-                    lowGlucoseColorValue: !hasStaticColorScheme
-                        ? hardCodedLow : state.lowGlucose,
-                    targetGlucose: isMgdL ? state.target : state.target.asMmolL,
-                    glucoseColorScheme: state.glucoseColorScheme
-                )
-            }
+            let hasStaticColorScheme = context.state.hasStaticColorScheme
+            let glucoseColor = context.state.glucoseColor
 
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {

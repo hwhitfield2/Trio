@@ -407,23 +407,30 @@ final class LiveActivityData: ObservableObject {
         }
         let prevGlucose = data.glucoseFromPersistence?.dropFirst().first
 
-        guard let determination = data.determination else {
-            debug(.default, "[LiveActivityManager] pushCurrentContent: no determination available")
-            return
-        }
-
         let content = LiveActivityAttributes.ContentState(
             new: bg,
             prev: prevGlucose,
             units: settings.units,
             chart: glucose,
             settings: settings,
-            determination: determination,
+            determination: data.determination,
             iob: data.iob,
             override: data.override,
             tempTarget: data.tempTarget,
             widgetItems: data.widgetItems
         )
+
+        // The home and lock screen widgets show the same content as the live activity, but they are
+        // not governed by the live activity setting and they stay on screen without a determination,
+        // so publish the snapshot before the checks that may skip the live activity update.
+        TrioWidgetSnapshotStore.shared.save(
+            TrioWidgetSnapshot(state: content, glucoseDate: bg.date)
+        )
+
+        guard data.determination != nil else {
+            debug(.default, "[LiveActivityManager] pushCurrentContent: no determination available")
+            return
+        }
 
         await pushUpdate(content)
     }
