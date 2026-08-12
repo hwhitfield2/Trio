@@ -180,9 +180,17 @@ platform :ios do
 
     # Compile the Flutter app once without signing; gym re-archives the
     # generated workspace with distribution signing below.
+    #
+    # with_unbundled_env is required: this lane runs under `bundle exec`, and
+    # the Flutter build shells out to `pod`. CocoaPods inherits our Bundler
+    # environment, whose Gemfile has fastlane but not cocoapods, and dies with
+    # "CocoaPods is installed but broken ... not in valid state" — so Flutter
+    # skips pod install and the archive has no Pods to link against.
     Dir.chdir(follower_dir) do
-      sh("flutter", "pub", "get")
-      sh("flutter", "build", "ios", "--release", "--no-codesign", "--build-number=#{current_build_number}")
+      Bundler.with_unbundled_env do
+        sh("flutter", "pub", "get")
+        sh("flutter", "build", "ios", "--release", "--no-codesign", "--build-number=#{current_build_number}")
+      end
     end
 
     update_project_team(
