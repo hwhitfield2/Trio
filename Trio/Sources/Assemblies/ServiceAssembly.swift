@@ -40,5 +40,6 @@ final class ServiceAssembly: Assembly {
         container.register(TwilioMessagingManager.self) { r in BaseTwilioMessagingManager(resolver: r) }
         container.register(SiteLifecycleManager.self) { r in BaseSiteLifecycleManager(resolver: r) }
         container.register(SleepSafetyManager.self) { r in BaseSleepSafetyManager(resolver: r) }
+        container.register(FollowerStatusPublisher.self) { r in BaseFollowerStatusPublisher(resolver: r) }
     }
 }

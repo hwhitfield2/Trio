@@ -12,6 +12,25 @@ struct SecureMessenger {
         sharedKey = Array(secretData.sha256())
     }
 
+    /// Encrypts arbitrary JSON data using the same wire format `decrypt`
+    /// expects: base64( nonce(12) || ciphertext || GCM tag(16) ). Used for
+    /// host → follower status pushes.
+    func encrypt(data: Data) throws -> String {
+        var nonce = [UInt8](repeating: 0, count: 12)
+        let status = SecRandomCopyBytes(kSecRandomDefault, nonce.count, &nonce)
+        guard status == errSecSuccess else {
+            throw NSError(
+                domain: "SecureMessenger",
+                code: 102,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to generate a random nonce"]
+            )
+        }
+        let gcm = GCM(iv: nonce, mode: .combined)
+        let aes = try AES(key: sharedKey, blockMode: gcm, padding: .noPadding)
+        let ciphertextAndTag = try aes.encrypt(Array(data))
+        return Data(nonce + ciphertextAndTag).base64EncodedString()
+    }
+
     func decrypt(base64EncodedString: String) throws -> CommandPayload {
         guard let combinedData = Data(base64Encoded: base64EncodedString) else {
             throw NSError(domain: "SecureMessenger", code: 100, userInfo: [NSLocalizedDescriptionKey: "Invalid Base64 string"])

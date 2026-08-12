@@ -1,0 +1,163 @@
+/// Status snapshot pushed by the Trio host, decrypted from the
+/// `encrypted_status` push field. Schema is produced by
+/// `FollowerStatusPublisher` on the host — keep both sides in sync.
+class StatusSnapshot {
+  const StatusSnapshot({
+    required this.timestamp,
+    required this.units,
+    required this.readings,
+    this.iob,
+    this.cob,
+    this.lastLoop,
+    this.eventualBg,
+    this.tempTarget,
+    this.override,
+    this.maxBolus,
+    this.maxCarbs,
+  });
+
+  final DateTime timestamp;
+
+  /// Host display units: 'mg/dL' or 'mmol/L'. Readings are always mg/dL.
+  final String units;
+
+  /// Newest first, up to 6 hours.
+  final List<GlucoseReading> readings;
+  final double? iob;
+  final double? cob;
+  final DateTime? lastLoop;
+  final double? eventualBg;
+  final ActiveTempTarget? tempTarget;
+  final ActiveOverride? override;
+
+  /// Live limits from the host; fresher than the ones in the pairing bundle.
+  final double? maxBolus;
+  final double? maxCarbs;
+
+  GlucoseReading? get latest => readings.isEmpty ? null : readings.first;
+
+  int? get delta {
+    if (readings.length < 2) return null;
+    return readings[0].sgv - readings[1].sgv;
+  }
+
+  static StatusSnapshot? fromJson(Map<String, dynamic> json) {
+    if (json['type'] != 'status') return null;
+    final timestamp = json['timestamp'];
+    if (timestamp is! num) return null;
+
+    final readings = <GlucoseReading>[];
+    final rawReadings = json['readings'];
+    if (rawReadings is List) {
+      for (final entry in rawReadings) {
+        if (entry is! Map<String, dynamic>) continue;
+        final sgv = entry['sgv'];
+        final date = entry['date'];
+        if (sgv is! num || date is! num) continue;
+        readings.add(GlucoseReading(
+          sgv: sgv.round(),
+          date: DateTime.fromMillisecondsSinceEpoch((date * 1000).round()),
+          direction: entry['direction'] as String?,
+        ));
+      }
+    }
+
+    return StatusSnapshot(
+      timestamp: DateTime.fromMillisecondsSinceEpoch((timestamp * 1000).round()),
+      units: (json['units'] as String?) ?? 'mg/dL',
+      readings: readings,
+      iob: (json['iob'] as num?)?.toDouble(),
+      cob: (json['cob'] as num?)?.toDouble(),
+      lastLoop: json['last_loop'] is num
+          ? DateTime.fromMillisecondsSinceEpoch(((json['last_loop'] as num) * 1000).round())
+          : null,
+      eventualBg: (json['eventual_bg'] as num?)?.toDouble(),
+      tempTarget: json['temp_target'] is Map<String, dynamic>
+          ? ActiveTempTarget.fromJson(json['temp_target'] as Map<String, dynamic>)
+          : null,
+      override: json['override'] is Map<String, dynamic>
+          ? ActiveOverride.fromJson(json['override'] as Map<String, dynamic>)
+          : null,
+      maxBolus: (json['max_bolus'] as num?)?.toDouble(),
+      maxCarbs: (json['max_carbs'] as num?)?.toDouble(),
+    );
+  }
+}
+
+class GlucoseReading {
+  const GlucoseReading({required this.sgv, required this.date, this.direction});
+
+  /// mg/dL
+  final int sgv;
+  final DateTime date;
+  final String? direction;
+
+  String get trendArrow {
+    switch (direction) {
+      case 'TripleUp':
+        return '⇈';
+      case 'DoubleUp':
+        return '⇈';
+      case 'SingleUp':
+        return '↑';
+      case 'FortyFiveUp':
+        return '↗';
+      case 'Flat':
+        return '→';
+      case 'FortyFiveDown':
+        return '↘';
+      case 'SingleDown':
+        return '↓';
+      case 'DoubleDown':
+        return '⇊';
+      case 'TripleDown':
+        return '⇊';
+      default:
+        return '';
+    }
+  }
+}
+
+class ActiveTempTarget {
+  const ActiveTempTarget({required this.target, required this.name, this.until});
+
+  /// mg/dL
+  final double target;
+  final String name;
+  final DateTime? until;
+
+  static ActiveTempTarget? fromJson(Map<String, dynamic> json) {
+    final target = json['target'];
+    if (target is! num) return null;
+    DateTime? until;
+    final startedAt = json['started_at'];
+    final duration = json['duration'];
+    if (startedAt is num && duration is num) {
+      until = DateTime.fromMillisecondsSinceEpoch(((startedAt + duration * 60) * 1000).round());
+    }
+    return ActiveTempTarget(
+      target: target.toDouble(),
+      name: (json['name'] as String?) ?? 'Temp Target',
+      until: until,
+    );
+  }
+}
+
+class ActiveOverride {
+  const ActiveOverride({required this.name, this.until});
+
+  final String name;
+  final DateTime? until;
+
+  static ActiveOverride? fromJson(Map<String, dynamic> json) {
+    final name = json['name'];
+    if (name is! String) return null;
+    DateTime? until;
+    final startedAt = json['started_at'];
+    final duration = json['duration'];
+    if (startedAt is num && duration is num && duration > 0) {
+      until = DateTime.fromMillisecondsSinceEpoch(((startedAt + duration * 60) * 1000).round());
+    }
+    return ActiveOverride(name: name, until: until);
+  }
+}

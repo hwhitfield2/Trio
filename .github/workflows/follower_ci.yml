@@ -1,0 +1,127 @@
+name: Follower CI (analyze + tests + builds)
+
+# CI for the Trio Follower app (FollowerApp/, Flutter). No signing, no
+# TestFlight: runs the protocol/crypto tests, builds an installable Android
+# APK artifact, and compile-checks the iOS side without codesigning.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'FollowerApp/**'
+      - '.github/workflows/follower_ci.yml'
+  pull_request:
+    paths:
+      - 'FollowerApp/**'
+
+jobs:
+  analyze_and_test:
+    name: Analyze and run tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FollowerApp
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare platform shells
+        run: ./tool/prepare_platforms.sh
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        run: flutter test
+
+  android_apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    needs: analyze_and_test
+    defaults:
+      run:
+        working-directory: FollowerApp
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # When the (optional) FOLLOWER_GOOGLE_SERVICES_JSON secret is set, the
+      # APK is built with FCM support so Android followers receive the host's
+      # status pushes. Without it the APK still works for commands.
+      - name: Prepare platform shells
+        run: ./tool/prepare_platforms.sh
+        env:
+          FOLLOWER_GOOGLE_SERVICES_JSON: ${{ secrets.FOLLOWER_GOOGLE_SERVICES_JSON }}
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trio-follower-android
+          path: FollowerApp/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          echo "## 📱 Trio Follower Android APK" >> $GITHUB_STEP_SUMMARY
+          echo "Download the APK from this run's artifacts and sideload it on the follower device." >> $GITHUB_STEP_SUMMARY
+          if [ -f android/app/google-services.json ]; then
+            echo "FCM: **enabled** (status pushes will work)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "FCM: **not configured** — add the \`FOLLOWER_GOOGLE_SERVICES_JSON\` repository secret to enable live status on Android." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  ios_compile_check:
+    name: iOS compile check (no codesign)
+    runs-on: macos-26
+    needs: analyze_and_test
+    steps:
+      # No job-level working-directory: it would also apply to steps that run
+      # before checkout, when FollowerApp does not exist yet.
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare platform shells
+        working-directory: FollowerApp
+        run: ./tool/prepare_platforms.sh
+
+      - name: Build iOS (unsigned)
+        working-directory: FollowerApp
+        run: flutter build ios --release --no-codesign

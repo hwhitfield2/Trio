@@ -66,7 +66,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, ObservableObject, UNUserNoti
 
             Task {
                 do {
-                    try await TrioRemoteControl.shared.handleRemoteNotification(encryptedData: encryptedMessage.encryptedData)
+                    try await TrioRemoteControl.shared.handleRemoteNotification(
+                        encryptedData: encryptedMessage.encryptedData,
+                        followerId: encryptedMessage.followerId
+                    )
                     completionHandler(.newData)
                 } catch {
                     debug(
