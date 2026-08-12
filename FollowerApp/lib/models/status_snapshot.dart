@@ -14,6 +14,8 @@ class StatusSnapshot {
     this.override,
     this.maxBolus,
     this.maxCarbs,
+    this.lowThreshold,
+    this.highThreshold,
   });
 
   final DateTime timestamp;
@@ -33,6 +35,12 @@ class StatusSnapshot {
   /// Live limits from the host; fresher than the ones in the pairing bundle.
   final double? maxBolus;
   final double? maxCarbs;
+
+  /// The low and high glucose thresholds the host alerts on, in mg/dL. Null on
+  /// hosts that predate per-follower alert settings; callers fall back to the
+  /// app's own defaults.
+  final double? lowThreshold;
+  final double? highThreshold;
 
   GlucoseReading? get latest => readings.isEmpty ? null : readings.first;
 
@@ -80,6 +88,8 @@ class StatusSnapshot {
           : null,
       maxBolus: (json['max_bolus'] as num?)?.toDouble(),
       maxCarbs: (json['max_carbs'] as num?)?.toDouble(),
+      lowThreshold: (json['low'] as num?)?.toDouble(),
+      highThreshold: (json['high'] as num?)?.toDouble(),
     );
   }
 }

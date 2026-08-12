@@ -49,14 +49,18 @@ end
 
 group = project.main_group[GROUP_NAME] || project.main_group.new_group(GROUP_NAME, GROUP_NAME)
 
-swift_ref = group.files.find { |f| f.path == 'TrioFollowerWidget.swift' } ||
-            group.new_reference('TrioFollowerWidget.swift')
+# Every Swift file the prepare script copied in, so adding a widget is a matter
+# of dropping a file into platform/ios/TrioFollowerWidget/ and nothing else.
+swift_names = Dir.glob('ios/TrioFollowerWidget/*.swift').map { |path| File.basename(path) }.sort
+abort('no widget sources found in ios/TrioFollowerWidget') if swift_names.empty?
+
 %w[Info.plist TrioFollowerWidget.entitlements Widget.xcconfig].each do |name|
   group.new_reference(name) unless group.files.any? { |f| f.path == name }
 end
 
-unless target.source_build_phase.files_references.include?(swift_ref)
-  target.add_file_references([swift_ref])
+swift_names.each do |name|
+  ref = group.files.find { |f| f.path == name } || group.new_reference(name)
+  target.add_file_references([ref]) unless target.source_build_phase.files_references.include?(ref)
 end
 
 # --- Build settings ----------------------------------------------------------
@@ -127,3 +131,4 @@ end
 project.save
 
 puts "==> #{TARGET_NAME} ready (bundle id #{bundle_id}, app group #{app_group_id})"
+puts "==> widget sources: #{swift_names.join(', ')}"

@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="widget_glucose_label">Glucose</string>
+    <string name="widget_trend_label">Trend &amp; Range</string>
+    <string name="widget_loop_label">Loop &amp; Insulin</string>
+
     <string name="widget_description">Glucose, insulin and carbs from the paired Trio host.</string>
-    <string name="widget_chart_description">Glucose over the last six hours</string>
+    <string name="widget_trend_description">The glucose chart with the share of readings low, in range and high.</string>
+    <string name="widget_loop_description">How long since the host last looped, plus insulin, carbs and the eventual glucose.</string>
+
+    <string name="widget_chart_description">Glucose over the recent hours</string>
     <string name="widget_open_app">Open Trio Follower</string>
+    <string name="widget_no_adjustment">No override or temp target</string>
+    <string name="widget_loop_now">Looped just now</string>
+    <string name="widget_loop_age">%1$d min since loop</string>
+    <string name="widget_range_summary">%1$d%% in range · %2$d%% low · %3$d%% high · %4$dh</string>
 </resources>

@@ -136,44 +136,64 @@ fi
 
 ANDROID_MAIN=android/app/src/main
 if [ -d "$ANDROID_MAIN" ]; then
-  echo "==> Installing the Android widget provider and resources"
-  # Drop the provider next to MainActivity so it lands in the app's package.
+  echo "==> Installing the Android widget providers and resources"
+  # Drop the sources next to MainActivity so they land in the app's package.
   PACKAGE_DIR=$(dirname "$(find "$ANDROID_MAIN/kotlin" -name 'MainActivity.kt' 2>/dev/null | head -1)")
   if [ -n "${PACKAGE_DIR:-}" ] && [ -d "$PACKAGE_DIR" ]; then
-    cp platform/android/kotlin/GlucoseWidgetProvider.kt "$PACKAGE_DIR/"
+    cp platform/android/kotlin/*.kt "$PACKAGE_DIR/"
   else
-    echo "    MainActivity.kt not found; skipping the widget provider"
+    echo "    MainActivity.kt not found; skipping the widget providers"
   fi
 
   mkdir -p "$ANDROID_MAIN/res/layout" "$ANDROID_MAIN/res/xml" \
     "$ANDROID_MAIN/res/drawable" "$ANDROID_MAIN/res/values" "$ANDROID_MAIN/res/values-night"
   cp -R platform/android/res/. "$ANDROID_MAIN/res/"
 
-  if ! grep -q 'GlucoseWidgetProvider' "$ANDROID_MAIN/AndroidManifest.xml"; then
-    echo "==> Registering the widget receiver in AndroidManifest.xml"
-    python3 - <<'PY'
+  if [ -f "$ANDROID_MAIN/AndroidManifest.xml" ]; then
+    echo "==> Registering the widget receivers in AndroidManifest.xml"
+    python3 - <<'WIDGETS_PY'
+import re
+
 path = 'android/app/src/main/AndroidManifest.xml'
 with open(path) as f:
     content = f.read()
 
-receiver = '''        <receiver
-            android:name=".GlucoseWidgetProvider"
-            android:exported="false">
+# (class name, appwidget-provider xml, picker label)
+WIDGETS = [
+    ('GlucoseWidgetProvider', 'glucose_widget_info', 'widget_glucose_label'),
+    ('TrendWidgetProvider', 'trend_widget_info', 'widget_trend_label'),
+    ('LoopWidgetProvider', 'loop_widget_info', 'widget_loop_label'),
+]
+
+TEMPLATE = """        <receiver
+            android:name=".{cls}"
+            android:exported="false"
+            android:label="@string/{label}">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/glucose_widget_info" />
+                android:resource="@xml/{info}" />
         </receiver>
-'''
+"""
 
-content = content.replace('    </application>', receiver + '    </application>', 1)
+for cls, info, label in WIDGETS:
+    block = TEMPLATE.format(cls=cls, info=info, label=label)
+    pattern = r'[ \t]*<receiver[^>]*android:name="\.%s".*?</receiver>\n' % re.escape(cls)
+    existing = re.search(pattern, content, re.DOTALL)
+    if existing:
+        # An earlier run of this script wrote this receiver without the picker
+        # label; rewrite it rather than leaving the widget unlabelled.
+        if existing.group(0) != block:
+            content = content[:existing.start()] + block + content[existing.end():]
+    else:
+        content = content.replace('    </application>', block + '    </application>', 1)
 
 with open(path, 'w') as f:
     f.write(content)
-print('widget receiver registered')
-PY
+print('widget receivers registered')
+WIDGETS_PY
   fi
 fi
 

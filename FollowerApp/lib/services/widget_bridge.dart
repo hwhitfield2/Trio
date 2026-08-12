@@ -21,10 +21,17 @@ class WidgetBridge {
   /// Key the native widgets read the payload from.
   static const payloadKey = 'trio_follower_status';
 
-  static const _iOSWidgetName = 'TrioFollowerWidget';
-  static const _androidProvider = 'org.nightscout.trio_follower.GlucoseWidgetProvider';
+  /// The three widgets, as (iOS WidgetKit kind, Android provider class). Both
+  /// platforms need every widget reloaded: WidgetCenter reloads one kind at a
+  /// time, and each Android provider is its own broadcast receiver.
+  static const _widgets = <List<String>>[
+    ['TrioFollowerWidget', 'org.nightscout.trio_follower.GlucoseWidgetProvider'],
+    ['TrioFollowerTrendWidget', 'org.nightscout.trio_follower.TrendWidgetProvider'],
+    ['TrioFollowerLoopWidget', 'org.nightscout.trio_follower.LoopWidgetProvider'],
+  ];
 
-  /// Glucose thresholds in mg/dL, matching the in-app chart's colouring.
+  /// Fallback glucose thresholds in mg/dL, used until the host reports the ones
+  /// it actually alerts on. Match the in-app chart's colouring.
   static const lowThreshold = 70.0;
   static const highThreshold = 180.0;
 
@@ -39,12 +46,14 @@ class WidgetBridge {
       }
       await HomeWidget.saveWidgetData<String>(
         payloadKey,
-        snapshot == null ? null : jsonEncode(_payload(snapshot)),
+        snapshot == null ? null : jsonEncode(payloadFor(snapshot)),
       );
-      await HomeWidget.updateWidget(
-        iOSName: _iOSWidgetName,
-        qualifiedAndroidName: _androidProvider,
-      );
+      for (final widget in _widgets) {
+        await HomeWidget.updateWidget(
+          iOSName: widget[0],
+          qualifiedAndroidName: widget[1],
+        );
+      }
     } catch (error) {
       debugPrint('Widget update skipped: $error');
     }
@@ -54,7 +63,8 @@ class WidgetBridge {
   /// glucose from a host this device is no longer paired with.
   static Future<void> clear() => publish(null);
 
-  static Map<String, dynamic> _payload(StatusSnapshot snapshot) {
+  @visibleForTesting
+  static Map<String, dynamic> payloadFor(StatusSnapshot snapshot) {
     final mmol = snapshot.units == 'mmol/L';
     final latest = snapshot.latest;
     final delta = snapshot.delta;
@@ -75,13 +85,44 @@ class WidgetBridge {
       'tempTargetName': snapshot.tempTarget?.name,
       'overrideName': snapshot.override?.name,
       // Thresholds in display units, so the native side can colour without
-      // repeating the unit conversion.
-      'low': _convert(lowThreshold, mmol),
-      'high': _convert(highThreshold, mmol),
+      // repeating the unit conversion. The host sends the values it alerts on;
+      // fall back to the in-app chart's defaults until it does.
+      'low': _convert(snapshot.lowThreshold ?? lowThreshold, mmol),
+      'high': _convert(snapshot.highThreshold ?? highThreshold, mmol),
+      'stats': statsFor(snapshot),
       'chart': [
         for (final reading in snapshot.readings)
           {'v': _convert(reading.sgv.toDouble(), mmol), 't': reading.date.millisecondsSinceEpoch},
       ],
+    };
+  }
+
+  /// Share of the plotted readings below, inside and above the host's range.
+  /// Percentages are whole numbers that always sum to 100, so the widgets can
+  /// draw them as one stacked bar without rounding gaps.
+  @visibleForTesting
+  static Map<String, int>? statsFor(StatusSnapshot snapshot) {
+    if (snapshot.readings.isEmpty) return null;
+
+    final low = snapshot.lowThreshold ?? lowThreshold;
+    final high = snapshot.highThreshold ?? highThreshold;
+    final total = snapshot.readings.length;
+    var below = 0;
+    var above = 0;
+    for (final reading in snapshot.readings) {
+      if (reading.sgv <= low) {
+        below++;
+      } else if (reading.sgv >= high) {
+        above++;
+      }
+    }
+
+    final lowPct = (below * 100 / total).round();
+    final highPct = (above * 100 / total).round();
+    return <String, int>{
+      'low': lowPct,
+      'in_range': (100 - lowPct - highPct).clamp(0, 100).toInt(),
+      'high': highPct,
     };
   }
 
