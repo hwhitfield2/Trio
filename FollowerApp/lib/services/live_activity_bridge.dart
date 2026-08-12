@@ -7,6 +7,10 @@ import 'package:trio_live_activity/trio_live_activity.dart';
 import '../models/status_snapshot.dart';
 import 'widget_bridge.dart';
 
+// Callers deal in the bridge, not the plugin, so the one type they need to name
+// comes along with it.
+export 'package:trio_live_activity/trio_live_activity.dart' show LiveActivitySupport;
+
 /// Keeps the iOS Live Activity in step with the host's status.
 ///
 /// Like the widgets, every displayed value is formatted here rather than in
