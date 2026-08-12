@@ -94,6 +94,23 @@ target.build_configurations.each do |config|
   )
 end
 
+# --- Alert tones -------------------------------------------------------------
+
+# UNNotificationSound resolves an APNS `sound` name against the app bundle, so
+# the tones have to be Runner resources. Flutter assets are no use here: they
+# land under flutter_assets/, where the notification system will not look.
+sounds = Dir.glob('ios/Runner/Sounds/*.wav').map { |path| File.basename(path) }.sort
+unless sounds.empty?
+  sound_group = project.main_group['Sounds'] || project.main_group.new_group('Sounds', 'Runner/Sounds')
+  sounds.each do |name|
+    ref = sound_group.files.find { |f| f.path == name } || sound_group.new_reference(name)
+    next if runner.resources_build_phase.files_references.include?(ref)
+
+    runner.resources_build_phase.add_file_reference(ref)
+  end
+  puts "==> alert tones bundled: #{sounds.join(', ')}"
+end
+
 # --- Embed into the app ------------------------------------------------------
 
 runner.add_dependency(target) unless runner.dependencies.any? { |d| d.target&.name == TARGET_NAME }

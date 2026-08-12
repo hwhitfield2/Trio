@@ -61,6 +61,32 @@ final class FollowerPushSender {
         }
     }
 
+    /// Sends a user-visible alert, as opposed to the silent status pushes.
+    ///
+    /// This is a separate message from the status push, so it costs the status
+    /// payload's 4 KB budget nothing, and it displays even when the follower app
+    /// has been swiped away — which is the whole reason alerts are evaluated on
+    /// the host rather than in the app.
+    func sendAlert(
+        title: String,
+        body: String,
+        sound: FollowerAlertSound,
+        to follower: PairedFollower
+    ) async throws {
+        guard let token = follower.pushToken, !token.isEmpty else {
+            throw FollowerPushError.notRegistered
+        }
+
+        switch follower.pushTransport {
+        case "apns":
+            try await sendAlertViaAPNS(title: title, body: body, sound: sound, to: follower, token: token)
+        case "fcm":
+            try await sendAlertViaFCM(title: title, body: body, sound: sound, to: follower, token: token)
+        default:
+            throw FollowerPushError.transportFailure("Unknown push transport: \(follower.pushTransport ?? "nil")")
+        }
+    }
+
     // MARK: - APNS (iOS followers)
 
     private func sendViaAPNS(
@@ -134,6 +160,122 @@ final class FollowerPushSender {
             return
         }
         throw FollowerPushError.transportFailure("APNS \(httpResponse.statusCode): \(reason ?? "unknown")")
+    }
+
+    private func sendAlertViaAPNS(
+        title: String,
+        body: String,
+        sound: FollowerAlertSound,
+        to follower: PairedFollower,
+        token: String,
+        allowEnvironmentRetry: Bool = true
+    ) async throws {
+        let manager = FollowerPairingManager.shared
+        guard manager.hasAPNSCredentials else {
+            throw FollowerPushError.missingAPNSCredentials
+        }
+        guard let jwt = APNSJWTManager.shared.getOrGenerateJWT(
+            keyId: manager.apnsKeyId,
+            teamId: manager.apnsTeamId,
+            apnsKey: manager.apnsKey
+        ) else {
+            throw FollowerPushError.transportFailure("Failed to generate APNS JWT")
+        }
+
+        let production = follower.pushEnvironment != "sandbox"
+        let host = production ? "api.push.apple.com" : "api.sandbox.push.apple.com"
+        guard let url = URL(string: "https://\(host)/3/device/\(token)") else {
+            throw FollowerPushError.transportFailure("Invalid APNS URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        // Alert push: priority 10 delivers immediately, unlike the silent
+        // status pushes the system is free to defer.
+        request.setValue("10", forHTTPHeaderField: "apns-priority")
+        request.setValue("alert", forHTTPHeaderField: "apns-push-type")
+        request.setValue(follower.pushBundleId ?? "", forHTTPHeaderField: "apns-topic")
+
+        var aps: [String: Any] = [
+            "alert": ["title": title, "body": body],
+            "interruption-level": "time-sensitive"
+        ]
+        if let soundName = sound.apnsSoundName {
+            aps["sound"] = soundName
+        }
+
+        let payload: [String: Any] = [
+            "aps": aps,
+            "follower_id": follower.id
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw FollowerPushError.transportFailure("No HTTP response from APNS")
+        }
+        if httpResponse.statusCode == 200 { return }
+
+        let reason = Self.apnsReason(from: data)
+        if reason == "BadDeviceToken", allowEnvironmentRetry {
+            var flipped = follower
+            flipped.pushEnvironment = production ? "sandbox" : "production"
+            try await sendAlertViaAPNS(
+                title: title,
+                body: body,
+                sound: sound,
+                to: flipped,
+                token: token,
+                allowEnvironmentRetry: false
+            )
+            return
+        }
+        throw FollowerPushError.transportFailure("APNS \(httpResponse.statusCode): \(reason ?? "unknown")")
+    }
+
+    private func sendAlertViaFCM(
+        title: String,
+        body: String,
+        sound: FollowerAlertSound,
+        to follower: PairedFollower,
+        token: String
+    ) async throws {
+        guard let account = FCMServiceAccount(json: FollowerPairingManager.shared.fcmServiceAccountJSON) else {
+            throw FollowerPushError.missingFCMCredentials
+        }
+
+        let accessToken = try await googleAccessToken(for: account)
+        guard let url = URL(string: "https://fcm.googleapis.com/v1/projects/\(account.projectId)/messages:send") else {
+            throw FollowerPushError.transportFailure("Invalid FCM URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Android binds the sound to the channel, so the sound choice is carried
+        // as the channel id; the follower app creates one channel per sound.
+        let payload: [String: Any] = [
+            "message": [
+                "token": token,
+                "notification": ["title": title, "body": body],
+                "android": [
+                    "priority": "HIGH",
+                    "notification": ["channel_id": sound.androidChannelId]
+                ]
+            ]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw FollowerPushError.transportFailure("FCM \(status): \(body.prefix(300))")
+        }
     }
 
     private static func apnsReason(from data: Data) -> String? {

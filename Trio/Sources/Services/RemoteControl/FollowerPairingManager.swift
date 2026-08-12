@@ -29,6 +29,18 @@ struct PairedFollower: Codable, Identifiable, Equatable {
     /// "production" or "sandbox" for iOS followers.
     var pushEnvironment: String?
 
+    /// Which alerts this follower receives, and how loudly.
+    ///
+    /// Optional because the keychain already holds followers paired before this
+    /// existed: the synthesized decoder ignores property defaults, so a
+    /// non-optional here would fail to decode every existing pairing and quietly
+    /// unpair everyone.
+    var alerts: FollowerAlertSettings?
+
+    /// The alert profile to evaluate against, falling back to the defaults for
+    /// followers that have never been configured.
+    var alertSettings: FollowerAlertSettings { alerts ?? .default }
+
     var isPushRegistered: Bool { !(pushToken ?? "").isEmpty }
 
     /// Six-digit verification code derived from the secret. Shown on the host
@@ -164,7 +176,10 @@ final class FollowerPairingManager: Injectable {
             secret: Self.generateSecret(),
             createdAt: Date(),
             lastSequence: 0,
-            lastSeenAt: nil
+            lastSeenAt: nil,
+            // Left nil rather than seeded, so a follower that was never
+            // configured follows any later change to the defaults.
+            alerts: nil
         )
         queue.sync {
             var all = loadFollowers()
@@ -199,6 +214,22 @@ final class FollowerPairingManager: Injectable {
             all[index].pushBundleId = bundleId
             all[index].pushEnvironment = environment
             saveFollowers(all)
+        }
+    }
+
+    /// Stores a follower's alert profile, keeping the thresholds ordered and in
+    /// range. Returns what was actually stored, which may differ from what was
+    /// passed once clamped.
+    @discardableResult
+    func updateAlertSettings(followerId: String, _ settings: FollowerAlertSettings) -> FollowerAlertSettings? {
+        queue.sync {
+            var all = loadFollowers()
+            guard let index = all.firstIndex(where: { $0.id == followerId }) else { return nil }
+            var clamped = settings
+            clamped.clampThresholds()
+            all[index].alerts = clamped
+            saveFollowers(all)
+            return clamped
         }
     }
 

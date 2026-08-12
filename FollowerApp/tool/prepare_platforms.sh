@@ -97,6 +97,10 @@ if [ -f ios/Runner.xcodeproj/project.pbxproj ]; then
   elif ! ruby -e "require 'xcodeproj'" >/dev/null 2>&1; then
     echo "==> Skipping the iOS widget: the xcodeproj gem is unavailable (run 'bundle install' at the repo root)"
   else
+    echo "==> Installing the alert tones into the app bundle"
+    mkdir -p ios/Runner/Sounds
+    cp platform/sounds/*.wav ios/Runner/Sounds/
+
     echo "==> Installing the iOS widget extension sources"
     mkdir -p ios/TrioFollowerWidget
     for file in platform/ios/TrioFollowerWidget/*; do
@@ -146,8 +150,13 @@ if [ -d "$ANDROID_MAIN" ]; then
   fi
 
   mkdir -p "$ANDROID_MAIN/res/layout" "$ANDROID_MAIN/res/xml" \
-    "$ANDROID_MAIN/res/drawable" "$ANDROID_MAIN/res/values" "$ANDROID_MAIN/res/values-night"
+    "$ANDROID_MAIN/res/drawable" "$ANDROID_MAIN/res/values" "$ANDROID_MAIN/res/values-night" \
+    "$ANDROID_MAIN/res/raw"
   cp -R platform/android/res/. "$ANDROID_MAIN/res/"
+
+  # Alert tones. res/raw names may not carry an extension in the sound URI, so
+  # the files keep their names and AlertChannels.kt refers to them without one.
+  cp platform/sounds/*.wav "$ANDROID_MAIN/res/raw/"
 
   if [ -f "$ANDROID_MAIN/AndroidManifest.xml" ]; then
     echo "==> Registering the widget receivers in AndroidManifest.xml"
@@ -194,6 +203,29 @@ with open(path, 'w') as f:
     f.write(content)
 print('widget receivers registered')
 WIDGETS_PY
+  fi
+
+  if [ -f "$ANDROID_MAIN/AndroidManifest.xml" ] && \
+     ! grep -q 'AlertChannelsInitializer' "$ANDROID_MAIN/AndroidManifest.xml"; then
+    echo "==> Registering the alert notification channels provider"
+    python3 - <<'CHANNELS_PY'
+path = 'android/app/src/main/AndroidManifest.xml'
+with open(path) as f:
+    content = f.read()
+
+provider = '''        <provider
+            android:name=".AlertChannelsInitializer"
+            android:authorities="${applicationId}.alertchannels"
+            android:exported="false"
+            android:initOrder="100" />
+'''
+
+content = content.replace('    </application>', provider + '    </application>', 1)
+
+with open(path, 'w') as f:
+    f.write(content)
+print('alert channels provider registered')
+CHANNELS_PY
   fi
 fi
 

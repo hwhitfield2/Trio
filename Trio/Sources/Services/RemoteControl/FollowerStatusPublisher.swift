@@ -59,6 +59,12 @@ struct FollowerStatusSnapshot: Encodable {
     let override: ActiveOverride?
     let maxBolus: Double
     let maxCarbs: Double
+    /// The low and high thresholds this follower is alerted on, in mg/dL. Two
+    /// numbers, so the follower can colour glucose the way the host does without
+    /// the whole alert profile having to fit the push budget. Substituted per
+    /// follower by `withThresholds(from:)`.
+    var low: Double
+    var high: Double
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -73,6 +79,8 @@ struct FollowerStatusSnapshot: Encodable {
         case override
         case maxBolus = "max_bolus"
         case maxCarbs = "max_carbs"
+        case low
+        case high
     }
 }
 
@@ -135,10 +143,13 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
         do {
             let snapshot = try await buildSnapshot()
             let encoder = JSONEncoder()
-            let snapshotData = try encodeWithinPushLimit(snapshot, using: encoder)
 
             for follower in followers {
                 guard let messenger = SecureMessenger(sharedSecret: follower.secret) else { continue }
+                // Each follower sees its own thresholds, so the encoding is
+                // per-follower rather than shared.
+                let personalised = snapshot.withThresholds(from: follower.alertSettings)
+                let snapshotData = try encodeWithinPushLimit(personalised, using: encoder)
                 do {
                     let encrypted = try messenger.encrypt(data: snapshotData)
                     try await FollowerPushSender.shared.sendStatus(encryptedStatus: encrypted, to: follower)
@@ -215,7 +226,9 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             tempTarget: tempTarget,
             override: override,
             maxBolus: Double(truncating: settingsManager.pumpSettings.maxBolus as NSNumber),
-            maxCarbs: Double(truncating: settings.maxCarbs as NSNumber)
+            maxCarbs: Double(truncating: settings.maxCarbs as NSNumber),
+            low: Double(truncating: FollowerAlertSettings.default.low.threshold as NSNumber),
+            high: Double(truncating: FollowerAlertSettings.default.high.threshold as NSNumber)
         )
     }
 
@@ -327,14 +340,47 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
     }
 }
 
+extension FollowerStatusSnapshot {
+    /// The same snapshot with one follower's alert thresholds substituted in.
+    func withThresholds(from settings: FollowerAlertSettings) -> FollowerStatusSnapshot {
+        var copy = self
+        copy.low = Double(truncating: settings.low.threshold as NSNumber)
+        copy.high = Double(truncating: settings.high.threshold as NSNumber)
+        return copy
+    }
+}
+
 extension BaseFollowerStatusPublisher: GlucoseObserver {
     func glucoseDidUpdate(_: [BloodGlucose]) {
         publishToAllFollowers()
+        evaluateAlerts()
     }
 }
 
 extension BaseFollowerStatusPublisher: DeterminationObserver {
     func determinationDidUpdate(_: Determination) {
         publishToAllFollowers()
+    }
+}
+
+extension BaseFollowerStatusPublisher {
+    /// Alerting is deliberately not throttled with the status pushes: a status
+    /// snapshot that is one minute stale is fine, an urgent low that is one
+    /// minute late is not.
+    func evaluateAlerts() {
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self = self else { return }
+            do {
+                let readings = try await self.fetchReadings()
+                let newest = readings.first
+                await FollowerAlertManager.shared.evaluate(
+                    glucose: newest.map { Decimal($0.sgv) },
+                    readingDate: newest.map { Date(timeIntervalSince1970: $0.date) },
+                    units: self.settingsManager.settings.units
+                )
+            } catch {
+                debug(.remoteControl, "Failed to evaluate follower alerts: \(error)")
+            }
+        }
     }
 }

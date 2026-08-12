@@ -109,7 +109,7 @@ extension RemoteControlConfig {
                 Section(
                     header: Text("Follower Apps"),
                     footer: Text(
-                        "Pair the Trio Follower app (iOS or Android) by QR code. Each follower gets its own secret and can be revoked individually. Commands from followers are replay-protected and follow the same safety limits as this device."
+                        "Pair the Trio Follower app (iOS or Android) by QR code. Each follower gets its own secret and can be revoked individually. Commands from followers are replay-protected and follow the same safety limits as this device. Tap a follower to choose which glucose alerts it receives and what they sound like."
                     ),
                     content: {
                         if state.followers.isEmpty {
@@ -117,11 +117,20 @@ extension RemoteControlConfig {
                                 .foregroundColor(.secondary)
                         } else {
                             ForEach(state.followers) { follower in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(follower.name)
-                                    Text(followerDetailText(follower))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                NavigationLink {
+                                    FollowerAlertSettingsView(
+                                        followerName: follower.name,
+                                        units: state.units,
+                                        settings: state.alertSettings(forFollowerId: follower.id),
+                                        onChange: { state.updateAlertSettings(followerId: follower.id, $0) }
+                                    )
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(follower.name)
+                                        Text(followerDetailText(follower))
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                                 .swipeActions {
                                     Button(role: .destructive) {

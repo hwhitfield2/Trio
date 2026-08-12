@@ -96,7 +96,25 @@ extension RemoteControlConfig {
 
         func revokeFollower(id: String) {
             FollowerPairingManager.shared.removeFollower(withId: id)
+            // Drop any armed alert condition with the pairing, so re-pairing the
+            // same device does not inherit a stale "already alerted" state.
+            FollowerAlertManager.shared.clearState(followerId: id)
             refreshFollowers()
+        }
+
+        func alertSettings(forFollowerId id: String) -> FollowerAlertSettings {
+            FollowerPairingManager.shared.follower(withId: id)?.alertSettings ?? .default
+        }
+
+        /// Persists an edited alert profile and hands back what was stored, which
+        /// is clamped into a valid ordering.
+        func updateAlertSettings(
+            followerId: String,
+            _ settings: FollowerAlertSettings
+        ) -> FollowerAlertSettings? {
+            let stored = FollowerPairingManager.shared.updateAlertSettings(followerId: followerId, settings)
+            refreshFollowers()
+            return stored
         }
 
         func generateNewSharedSecret() {
