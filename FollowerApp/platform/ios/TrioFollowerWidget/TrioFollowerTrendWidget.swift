@@ -67,7 +67,7 @@ struct FollowerTrendView: View {
                     .foregroundStyle(context.isStale ? .red.opacity(0.6) : .secondary)
             }
 
-            FollowerChartView(status: context.status)
+            FollowerChartView(status: context.status, colorSchemeChoice: context.preferences.glucoseColor)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if let stats = context.status.stats {

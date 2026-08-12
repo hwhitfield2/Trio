@@ -73,14 +73,20 @@ struct FollowerStatus: Codable {
     /// The numeric glucose value, for colouring. `nil` when there is no reading.
     var glucoseValue: Double? { Double(bg) }
 
-    func color(for value: Double?) -> Color {
-        guard let value else { return .primary }
+    /// Range colouring, unless the user asked for a single colour instead.
+    func color(
+        for value: Double?,
+        scheme: FollowerDisplayPreferences.GlucoseColorScheme = .dynamicColor
+    ) -> Color {
+        guard scheme == .dynamicColor, let value else { return .primary }
         if value <= low { return .red }
         if value >= high { return .orange }
         return .green
     }
 
-    var glucoseColor: Color { color(for: glucoseValue) }
+    func glucoseColor(_ scheme: FollowerDisplayPreferences.GlucoseColorScheme) -> Color {
+        color(for: glucoseValue, scheme: scheme)
+    }
 
     /// The span the chart actually covers, so a plot never stretches a couple of
     /// hours of readings across a fixed six-hour axis. The host trims readings to
@@ -197,13 +203,25 @@ struct FollowerProvider: TimelineProvider {
 struct FollowerContext {
     let status: FollowerStatus
     let isStale: Bool
+    /// The follower's own layout choices, read per render: the extension is
+    /// long-lived, so a value cached at launch would go stale the moment the
+    /// user changed a setting.
+    let preferences: FollowerDisplayPreferences
 
-    init(status: FollowerStatus, now: Date) {
+    init(status: FollowerStatus, now: Date, preferences: FollowerDisplayPreferences = .load()) {
         self.status = status
+        self.preferences = preferences
         isStale = status.isStale(asOf: now)
     }
 
-    var glucoseColor: Color { isStale ? .secondary : status.glucoseColor }
+    var glucoseColor: Color {
+        isStale ? .secondary : status.glucoseColor(preferences.glucoseColor)
+    }
+
+    /// Chart point colouring, which follows the same choice.
+    func color(for value: Double?) -> Color {
+        status.color(for: value, scheme: preferences.glucoseColor)
+    }
 
     var updatedText: String {
         guard let date = status.readingDate else { return "--" }

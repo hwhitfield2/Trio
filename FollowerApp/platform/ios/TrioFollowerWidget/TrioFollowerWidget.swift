@@ -17,6 +17,10 @@ struct FollowerChartView: View {
     var window: TimeInterval?
     var showThresholdLines = true
 
+    /// Which colouring the user asked for. Defaulted so a caller that does not
+    /// care — a placeholder, a preview — need not pass one.
+    var colorSchemeChoice: FollowerDisplayPreferences.GlucoseColorScheme = .dynamicColor
+
     var body: some View {
         let anchor = max(status.readingDate ?? Date(), status.chart.map(\.date).max() ?? Date())
         let span = window ?? status.chartWindow
@@ -43,7 +47,7 @@ struct FollowerChartView: View {
                     y: .value("Glucose", point.v)
                 )
                 .symbolSize(16)
-                .foregroundStyle(status.color(for: point.v))
+                .foregroundStyle(status.color(for: point.v, scheme: colorSchemeChoice))
             }
         }
         .chartYScale(domain: minValue ... maxValue)
@@ -155,7 +159,7 @@ struct FollowerGlucoseMediumView: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            FollowerChartView(status: context.status)
+            FollowerChartView(status: context.status, colorSchemeChoice: context.preferences.glucoseColor)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .topLeading) { activePills }
 
@@ -172,12 +176,15 @@ struct FollowerGlucoseMediumView: View {
                 }
                 .foregroundStyle(context.glucoseColor)
 
-                Divider().frame(height: 24)
-                FollowerValueLabel(value: context.status.iob ?? "--", unit: "U", label: "IOB")
-                Divider().frame(height: 24)
-                FollowerValueLabel(value: context.status.cob ?? "--", unit: "g", label: "COB")
-                Divider().frame(height: 24)
-                FollowerValueLabel(value: context.updatedText, label: "Updated")
+                ForEach(Array(context.preferences.items.enumerated()), id: \.offset) { _, item in
+                    // The glucose reading is already spelled out to the left of
+                    // this row, so the two glucose items are skipped rather than
+                    // printed twice.
+                    if let label = FollowerItemLabel(item: item, context: context) {
+                        Divider().frame(height: 24)
+                        label
+                    }
+                }
             }
         }
     }
@@ -204,6 +211,46 @@ struct FollowerGlucoseMediumView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(color.opacity(colorScheme == .dark ? 0.6 : 0.8))
             }
+    }
+}
+
+/// One value in the medium widget's row, chosen by the user.
+///
+/// Fails to build for the items this row does not draw: the reading is already
+/// spelled out beside the row, so the two glucose items would only repeat it,
+/// and an empty slot draws nothing at all.
+struct FollowerItemLabel: View {
+    private let value: String
+    private let unit: String?
+    private let label: String
+
+    init?(item: FollowerDisplayPreferences.Item, context: FollowerContext) {
+        switch item {
+        case .iob:
+            value = context.status.iob ?? "--"
+            unit = "U"
+            label = String(localized: "IOB")
+        case .cob:
+            value = context.status.cob ?? "--"
+            unit = "g"
+            label = String(localized: "COB")
+        case .eventualGlucose:
+            value = context.status.eventualBg ?? "--"
+            unit = nil
+            label = String(localized: "Eventual")
+        case .updatedLabel:
+            value = context.updatedText
+            unit = nil
+            label = String(localized: "Updated")
+        case .currentGlucose,
+             .currentGlucoseLarge,
+             .empty:
+            return nil
+        }
+    }
+
+    var body: some View {
+        FollowerValueLabel(value: value, unit: unit, label: label)
     }
 }
 

@@ -5,9 +5,11 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/command.dart';
+import '../models/display_preferences.dart';
 import '../models/pairing_bundle.dart';
 import '../models/status_snapshot.dart';
 import '../services/command_service.dart';
+import '../services/display_preferences_store.dart';
 import '../services/pairing_store.dart';
 import '../services/push_service.dart';
 import '../services/status_service.dart';
@@ -43,6 +45,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// unless the user turns it on: it is the one path where the push service
   /// carries readable data rather than ciphertext.
   bool liveActivityRemoteUpdates = false;
+
+  /// How the Live Activity and the widgets lay themselves out. The widget
+  /// extension reads these from the shared app group; this copy drives the
+  /// settings screen.
+  DisplayPreferences displayPreferences = const DisplayPreferences();
   String? statusHint;
   List<CommandRecord> history = [];
 
@@ -77,7 +84,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     liveActivitySupport = await LiveActivityBridge.support();
     liveActivityEnabled = await LiveActivityBridge.isEnabled();
     liveActivityRemoteUpdates = await LiveActivityBridge.remoteUpdatesEnabled();
+    displayPreferences = await DisplayPreferencesStore.load();
     initialized = true;
+    // Publish the layout before the data: an extension that redraws in between
+    // then already has the choices it should draw with.
+    await WidgetBridge.publishPreferences(displayPreferences);
     await WidgetBridge.publish(snapshot);
     await LiveActivityBridge.publish(snapshot, hostName: _hostName);
 
@@ -321,6 +332,19 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (enabled) {
       await LiveActivityBridge.publish(snapshot, hostName: _hostName);
     }
+  }
+
+  /// Stores new layout choices and redraws everything that follows them.
+  ///
+  /// The Live Activity is republished rather than merely reloaded: its layout
+  /// is read when a content state is rendered, so without a new state it would
+  /// keep the old shape until the next reading arrived.
+  Future<void> setDisplayPreferences(DisplayPreferences preferences) async {
+    displayPreferences = preferences;
+    notifyListeners();
+    await DisplayPreferencesStore.save(preferences);
+    await WidgetBridge.publishPreferences(preferences);
+    await LiveActivityBridge.publish(snapshot, hostName: _hostName);
   }
 
   /// Lets the host update the Live Activity directly, or takes that back.

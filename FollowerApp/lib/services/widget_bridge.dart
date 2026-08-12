@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 
+import '../models/display_preferences.dart';
 import '../models/status_snapshot.dart';
 
 /// Publishes the latest host status to the iOS and Android home screen widgets.
@@ -20,6 +21,11 @@ class WidgetBridge {
 
   /// Key the native widgets read the payload from.
   static const payloadKey = 'trio_follower_status';
+
+  /// Key the native widgets read the layout choices from. Written separately
+  /// from the payload so a settings change redraws without waiting for the next
+  /// status push.
+  static const preferencesKey = 'trio_follower_display';
 
   /// The three widgets, as (iOS WidgetKit kind, Android provider class). Both
   /// platforms need every widget reloaded: WidgetCenter reloads one kind at a
@@ -62,6 +68,29 @@ class WidgetBridge {
   /// Clears the widgets, e.g. after unpairing, so they cannot keep showing
   /// glucose from a host this device is no longer paired with.
   static Future<void> clear() => publish(null);
+
+  /// Shares the layout choices with the widget extension and redraws. The
+  /// Live Activity reads the same key, so its layout follows too — see
+  /// `LiveActivityBridge.publish`, which the caller runs alongside this.
+  static Future<void> publishPreferences(DisplayPreferences preferences) async {
+    try {
+      if (appGroupId.isNotEmpty) {
+        await HomeWidget.setAppGroupId(appGroupId);
+      }
+      await HomeWidget.saveWidgetData<String>(
+        preferencesKey,
+        jsonEncode(preferences.toJson()),
+      );
+      for (final widget in _widgets) {
+        await HomeWidget.updateWidget(
+          iOSName: widget[0],
+          qualifiedAndroidName: widget[1],
+        );
+      }
+    } catch (error) {
+      debugPrint('Widget preferences update skipped: $error');
+    }
+  }
 
   @visibleForTesting
   static Map<String, dynamic> payloadFor(StatusSnapshot snapshot) {

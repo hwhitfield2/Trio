@@ -11,6 +11,9 @@ import Testing
         cob: Double? = 18.4,
         low: Double = 70,
         high: Double = 180,
+        eventualBG: Double? = 110,
+        tempTarget: FollowerStatusSnapshot.ActiveTempTarget? = nil,
+        override: FollowerStatusSnapshot.ActiveOverride? = nil,
         now: TimeInterval = 1_700_000_000
     ) -> FollowerStatusSnapshot {
         FollowerStatusSnapshot(
@@ -27,9 +30,9 @@ import Testing
             iob: iob,
             cob: cob,
             lastLoop: now,
-            eventualBG: 110,
-            tempTarget: nil,
-            override: nil,
+            eventualBG: eventualBG,
+            tempTarget: tempTarget,
+            override: override,
             maxBolus: 10,
             maxCarbs: 250,
             low: low,
@@ -55,11 +58,54 @@ import Testing
             "readingDate",
             "low",
             "high",
-            "chart"
+            "chart",
+            // Only present because this snapshot has them; see below.
+            "eventual",
+            "lastLoop"
         ])
 
         let chart = try #require(json["chart"] as? [[String: Any]])
         #expect(Set(chart[0].keys) == ["v", "t"])
+    }
+
+    @Test("Values the detailed layouts do not have are left out of the payload")
+    func optionalFieldsOmitted() throws {
+        // The follower's ContentState declares these optional, so an absent key
+        // decodes as nil. Leaving them out rather than sending nulls keeps the
+        // 4 KB ActivityKit budget for chart points.
+        let state = try #require(FollowerLiveActivityState.from(snapshot: snapshot(eventualBG: nil)))
+        let json = try state.asJSONObject()
+
+        #expect(json["eventual"] == nil)
+        #expect(json["overrideName"] == nil)
+        #expect(json["tempTargetName"] == nil)
+    }
+
+    @Test("Override and temp target names reach the detailed layouts") func statusPills() throws {
+        let state = try #require(FollowerLiveActivityState.from(snapshot: snapshot(
+            tempTarget: FollowerStatusSnapshot.ActiveTempTarget(
+                target: 140,
+                name: "Exercise",
+                startedAt: 1_700_000_000,
+                duration: 60
+            ),
+            override: FollowerStatusSnapshot.ActiveOverride(
+                name: "Sick day",
+                startedAt: 1_700_000_000,
+                duration: 120
+            )
+        )))
+
+        #expect(state.overrideName == "Sick day")
+        #expect(state.tempTargetName == "Exercise")
+    }
+
+    @Test("Eventual glucose is formatted in the host's units, like the reading")
+    func eventualGlucose() throws {
+        #expect(try #require(FollowerLiveActivityState.from(snapshot: snapshot())).eventual == "110")
+        #expect(
+            try #require(FollowerLiveActivityState.from(snapshot: snapshot(units: "mmol/L"))).eventual == "6.1"
+        )
     }
 
     @Test("Formats mg/dL exactly like the follower app does") func mgdlFormatting() throws {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
+import 'display_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -64,6 +65,19 @@ class SettingsScreen extends StatelessWidget {
                     onChanged: state.liveActivitySupport.enabled
                         ? (value) => context.read<AppState>().setLiveActivityRemoteUpdates(value)
                         : null,
+                  ),
+                if (state.liveActivitySupport.available)
+                  ListTile(
+                    leading: const Icon(Icons.tune),
+                    title: const Text('Live Activity & widgets'),
+                    subtitle: const Text(
+                      'Lock Screen, Watch and CarPlay layout, glucose colour and '
+                      'which values are shown.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const DisplaySettingsScreen()),
+                    ),
                   ),
                 ListTile(
                   leading: const Icon(Icons.podcasts),

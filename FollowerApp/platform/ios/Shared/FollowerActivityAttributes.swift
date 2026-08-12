@@ -36,7 +36,24 @@ struct FollowerActivityAttributes: ActivityAttributes {
         let high: Double
         let chart: [Point]
 
+        // Everything below is only drawn by the detailed layouts, and only when
+        // there is something to draw. Optional so that a host or an app build
+        // that predates them still decodes: the synthesised decoder treats a
+        // missing key as nil, and ignores keys it does not know.
+
+        /// Predicted eventual glucose, pre-formatted in display units.
+        let eventual: String?
+        let overrideName: String?
+        let tempTargetName: String?
+        /// Seconds since epoch of the host's last loop cycle.
+        let lastLoop: Double?
+
         var reading: Date { Date(timeIntervalSince1970: readingDate) }
+
+        var lastLoopDate: Date? { lastLoop.map { Date(timeIntervalSince1970: $0) } }
+
+        var isOverrideActive: Bool { !(overrideName ?? "").isEmpty }
+        var isTempTargetActive: Bool { !(tempTargetName ?? "").isEmpty }
 
         /// Matches the widgets and Trio itself: older than six minutes is no
         /// longer current.

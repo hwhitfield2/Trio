@@ -72,7 +72,12 @@ void main() {
       final state = LiveActivityBridge.stateFor(snapshotWith(2));
       expect(
         state.keys.toSet(),
-        {'bg', 'direction', 'change', 'iob', 'cob', 'readingDate', 'low', 'high', 'chart'},
+        {
+          'bg', 'direction', 'change', 'iob', 'cob', 'readingDate', 'low', 'high', 'chart',
+          // Drawn only by the detailed layouts, and null when the host sent
+          // nothing for them.
+          'eventual', 'overrideName', 'tempTargetName', 'lastLoop',
+        },
       );
       final point = (state['chart'] as List).first as Map;
       expect(point.keys.cast<String>().toSet(), {'v', 't'});
@@ -105,6 +110,33 @@ void main() {
       expect(mgdl['cob'], '18');
       expect(mgdl['low'], 70);
       expect(mgdl['high'], 180);
+    });
+
+    test('carries what the detailed layouts draw', () {
+      final now = DateTime.now();
+      final snapshot = StatusSnapshot(
+        timestamp: now,
+        units: 'mg/dL',
+        readings: [GlucoseReading(sgv: 120, date: now, direction: 'Flat')],
+        eventualBg: 110,
+        lastLoop: now.subtract(const Duration(minutes: 2)),
+        tempTarget: const ActiveTempTarget(target: 140, name: 'Exercise'),
+        override: const ActiveOverride(name: 'Sick day'),
+      );
+
+      final state = LiveActivityBridge.stateFor(snapshot);
+      expect(state['eventual'], '110');
+      expect(state['tempTargetName'], 'Exercise');
+      expect(state['overrideName'], 'Sick day');
+      expect(state['lastLoop'], now.subtract(const Duration(minutes: 2)).millisecondsSinceEpoch ~/ 1000);
+    });
+
+    test('leaves the detailed values null when the host sent none', () {
+      final state = LiveActivityBridge.stateFor(snapshotWith(2));
+      expect(state['eventual'], isNull);
+      expect(state['tempTargetName'], isNull);
+      expect(state['overrideName'], isNull);
+      expect(state['lastLoop'], isNull);
     });
 
     test('mmol/L conversion matches the host vector', () {

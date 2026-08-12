@@ -128,6 +128,15 @@ class LiveActivityBridge {
       // Seconds, not milliseconds: the chart dominates a 4 KB budget.
       'readingDate':
           (latest?.date ?? snapshot.timestamp).millisecondsSinceEpoch ~/ 1000,
+      // Only the detailed layouts draw these, but they cost a few bytes and
+      // the layout is chosen on the device, after the payload was built.
+      'eventual':
+          snapshot.eventualBg == null ? null : formatGlucose(snapshot.eventualBg!.round()),
+      'overrideName': snapshot.override?.name,
+      'tempTargetName': snapshot.tempTarget?.name,
+      'lastLoop': snapshot.lastLoop == null
+          ? null
+          : snapshot.lastLoop!.millisecondsSinceEpoch ~/ 1000,
       'low': convert(low),
       'high': convert(high),
       'chart': [

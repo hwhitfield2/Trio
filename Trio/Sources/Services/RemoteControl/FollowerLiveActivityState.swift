@@ -36,6 +36,16 @@ struct FollowerLiveActivityState: Encodable, Equatable {
     let high: Double
     let chart: [Point]
 
+    // Drawn only by the follower's detailed layouts. Optional on both sides, so
+    // a follower app that predates them still decodes what it does know.
+
+    /// Predicted eventual glucose, pre-formatted in the host's display units.
+    let eventual: String?
+    let overrideName: String?
+    let tempTargetName: String?
+    /// Seconds since epoch of the host's last loop cycle.
+    let lastLoop: Double?
+
     /// Roughly two hours at a five-minute cadence, matching the follower's own
     /// chart budget. ActivityKit's payload limit is 4 KB and the chart
     /// dominates it.
@@ -97,7 +107,11 @@ struct FollowerLiveActivityState: Encodable, Equatable {
             high: convert(snapshot.high),
             chart: snapshot.readings.prefix(maxChartPoints).map {
                 Point(v: convert(Double($0.sgv)), t: $0.date)
-            }
+            },
+            eventual: snapshot.eventualBG.map { formatGlucose(Int($0.rounded())) },
+            overrideName: snapshot.override?.name,
+            tempTargetName: snapshot.tempTarget?.name,
+            lastLoop: snapshot.lastLoop
         )
     }
 

@@ -279,6 +279,35 @@ Everything else — commands, status snapshots — stays ciphertext whether this
 is on or off. Leaving it off costs nothing but Lock Screen freshness: the app
 still updates the activity whenever it runs.
 
+### Layout: Lock Screen, Watch, CarPlay and the widgets
+
+The Live Activity carries the same choices Trio's does, under **Settings →
+Live Activity & widgets**:
+
+- **Lock Screen style** — simple (glucose, trend, delta, time) or detailed
+  (a chart with the values below it, and override / temp target badges over it).
+- **Watch & CarPlay style** — the same choice, made separately, for the Apple
+  Watch Smart Stack and the CarPlay dashboard. The activity reaches them at all
+  because it declares `supplementalActivityFamilies([.small])`, which needs
+  iOS 18.
+- **Glucose colour** — coloured by range, or a single colour.
+- **Detailed layout** — the four values under the chart, in order: glucose
+  (two sizes), IOB, COB, eventual glucose, last updated, or blank. The medium
+  home screen widget follows the same list.
+
+Trio keeps these inside the Live Activity's content state, because there the
+device that renders is the device that configures. The follower cannot: an
+update may be *pushed by the host*, which knows nothing about how this
+follower likes to see things. So they live in the shared app group instead
+(`lib/models/display_preferences.dart` writes,
+`platform/ios/TrioFollowerWidget/FollowerDisplayPreferences.swift` reads), and
+the widget extension applies them to whatever content state it is handed —
+local or pushed, identically. Changing one republishes the activity, since a
+layout is only applied when a content state is rendered.
+
+Trio's **Total Daily Dose** item has no counterpart here: the host's status
+snapshot carries no TDD, so there would be nothing to put in the slot.
+
 Two more things worth knowing:
 
 - The displayed values are formatted twice, once in Dart
