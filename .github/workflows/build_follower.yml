@@ -8,7 +8,8 @@ name: 5. Build Trio Follower
 # Uses the same repository secrets as "4. Build Trio". One-time setup, in
 # order (see FollowerApp/README.md):
 #   1. "2. Add Identifiers" — creates the follower bundle id with push
-#      notifications.
+#      notifications, and the follower widget bundle id. Both need the Trio App
+#      Group added by hand on the Apple developer site (see FollowerApp/README).
 #   2. Create the follower's App Store Connect app record by hand; Apple's API
 #      cannot create apps, and without the record TestFlight upload fails.
 #   3. "3. Create Certificates" — provisions the follower's signing profile.
@@ -73,7 +74,11 @@ jobs:
         run: sudo sntp -sS time.windows.com
 
       - name: Prepare platform shells
-        run: ./FollowerApp/tool/prepare_platforms.sh
+        # bundle exec so the script can use fastlane's xcodeproj gem to add the
+        # widget extension target; TEAMID supplies the shared app group id.
+        run: bundle exec ./FollowerApp/tool/prepare_platforms.sh
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
 
       - name: Fastlane Build & Archive
         run: bundle exec fastlane build_follower

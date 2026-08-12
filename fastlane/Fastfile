@@ -159,6 +159,11 @@ platform :ios do
   lane :build_follower do
     setup_ci if ENV['CI']
     FOLLOWER_BUNDLE_ID = "#{ENV['BUNDLE_ID']}follower"
+    FOLLOWER_WIDGET_BUNDLE_ID = "#{FOLLOWER_BUNDLE_ID}.widget"
+    # The follower shares Trio's app group rather than registering one of its
+    # own. Must match what tool/prepare_platforms.sh writes into the
+    # entitlements, or the widget cannot read what the app publishes.
+    FOLLOWER_APP_GROUP_ID = "group.org.nightscout.#{TEAMID}.trio.trio-app-group"
     follower_dir = "#{GITHUB_WORKSPACE}/FollowerApp"
 
     api_key = app_store_connect_api_key(
@@ -189,7 +194,9 @@ platform :ios do
     Dir.chdir(follower_dir) do
       Bundler.with_unbundled_env do
         sh("flutter", "pub", "get")
-        sh("flutter", "build", "ios", "--release", "--no-codesign", "--build-number=#{current_build_number}")
+        sh("flutter", "build", "ios", "--release", "--no-codesign",
+           "--build-number=#{current_build_number}",
+           "--dart-define=APP_GROUP_ID=#{FOLLOWER_APP_GROUP_ID}")
       end
     end
 
@@ -212,7 +219,7 @@ platform :ios do
     match(
       type: "appstore",
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
-      app_identifier: [FOLLOWER_BUNDLE_ID]
+      app_identifier: [FOLLOWER_BUNDLE_ID, FOLLOWER_WIDGET_BUNDLE_ID]
     )
 
     mapping = Actions.lane_context[
@@ -228,6 +235,27 @@ platform :ios do
       targets: ["Runner"]
     )
 
+    # The widget extension is only present when prepare_platforms.sh could
+    # create it, i.e. when TEAMID was set for that step.
+    widget_target = project.targets.find { |t| t.name == "TrioFollowerWidgetExtension" }
+    if widget_target
+      update_code_signing_settings(
+        path: "#{follower_dir}/ios/Runner.xcodeproj",
+        use_automatic_signing: false,
+        profile_name: mapping[FOLLOWER_WIDGET_BUNDLE_ID],
+        code_sign_identity: "iPhone Distribution",
+        bundle_identifier: FOLLOWER_WIDGET_BUNDLE_ID,
+        targets: ["TrioFollowerWidgetExtension"]
+      )
+    else
+      UI.important("No widget extension target found; building the follower without its home screen widget")
+    end
+
+    profiles = { FOLLOWER_BUNDLE_ID => mapping[FOLLOWER_BUNDLE_ID] }
+    if widget_target
+      profiles[FOLLOWER_WIDGET_BUNDLE_ID] = mapping[FOLLOWER_WIDGET_BUNDLE_ID]
+    end
+
     gym(
       workspace: "#{follower_dir}/ios/Runner.xcworkspace",
       export_method: "app-store",
@@ -235,7 +263,10 @@ platform :ios do
       output_name: "TrioFollower.ipa",
       configuration: "Release",
       destination: 'generic/platform=iOS',
-      buildlog_path: 'buildlog'
+      buildlog_path: 'buildlog',
+      export_options: {
+        provisioningProfiles: profiles
+      }
     )
 
     copy_artifacts(
@@ -308,9 +339,15 @@ platform :ios do
     ])
 
     # Trio Follower companion app (FollowerApp/): needs push notifications so
-    # the host can deliver encrypted status snapshots to it.
+    # the host can deliver encrypted status snapshots to it, and the app group
+    # it shares with its home screen widget.
     configure_bundle_id("Trio Follower", "#{BUNDLE_ID}follower", [
+      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS,
       Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS
+    ])
+
+    configure_bundle_id("Trio Follower Widget", "#{BUNDLE_ID}follower.widget", [
+      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
     ])
 
     # Report whether the follower has an App Store Connect app record, which
@@ -366,8 +403,9 @@ platform :ios do
         "#{BUNDLE_ID}.LiveActivity",
         # Trio Follower: build_follower calls setup_ci, which forces
         # MATCH_READONLY, so its match run can only fetch an existing profile —
-        # this lane is the only place the follower profile gets created.
-        "#{BUNDLE_ID}follower"
+        # this lane is the only place the follower profiles get created.
+        "#{BUNDLE_ID}follower",
+        "#{BUNDLE_ID}follower.widget"
       ]
     )
   end

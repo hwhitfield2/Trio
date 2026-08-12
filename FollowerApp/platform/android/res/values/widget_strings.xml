@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">Glucose, insulin and carbs from the paired Trio host.</string>
+    <string name="widget_chart_description">Glucose over the last six hours</string>
+    <string name="widget_open_app">Open Trio Follower</string>
+</resources>

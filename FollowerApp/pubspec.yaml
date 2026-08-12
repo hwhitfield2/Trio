@@ -38,6 +38,9 @@ dependencies:
   provider: ^6.1.2
   intl: ^0.19.0
   shared_preferences: ^2.3.2
+  # Shared storage + redraw trigger for the iOS and Android home screen widgets
+  # (app group UserDefaults on iOS, SharedPreferences on Android)
+  home_widget: ^0.7.0
 
 dev_dependencies:
   flutter_test:

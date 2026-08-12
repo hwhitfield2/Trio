@@ -1,0 +1,18 @@
+// Version numbers for the widget extension.
+//
+// An app extension has to carry the same CFBundleShortVersionString and
+// CFBundleVersion as its host app or App Store Connect rejects the upload, so
+// both come from the same Generated.xcconfig that Flutter writes for Runner.
+// The defaults below only apply before the first `flutter build`, when that
+// file does not exist yet.
+//
+// Runner's own Debug/Release xcconfig is deliberately not included here: it
+// pulls in the Pods-Runner settings, which would link Flutter into the widget.
+
+FLUTTER_BUILD_NAME = 1.0.0
+FLUTTER_BUILD_NUMBER = 1
+
+#include? "../Flutter/Generated.xcconfig"
+
+CURRENT_PROJECT_VERSION = $(FLUTTER_BUILD_NUMBER)
+MARKETING_VERSION = $(FLUTTER_BUILD_NAME)

@@ -5,16 +5,27 @@
 # do any manual Xcode/AndroidManifest editing:
 #
 #   iOS:     camera + Face ID usage strings, remote-notification background
-#            mode, aps-environment entitlements file
+#            mode, aps-environment + app group entitlements file, and the
+#            home screen widget extension target
 #   Android: USE_BIOMETRIC permission, FlutterFragmentActivity (required by
-#            local_auth), optional google-services.json from the
-#            FOLLOWER_GOOGLE_SERVICES_JSON environment variable (FCM status
-#            pushes)
+#            local_auth), the home screen widget provider, optional
+#            google-services.json from the FOLLOWER_GOOGLE_SERVICES_JSON
+#            environment variable (FCM status pushes)
+#
+# The iOS widget needs an app group, whose identifier carries the Apple team id,
+# so set TEAMID to build it. Without TEAMID the iOS widget is skipped with a
+# warning and everything else still works; the Android widget never needs it.
 #
 # Idempotent: safe to re-run at any time.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# The follower shares Trio's app group rather than registering one of its own,
+# so builders do not have to create a second group. Keep in sync with
+# TRIO_APP_GROUP_ID in Config.xcconfig.
+APP_GROUP_ID="group.org.nightscout.${TEAMID:-}.trio.trio-app-group"
+WIDGET_BUNDLE_ID="org.nightscout.${TEAMID:-}.triofollower.widget"
 
 echo "==> flutter create (platform shells)"
 flutter create . --platforms=ios,android --project-name trio_follower --org org.nightscout
@@ -50,7 +61,23 @@ print('Info.plist patched')
 PY
 
   echo "==> Writing ios/Runner/Runner.entitlements"
-  cat > ios/Runner/Runner.entitlements <<'EOF'
+  if [ -n "${TEAMID:-}" ]; then
+    cat > ios/Runner/Runner.entitlements <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>${APP_GROUP_ID}</string>
+	</array>
+</dict>
+</plist>
+EOF
+  else
+    cat > ios/Runner/Runner.entitlements <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -60,6 +87,26 @@ PY
 </dict>
 </plist>
 EOF
+  fi
+fi
+
+# --- iOS widget extension -----------------------------------------------------
+
+if [ -f ios/Runner.xcodeproj/project.pbxproj ]; then
+  if [ -z "${TEAMID:-}" ]; then
+    echo "==> Skipping the iOS widget: TEAMID is not set, so the app group id is unknown"
+  elif ! ruby -e "require 'xcodeproj'" >/dev/null 2>&1; then
+    echo "==> Skipping the iOS widget: the xcodeproj gem is unavailable (run 'bundle install' at the repo root)"
+  else
+    echo "==> Installing the iOS widget extension sources"
+    mkdir -p ios/TrioFollowerWidget
+    for file in platform/ios/TrioFollowerWidget/*; do
+      name=$(basename "$file")
+      sed "s|__APP_GROUP_ID__|${APP_GROUP_ID}|g" "$file" > "ios/TrioFollowerWidget/$name"
+    done
+
+    ruby platform/ios/add_widget_target.rb "$APP_GROUP_ID" "$WIDGET_BUNDLE_ID"
+  fi
 fi
 
 # --- Android -----------------------------------------------------------------
@@ -82,6 +129,51 @@ content = re.sub(r'(<manifest[^>]*>\n)', r'\1' + permission, content, count=1)
 with open(path, 'w') as f:
     f.write(content)
 print('AndroidManifest.xml patched')
+PY
+  fi
+fi
+
+# --- Android widget -----------------------------------------------------------
+
+ANDROID_MAIN=android/app/src/main
+if [ -d "$ANDROID_MAIN" ]; then
+  echo "==> Installing the Android widget provider and resources"
+  # Drop the provider next to MainActivity so it lands in the app's package.
+  PACKAGE_DIR=$(dirname "$(find "$ANDROID_MAIN/kotlin" -name 'MainActivity.kt' 2>/dev/null | head -1)")
+  if [ -n "${PACKAGE_DIR:-}" ] && [ -d "$PACKAGE_DIR" ]; then
+    cp platform/android/kotlin/GlucoseWidgetProvider.kt "$PACKAGE_DIR/"
+  else
+    echo "    MainActivity.kt not found; skipping the widget provider"
+  fi
+
+  mkdir -p "$ANDROID_MAIN/res/layout" "$ANDROID_MAIN/res/xml" \
+    "$ANDROID_MAIN/res/drawable" "$ANDROID_MAIN/res/values" "$ANDROID_MAIN/res/values-night"
+  cp -R platform/android/res/. "$ANDROID_MAIN/res/"
+
+  if ! grep -q 'GlucoseWidgetProvider' "$ANDROID_MAIN/AndroidManifest.xml"; then
+    echo "==> Registering the widget receiver in AndroidManifest.xml"
+    python3 - <<'PY'
+path = 'android/app/src/main/AndroidManifest.xml'
+with open(path) as f:
+    content = f.read()
+
+receiver = '''        <receiver
+            android:name=".GlucoseWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glucose_widget_info" />
+        </receiver>
+'''
+
+content = content.replace('    </application>', receiver + '    </application>', 1)
+
+with open(path, 'w') as f:
+    f.write(content)
+print('widget receiver registered')
 PY
   fi
 fi

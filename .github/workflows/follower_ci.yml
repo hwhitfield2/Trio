@@ -118,9 +118,18 @@ jobs:
           channel: stable
           cache: true
 
+      # For the xcodeproj gem, which adds the widget extension target.
+      - name: Install Ruby dependencies
+        run: bundle install
+
       - name: Prepare platform shells
         working-directory: FollowerApp
-        run: ./tool/prepare_platforms.sh
+        run: bundle exec ./tool/prepare_platforms.sh
+        env:
+          # Only decides the app group id baked into the widget's entitlements.
+          # Any value builds, because this job never signs — the point is to
+          # compile the widget's Swift.
+          TEAMID: CI0000TEST
 
       - name: Build iOS (unsigned)
         working-directory: FollowerApp

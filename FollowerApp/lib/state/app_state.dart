@@ -11,6 +11,7 @@ import '../services/command_service.dart';
 import '../services/pairing_store.dart';
 import '../services/push_service.dart';
 import '../services/status_service.dart';
+import '../services/widget_bridge.dart';
 
 class AppState extends ChangeNotifier {
   AppState({PairingStore? store, PushService? push})
@@ -47,6 +48,7 @@ class AppState extends ChangeNotifier {
     await _loadHistory();
     snapshot = await _statusService?.loadPersisted();
     initialized = true;
+    await WidgetBridge.publish(snapshot);
 
     _push.onMessage(_handlePushData);
     _push.onNewToken((_) => registerPush(force: true));
@@ -68,6 +70,7 @@ class AppState extends ChangeNotifier {
     await StatusService.clearPersisted();
     _rebuildServices();
     notifyListeners();
+    await WidgetBridge.clear();
     await registerPush(force: true);
   }
 
@@ -78,6 +81,7 @@ class AppState extends ChangeNotifier {
     snapshot = null;
     _rebuildServices();
     notifyListeners();
+    await WidgetBridge.clear();
   }
 
   /// Registers this device's push address with the host so it can deliver
@@ -166,6 +170,9 @@ class AppState extends ChangeNotifier {
       snapshot = updated;
       statusHint = null;
       notifyListeners();
+      // Pushes are also delivered in the background, so the widgets stay
+      // current without the app being opened.
+      await WidgetBridge.publish(updated);
     }
   }
 

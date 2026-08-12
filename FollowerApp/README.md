@@ -14,6 +14,11 @@ It also shows live glucose, IOB, COB, loop state and active targets/overrides
 — **pushed end-to-end encrypted straight from the host device**. There is no
 Nightscout and no other third-party data service anywhere in the loop.
 
+The same data is available on the **home screen**, on both platforms: an iOS
+widget (small, medium, and the three lock screen sizes) and an Android app
+widget. Both are redrawn whenever a status push arrives, including while the
+app is in the background — see [Home screen widgets](#home-screen-widgets).
+
 ## How it works
 
 ```
@@ -68,8 +73,18 @@ The repository's GitHub Actions build the follower for you:
   Trio", and attaches an installable **Android APK** as a workflow artifact.
   One-time prerequisites:
   1. Run **"2. Add Identifiers"** once — it also creates the follower bundle id
-     (`org.nightscout.<TEAMID>.triofollower`) with push notifications, and
-     reports whether the App Store Connect app record below exists.
+     (`org.nightscout.<TEAMID>.triofollower`) with push notifications, creates
+     the widget bundle id (`…triofollower.widget`), and reports whether the App
+     Store Connect app record below exists.
+  1b. Add the **Trio App Group** to both follower identifiers by hand, at
+     [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list):
+     open `org.nightscout.<TEAMID>.triofollower` and
+     `org.nightscout.<TEAMID>.triofollower.widget`, and under **App Groups**
+     click Configure and select **Trio App Group**
+     (`group.org.nightscout.<TEAMID>.trio.trio-app-group`). The follower shares
+     Trio's group instead of registering one of its own; it is how the app hands
+     glucose to its widget. Apple's API cannot assign app groups, so this is
+     manual. Skip it and the build fails to sign the widget.
   2. Create the follower's **App Store Connect app record** by hand, once, at
      [App Store Connect](https://appstoreconnect.apple.com) → Apps → **+**:
      platform **iOS**, bundle id `org.nightscout.<TEAMID>.triofollower`, the
@@ -88,6 +103,54 @@ The repository's GitHub Actions build the follower for you:
 - **"Follower CI"** (`follower_ci.yml`) — runs automatically on changes to
   `FollowerApp/`: analyzer, protocol/crypto tests, an Android APK build, and
   an unsigned iOS compile check.
+
+## Home screen widgets
+
+Both platforms show the host's latest status on the home screen. Add them the
+usual way: long-press the home screen → **Widgets** → **Trio Follower** on iOS,
+or **Widgets** → **Trio Follower** on Android.
+
+- **iOS** — small and medium home screen sizes plus the circular, rectangular
+  and inline lock screen sizes. The medium size includes six hours of readings.
+- **Android** — one resizable widget with six hours of readings, drawn to fit
+  whatever size you give it.
+
+Both show glucose and trend, the delta, IOB, COB and the time of the reading,
+coloured with the same 70/180 mg/dL thresholds as the in-app chart, and strike
+the value through once the reading is more than six minutes old.
+
+How it works: `lib/services/widget_bridge.dart` formats every displayed value
+and writes one JSON payload to shared storage whenever a status push arrives —
+including background pushes, so the widgets stay current without opening the
+app. The native side only lays out the strings it is given, which is what keeps
+iOS, Android and the in-app screen from disagreeing.
+
+The widgets show `--` and "Open Trio Follower" until the first status arrives,
+and are cleared when you unpair, so they can never keep displaying glucose from
+a host this device is no longer paired with.
+
+**iOS specifics.** The widget is a separate process, so it reads the payload
+from the app group it shares with the app — Trio's own
+`group.org.nightscout.<TEAMID>.trio.trio-app-group`, reused so builders do not
+have to register a second group. The group id carries the Apple team id, so
+`tool/prepare_platforms.sh` needs `TEAMID` to build the widget:
+
+```bash
+TEAMID=<your team id> ./tool/prepare_platforms.sh
+```
+
+Without it the script skips the iOS widget (with a warning) and everything else
+still builds. It also needs fastlane's `xcodeproj` gem, since it adds the widget
+extension target to the generated `ios/Runner.xcodeproj`; run `bundle install`
+at the repository root first, then run the script under `bundle exec`. For a
+local `flutter run`/`flutter build ios`, pass the group to the Dart side too:
+
+```bash
+flutter build ios --dart-define=APP_GROUP_ID=group.org.nightscout.<TEAMID>.trio.trio-app-group
+```
+
+CI does both automatically. Android needs none of this — its widget reads the
+app's own storage.
 
 ### Local builds
 
