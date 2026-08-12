@@ -87,6 +87,77 @@ final class FollowerPushSender {
         }
     }
 
+    /// Updates the follower's Live Activity directly, without the follower app
+    /// being involved at all.
+    ///
+    /// This is the only payload the host sends that is not end-to-end
+    /// encrypted: ActivityKit decodes `content-state` itself to draw the Lock
+    /// Screen, so it cannot be ciphertext. Followers only receive it after
+    /// opting in, which is what registers the token in the first place.
+    func sendLiveActivity(state: FollowerLiveActivityState, to follower: PairedFollower) async throws {
+        guard let token = follower.liveActivityToken, !token.isEmpty else {
+            throw FollowerPushError.notRegistered
+        }
+
+        let manager = FollowerPairingManager.shared
+        guard manager.hasAPNSCredentials else {
+            throw FollowerPushError.missingAPNSCredentials
+        }
+        guard let jwt = APNSJWTManager.shared.getOrGenerateJWT(
+            keyId: manager.apnsKeyId,
+            teamId: manager.apnsTeamId,
+            apnsKey: manager.apnsKey
+        ) else {
+            throw FollowerPushError.transportFailure("Failed to generate APNS JWT")
+        }
+
+        let production = follower.pushEnvironment != "sandbox"
+        let host = production ? "api.push.apple.com" : "api.sandbox.push.apple.com"
+        guard let url = URL(string: "https://\(host)/3/device/\(token)") else {
+            throw FollowerPushError.transportFailure("Invalid APNS URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue("liveactivity", forHTTPHeaderField: "apns-push-type")
+        // Priority 5 is not drawn from the system's ActivityKit budget, so a
+        // reading every five minutes never gets the follower throttled. A
+        // Live Activity update is never urgent enough to spend the budget:
+        // anything that is urgent goes out as an alert push instead.
+        request.setValue("5", forHTTPHeaderField: "apns-priority")
+        // Live Activity pushes have their own topic suffix.
+        request.setValue("\(follower.pushBundleId ?? "").push-type.liveactivity", forHTTPHeaderField: "apns-topic")
+
+        let contentState = try state.asJSONObject()
+        let aps: [String: Any] = [
+            "timestamp": Int(Date().timeIntervalSince1970),
+            "event": "update",
+            "content-state": contentState,
+            // Lets the follower's Lock Screen dim itself when updates stop
+            // arriving, rather than showing an old number as if it were current.
+            "stale-date": Int(state.staleDate.timeIntervalSince1970)
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["aps": aps])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw FollowerPushError.transportFailure("No HTTP response from APNS")
+        }
+        if httpResponse.statusCode == 200 { return }
+
+        let reason = Self.apnsReason(from: data)
+        // The token dies with the activity — when the follower ends one while
+        // offline, the host never hears about it. Drop the token rather than
+        // pushing to a dead address on every reading; the follower registers a
+        // new one when it starts another activity.
+        if ["BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic"].contains(reason ?? "") {
+            manager.updateLiveActivityToken(followerId: follower.id, token: "")
+        }
+        throw FollowerPushError.transportFailure("APNS \(httpResponse.statusCode): \(reason ?? "unknown")")
+    }
+
     // MARK: - APNS (iOS followers)
 
     private func sendViaAPNS(

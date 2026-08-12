@@ -63,5 +63,70 @@ void main() {
       expect(state['iob'], '1.3');
       expect(state['cob'], '18');
     });
+
+    test('field names are the ones ActivityKit decodes', () {
+      // Shared with FollowerActivityAttributes.ContentState (which ActivityKit
+      // decodes into) and with the host's FollowerLiveActivityState (which
+      // pushes the same structure). A rename that misses one of the three stops
+      // Live Activity updates silently.
+      final state = LiveActivityBridge.stateFor(snapshotWith(2));
+      expect(
+        state.keys.toSet(),
+        {'bg', 'direction', 'change', 'iob', 'cob', 'readingDate', 'low', 'high', 'chart'},
+      );
+      final point = (state['chart'] as List).first as Map;
+      expect(point.keys.cast<String>().toSet(), {'v', 't'});
+    });
+
+    test('matches the host formatting vector, value for value', () {
+      // The same numbers appear in TrioTests/FollowerLiveActivityStateTests.
+      // The host formats a remote update itself, so the two implementations
+      // have to agree digit for digit or the Lock Screen would change when it
+      // switched between local and remote updates.
+      final now = DateTime.now();
+      final snapshot = StatusSnapshot(
+        timestamp: now,
+        units: 'mg/dL',
+        readings: [
+          GlucoseReading(sgv: 120, date: now, direction: 'FortyFiveUp'),
+          GlucoseReading(sgv: 114, date: now.subtract(const Duration(minutes: 5)), direction: 'Flat'),
+        ],
+        iob: 1.25,
+        cob: 18.4,
+        lowThreshold: 70,
+        highThreshold: 180,
+      );
+
+      final mgdl = LiveActivityBridge.stateFor(snapshot);
+      expect(mgdl['bg'], '120');
+      expect(mgdl['direction'], '↗');
+      expect(mgdl['change'], '+6');
+      expect(mgdl['iob'], '1.3');
+      expect(mgdl['cob'], '18');
+      expect(mgdl['low'], 70);
+      expect(mgdl['high'], 180);
+    });
+
+    test('mmol/L conversion matches the host vector', () {
+      final now = DateTime.now();
+      final snapshot = StatusSnapshot(
+        timestamp: now,
+        units: 'mmol/L',
+        readings: [
+          GlucoseReading(sgv: 120, date: now, direction: 'SingleDown'),
+          GlucoseReading(sgv: 138, date: now.subtract(const Duration(minutes: 5)), direction: 'Flat'),
+        ],
+        lowThreshold: 70,
+        highThreshold: 180,
+      );
+
+      final state = LiveActivityBridge.stateFor(snapshot);
+      expect(state['bg'], '6.7');
+      expect(state['direction'], '↓');
+      expect(state['change'], '-1.0');
+      expect(state['low'], 3.9);
+      expect(state['high'], 10.0);
+      expect(((state['chart'] as List).first as Map)['v'], 6.7);
+    });
   });
 }

@@ -116,7 +116,10 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
     }
 
     func publishToAllFollowers() {
-        let followers = FollowerPairingManager.shared.followers.filter(\.isPushRegistered)
+        // Either registration is reason enough to build a snapshot: they are
+        // separate opt-ins, and a follower can hold one without the other.
+        let followers = FollowerPairingManager.shared.followers
+            .filter { $0.isPushRegistered || $0.isLiveActivityRegistered }
         guard !followers.isEmpty else { return }
 
         let shouldPublish: Bool = throttleQueue.sync {
@@ -134,7 +137,7 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
 
     func publish(toFollowerId followerId: String) async {
         guard let follower = FollowerPairingManager.shared.follower(withId: followerId),
-              follower.isPushRegistered
+              follower.isPushRegistered || follower.isLiveActivityRegistered
         else { return }
         await publish(to: [follower])
     }
@@ -149,20 +152,45 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
                 // Each follower sees its own thresholds, so the encoding is
                 // per-follower rather than shared.
                 let personalised = snapshot.withThresholds(from: follower.alertSettings)
-                let snapshotData = try encodeWithinPushLimit(personalised, using: encoder)
-                do {
-                    let encrypted = try messenger.encrypt(data: snapshotData)
-                    try await FollowerPushSender.shared.sendStatus(encryptedStatus: encrypted, to: follower)
-                    debug(.remoteControl, "Status snapshot pushed to follower \(follower.name)")
-                } catch {
-                    debug(
-                        .remoteControl,
-                        "Failed to push status to follower \(follower.name): \(error)"
-                    )
+                if follower.isPushRegistered {
+                    let snapshotData = try encodeWithinPushLimit(personalised, using: encoder)
+                    do {
+                        let encrypted = try messenger.encrypt(data: snapshotData)
+                        try await FollowerPushSender.shared.sendStatus(encryptedStatus: encrypted, to: follower)
+                        debug(.remoteControl, "Status snapshot pushed to follower \(follower.name)")
+                    } catch {
+                        debug(
+                            .remoteControl,
+                            "Failed to push status to follower \(follower.name): \(error)"
+                        )
+                    }
                 }
+
+                await publishLiveActivity(personalised, to: follower)
             }
         } catch {
             debug(.remoteControl, "Failed to build follower status snapshot: \(error)")
+        }
+    }
+
+    /// Pushes the same reading straight to the follower's Live Activity.
+    ///
+    /// Separate from the status push on purpose: the status push only reaches
+    /// the Lock Screen if the system decides to wake the follower app, which it
+    /// often does not. This one is drawn by ActivityKit whether the app runs or
+    /// not, so it is the only update that survives the app being suspended or
+    /// swiped away. A follower that has not opted in has no token and is
+    /// skipped.
+    private func publishLiveActivity(_ snapshot: FollowerStatusSnapshot, to follower: PairedFollower) async {
+        guard follower.isLiveActivityRegistered,
+              let state = FollowerLiveActivityState.from(snapshot: snapshot)
+        else { return }
+
+        do {
+            try await FollowerPushSender.shared.sendLiveActivity(state: state, to: follower)
+            debug(.remoteControl, "Live Activity pushed to follower \(follower.name)")
+        } catch {
+            debug(.remoteControl, "Failed to push Live Activity to follower \(follower.name): \(error)")
         }
     }
 

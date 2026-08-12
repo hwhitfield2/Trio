@@ -51,6 +51,10 @@ plist.setdefault('NSCameraUsageDescription',
 plist.setdefault('NSFaceIDUsageDescription',
                  'Confirm remote commands before they are sent.')
 plist['NSSupportsLiveActivities'] = True
+# The host pushes a Live Activity update per CGM reading. Without this key the
+# system holds those to its ordinary budget; with it, the user can also turn
+# them back down in Settings, which is where that decision belongs.
+plist['NSSupportsLiveActivitiesFrequentUpdates'] = True
 modes = plist.setdefault('UIBackgroundModes', [])
 if 'remote-notification' not in modes:
     modes.append('remote-notification')

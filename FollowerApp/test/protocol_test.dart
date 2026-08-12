@@ -117,6 +117,19 @@ void main() {
       expect(register['push_bundle_id'], 'org.nightscout.triofollower');
       expect(register['push_environment'], 'production');
     });
+
+    test('live activity registration carries and clears the token', () {
+      final register = TrioCommand.registerLiveActivity(liveActivityToken: 'deadbeef')
+          .toPayload(user: 'Mom', sequence: 7);
+      expect(register['command_type'], 'register_live_activity');
+      expect(register['live_activity_token'], 'deadbeef');
+
+      // Withdrawing sends an empty token rather than omitting the field, so the
+      // host can tell "stop pushing" apart from a malformed command.
+      final clear = TrioCommand.registerLiveActivity().toPayload(user: 'Mom', sequence: 8);
+      expect(clear['command_type'], 'register_live_activity');
+      expect(clear['live_activity_token'], '');
+    });
   });
 
   group('StatusSnapshot', () {

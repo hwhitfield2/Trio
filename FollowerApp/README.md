@@ -32,7 +32,10 @@ Follower app ──(AES-256-GCM encrypted command over APNS HTTP/2)──▶ App
 - The host pushes an encrypted **status snapshot** to every paired follower
   on each glucose/loop update, right after every command (so you see the
   effect immediately), and on demand via pull-to-refresh. Data exists only on
-  the host and paired followers — the push services carry ciphertext.
+  the host and paired followers — the push services carry ciphertext. The one
+  exception is opt-in and off by default: [Live Activity updates pushed by the
+  host](#live-activity-updates-pushed-by-the-host-ios-opt-in) cannot be
+  encrypted, because ActivityKit has to read them to draw the Lock Screen.
 - The host identifies the sender via `follower_id`, decrypts with that
   follower's key, checks the command timestamp (±10 min) **and** a strictly
   increasing sequence number, so captured pushes can never be replayed.
@@ -247,6 +250,47 @@ stays silent, resetting as soon as it answers. The policy lives in
 `lib/services/sync_scheduler.dart` and is covered by
 `test/sync_scheduler_test.dart`.
 
+None of this helps while the app is closed — a suspended app cannot poll. For
+the Lock Screen there is a way around that; see below.
+
+### Live Activity updates pushed by the host (iOS, opt-in)
+
+The Live Activity can be updated by the host **directly**, without the app
+being woken at all:
+
+1. When the activity starts, the app asks ActivityKit for a push token
+   (`pushType: .token`).
+2. With **Settings → Let the host update it directly** switched on, the app
+   sends that token to the host (`register_live_activity`).
+3. The host then pushes an `apns-push-type: liveactivity` update to it on
+   every reading, at `apns-priority: 5` — a priority that does not count
+   against the system's ActivityKit budget, so a five-minute cadence is not
+   throttled.
+
+The system draws these itself, so the Lock Screen and Dynamic Island stay
+current while the app is suspended or has been swiped away — the cases where
+silent status pushes are dropped entirely.
+
+**The trade-off, and why it is off by default:** ActivityKit decodes the
+payload to draw it, so a remote Live Activity update *cannot* be end-to-end
+encrypted. It is the only message in this system that isn't: Apple's push
+service carries the displayed glucose, trend, IOB and COB as plain text.
+Everything else — commands, status snapshots — stays ciphertext whether this
+is on or off. Leaving it off costs nothing but Lock Screen freshness: the app
+still updates the activity whenever it runs.
+
+Two more things worth knowing:
+
+- The displayed values are formatted twice, once in Dart
+  (`lib/services/live_activity_bridge.dart`) for local updates and once in
+  Swift (`Trio/Sources/Services/RemoteControl/FollowerLiveActivityState.swift`)
+  for pushed ones. They must agree digit for digit, down to how halves round;
+  the same test vectors are pinned on both sides.
+- iOS ends any Live Activity after 8 hours. The app starts a new one the next
+  time it runs. Reviving it remotely would need a push-to-start token
+  (iOS 17.2+), which is not implemented — and Apple requires start pushes to
+  carry a user-visible alert.
+
 ## Limitations
 
 - Command *delivery* is confirmed (APNS accepted the push); command
@@ -258,6 +302,9 @@ stays silent, resetting as soon as it answers. The policy lives in
   commands survive short offline windows via APNS storage, subject to the
   host's ±10 minute command freshness window.
 - iOS may throttle background status pushes when the follower app hasn't been
-  opened for a long time, so the widgets and the Live Activity can lag behind.
-  Opening the app fetches the current state: it asks the host directly
-  whenever the data it has is older than a CGM cycle.
+  opened for a long time, and delivers none at all to an app that was swiped
+  away, so the home screen widgets can lag behind. Opening the app fetches the
+  current state: it asks the host directly whenever the data it has is older
+  than a CGM cycle. The Lock Screen has a way around this that the widgets do
+  not — see [Live Activity updates pushed by the
+  host](#live-activity-updates-pushed-by-the-host-ios-opt-in).

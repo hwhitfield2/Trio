@@ -188,6 +188,25 @@ class TrioRemoteControl: Injectable {
                 environment: commandPayload.pushEnvironment
             )
             debug(.remoteControl, "Follower push registration stored (transport: \(transport)).")
+        case .registerLiveActivity:
+            guard let followerId = followerId else {
+                await logError(
+                    "Live Activity registration rejected: only paired followers can register an activity.",
+                    payload: commandPayload
+                )
+                return
+            }
+            guard let token = commandPayload.liveActivityToken else {
+                await logError("Live Activity registration rejected: no token in the command.", payload: commandPayload)
+                return
+            }
+            FollowerPairingManager.shared.updateLiveActivityToken(followerId: followerId, token: token)
+            debug(
+                .remoteControl,
+                token.isEmpty
+                    ? "Follower Live Activity token cleared."
+                    : "Follower Live Activity token stored."
+            )
         }
     }
 }

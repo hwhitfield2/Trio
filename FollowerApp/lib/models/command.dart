@@ -16,6 +16,7 @@ class TrioCommand {
     this.pushTransport,
     this.pushBundleId,
     this.pushEnvironment,
+    this.liveActivityToken,
   });
 
   final String commandType;
@@ -35,6 +36,10 @@ class TrioCommand {
   final String? pushTransport;
   final String? pushBundleId;
   final String? pushEnvironment;
+
+  /// APNS token of this device's running Live Activity, or the empty string to
+  /// tell the host to stop pushing to it.
+  final String? liveActivityToken;
 
   factory TrioCommand.bolus(double units) => TrioCommand._(commandType: 'bolus', bolusAmount: units);
 
@@ -82,6 +87,14 @@ class TrioCommand {
         pushEnvironment: pushEnvironment,
       );
 
+  /// Hands the host the Live Activity's push token so it can update the Lock
+  /// Screen directly, or clears it (empty token) when the user turns remote
+  /// updates off.
+  factory TrioCommand.registerLiveActivity({String? liveActivityToken}) => TrioCommand._(
+        commandType: 'register_live_activity',
+        liveActivityToken: liveActivityToken ?? '',
+      );
+
   /// Builds the payload that gets encrypted. `user` identifies this follower
   /// in Trio's logs and notifications; `sequence` provides replay protection.
   Map<String, dynamic> toPayload({
@@ -107,6 +120,7 @@ class TrioCommand {
       if (pushTransport != null) 'push_transport': pushTransport,
       if (pushBundleId != null) 'push_bundle_id': pushBundleId,
       if (pushEnvironment != null) 'push_environment': pushEnvironment,
+      if (liveActivityToken != null) 'live_activity_token': liveActivityToken,
     };
   }
 
@@ -132,6 +146,10 @@ class TrioCommand {
         return 'Status refresh';
       case 'register_follower':
         return 'Push registration';
+      case 'register_live_activity':
+        return (liveActivityToken ?? '').isEmpty
+            ? 'Live Activity updates off'
+            : 'Live Activity registration';
       default:
         return commandType;
     }

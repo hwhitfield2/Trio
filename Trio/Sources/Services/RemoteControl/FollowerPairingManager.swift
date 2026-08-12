@@ -29,6 +29,12 @@ struct PairedFollower: Codable, Identifiable, Equatable {
     /// "production" or "sandbox" for iOS followers.
     var pushEnvironment: String?
 
+    /// APNS token of the follower's Live Activity, registered by the follower
+    /// app when the user opts in to remote Lock Screen updates. Optional for
+    /// the same reason as `alerts`: followers paired before this existed must
+    /// still decode.
+    var liveActivityToken: String?
+
     /// Which alerts this follower receives, and how loudly.
     ///
     /// Optional because the keychain already holds followers paired before this
@@ -42,6 +48,11 @@ struct PairedFollower: Codable, Identifiable, Equatable {
     var alertSettings: FollowerAlertSettings { alerts ?? .default }
 
     var isPushRegistered: Bool { !(pushToken ?? "").isEmpty }
+
+    /// Live Activities are iOS-only, so an Android follower never has one.
+    var isLiveActivityRegistered: Bool {
+        pushTransport == "apns" && !(liveActivityToken ?? "").isEmpty
+    }
 
     /// Six-digit verification code derived from the secret. Shown on the host
     /// after creating a pairing and on the follower after scanning the QR code
@@ -213,6 +224,17 @@ final class FollowerPairingManager: Injectable {
             all[index].pushTransport = transport
             all[index].pushBundleId = bundleId
             all[index].pushEnvironment = environment
+            saveFollowers(all)
+        }
+    }
+
+    /// Stores (or, with an empty token, clears) the follower's Live Activity
+    /// push address.
+    func updateLiveActivityToken(followerId: String, token: String) {
+        queue.sync {
+            var all = loadFollowers()
+            guard let index = all.firstIndex(where: { $0.id == followerId }) else { return }
+            all[index].liveActivityToken = token.isEmpty ? nil : token
             saveFollowers(all)
         }
     }

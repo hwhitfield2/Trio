@@ -13,12 +13,27 @@ import UIKit
 /// runs on, so a status push that arrives while the app is in the background can
 /// still refresh the activity.
 public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
+    private let channel: FlutterMethodChannel
+    /// Watches the running activity's push token. One activity at a time, so
+    /// one task at a time.
+    private var tokenTask: Task<Void, Never>?
+    private var pushToken: String?
+
+    init(channel: FlutterMethodChannel) {
+        self.channel = channel
+        super.init()
+    }
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(
             name: "trio_follower/live_activity",
             binaryMessenger: registrar.messenger()
         )
-        registrar.addMethodCallDelegate(TrioLiveActivityPlugin(), channel: channel)
+        let instance = TrioLiveActivityPlugin(channel: channel)
+        registrar.addMethodCallDelegate(instance, channel: channel)
+        // An activity survives the app being killed, so on launch there may
+        // already be one running whose token needs watching again.
+        instance.observeRunningActivity()
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -29,6 +44,8 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
             perform(call, result: result) { try self.start(arguments: $0) }
         case "update":
             perform(call, result: result) { try self.update(arguments: $0) }
+        case "pushToken":
+            result(pushToken)
         case "end":
             Task { await self.endAll() }
             result(true)
@@ -83,18 +100,62 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
                     Task {
                         await existing.update(Self.content(state))
                     }
+                    observe(existing)
                     return
                 }
 
-                _ = try Activity.request(
+                // `.token` asks the system for an APNS token addressed straight
+                // at this activity. The host can then update the Lock Screen
+                // without the app being woken at all, which is the only way the
+                // activity stays current while the app is suspended. The token
+                // is only ever sent to the host when the user opts in; minting
+                // one costs nothing on its own.
+                let activity = try Activity.request(
                     attributes: FollowerActivityAttributes(hostName: hostName),
                     content: Self.content(state),
-                    pushType: nil
+                    pushType: .token
                 )
+                observe(activity)
                 return
             }
         #endif
         throw LiveActivityError.unsupported
+    }
+
+    private func observeRunningActivity() {
+        #if canImport(ActivityKit)
+            if #available(iOS 16.2, *) {
+                guard let existing = Activity<FollowerActivityAttributes>.activities.first else { return }
+                observe(existing)
+            }
+        #endif
+    }
+
+    #if canImport(ActivityKit)
+        /// Follows the activity's push token for as long as it lives.
+        ///
+        /// The token is not available synchronously after `request`, and the
+        /// system rotates it during the activity's life, so the stream is the
+        /// only reliable source — reading `activity.pushToken` once would leave
+        /// the host pushing at a dead address.
+        @available(iOS 16.2, *)
+        private func observe(_ activity: Activity<FollowerActivityAttributes>) {
+            tokenTask?.cancel()
+            tokenTask = Task { [weak self] in
+                for await tokenData in activity.pushTokenUpdates {
+                    let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                    DispatchQueue.main.async { self?.publish(token: token) }
+                }
+            }
+        }
+    #endif
+
+    /// Hands the token to Dart, which decides whether the host may have it.
+    private func publish(token: String?) {
+        pushToken = token
+        // A different name from the "pushToken" method Dart calls into, so
+        // the two directions of this channel stay easy to tell apart.
+        channel.invokeMethod("onPushToken", arguments: token)
     }
 
     private func update(arguments: [String: Any]) throws {
@@ -128,6 +189,11 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
                 }
             }
         #endif
+        tokenTask?.cancel()
+        tokenTask = nil
+        // The token dies with the activity; tell Dart so the host is told to
+        // stop pushing to it rather than pushing into the void.
+        DispatchQueue.main.async { self.publish(token: nil) }
     }
 
     #if canImport(ActivityKit)

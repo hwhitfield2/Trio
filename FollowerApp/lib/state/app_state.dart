@@ -38,6 +38,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// them switched on for the app in iOS Settings.
   LiveActivitySupport liveActivitySupport = LiveActivitySupport.unsupported;
   bool liveActivityEnabled = false;
+
+  /// Whether the host may update the Live Activity directly over APNS. Off
+  /// unless the user turns it on: it is the one path where the push service
+  /// carries readable data rather than ciphertext.
+  bool liveActivityRemoteUpdates = false;
   String? statusHint;
   List<CommandRecord> history = [];
 
@@ -51,6 +56,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _ticker;
   bool _observingLifecycle = false;
   bool _statusRequestInFlight = false;
+
+  /// Last Live Activity token the host acknowledged, so a token that has not
+  /// changed is not re-sent on every activity update.
+  String? _registeredLiveActivityToken;
 
   bool get isPaired => bundle != null;
 
@@ -67,12 +76,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     snapshot = await _statusService?.loadPersisted();
     liveActivitySupport = await LiveActivityBridge.support();
     liveActivityEnabled = await LiveActivityBridge.isEnabled();
+    liveActivityRemoteUpdates = await LiveActivityBridge.remoteUpdatesEnabled();
     initialized = true;
     await WidgetBridge.publish(snapshot);
     await LiveActivityBridge.publish(snapshot, hostName: _hostName);
 
     _push.onMessage(_handlePushData);
     _push.onNewToken((_) => registerPush(force: true));
+    LiveActivityBridge.onPushToken(_handleLiveActivityToken);
 
     if (!_observingLifecycle) {
       WidgetsBinding.instance.addObserver(this);
@@ -84,6 +95,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (isPaired) {
       _startTicker();
       await registerPush();
+      // Re-register the Live Activity token: an activity started before the
+      // app was last killed is still running, and the host may have been
+      // re-paired or restored since.
+      await _handleLiveActivityToken(await LiveActivityBridge.pushToken());
       // A registration also triggers a status push from the host; when the
       // token was already registered, ask explicitly so the UI is fresh.
       await requestStatus();
@@ -121,6 +136,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await StatusService.clearPersisted();
     _rebuildServices();
     _scheduler.reset();
+    _registeredLiveActivityToken = null;
     _startTicker();
     notifyListeners();
     await WidgetBridge.clear();
@@ -135,6 +151,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     snapshot = null;
     _rebuildServices();
     _scheduler.reset();
+    _registeredLiveActivityToken = null;
     _stopTicker();
     notifyListeners();
     await WidgetBridge.clear();
@@ -303,6 +320,51 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await LiveActivityBridge.setEnabled(enabled);
     if (enabled) {
       await LiveActivityBridge.publish(snapshot, hostName: _hostName);
+    }
+  }
+
+  /// Lets the host update the Live Activity directly, or takes that back.
+  ///
+  /// Switching on restarts the activity: the system only issues a push token
+  /// at the moment an activity is requested, so one that is already running
+  /// can never gain one.
+  Future<void> setLiveActivityRemoteUpdates(bool enabled) async {
+    liveActivityRemoteUpdates = enabled;
+    notifyListeners();
+    await LiveActivityBridge.setRemoteUpdatesEnabled(enabled);
+
+    if (enabled) {
+      await LiveActivityBridge.restart(snapshot, hostName: _hostName);
+      // The token usually arrives on the stream a moment later, but ask too:
+      // an activity that was already running with a token has nothing new to
+      // report.
+      await _handleLiveActivityToken(await LiveActivityBridge.pushToken());
+    } else {
+      // Forced: this app may have been restarted since the token was
+      // registered, so it cannot tell from memory whether the host still holds
+      // one. Withdrawing has to reach the host either way — the activity keeps
+      // running, so nothing else would stop the pushes.
+      await _sendLiveActivityToken('', force: true);
+    }
+  }
+
+  /// The system issued, rotated or dropped the Live Activity's push token.
+  Future<void> _handleLiveActivityToken(String? token) async {
+    if (!liveActivityRemoteUpdates) return;
+    await _sendLiveActivityToken(token ?? '');
+  }
+
+  /// Registers (or clears) the Live Activity token on the host, skipping the
+  /// send when the host already has this exact token.
+  Future<void> _sendLiveActivityToken(String token, {bool force = false}) async {
+    final service = _commandService;
+    if (service == null) return;
+    // A null registration and an empty token both mean "the host has nothing".
+    if (!force && token == (_registeredLiveActivityToken ?? '')) return;
+
+    final record = await service.send(TrioCommand.registerLiveActivity(liveActivityToken: token));
+    if (record.accepted) {
+      _registeredLiveActivityToken = token;
     }
   }
 

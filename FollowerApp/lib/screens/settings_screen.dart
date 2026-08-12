@@ -49,6 +49,22 @@ class SettingsScreen extends StatelessWidget {
                         ? (value) => context.read<AppState>().setLiveActivityEnabled(value)
                         : null,
                   ),
+                if (state.liveActivitySupport.available && state.liveActivityEnabled)
+                  SwitchListTile(
+                    secondary: const Icon(Icons.cloud_sync),
+                    title: const Text('Let the host update it directly'),
+                    subtitle: const Text(
+                      'Keeps the Lock Screen current even while this app is '
+                      'closed, instead of only when it runs. Apple has to read '
+                      'these updates to draw them, so glucose, IOB and COB '
+                      'travel as plain text — everything else this app '
+                      'exchanges with the host stays encrypted either way.',
+                    ),
+                    value: state.liveActivityRemoteUpdates,
+                    onChanged: state.liveActivitySupport.enabled
+                        ? (value) => context.read<AppState>().setLiveActivityRemoteUpdates(value)
+                        : null,
+                  ),
                 ListTile(
                   leading: const Icon(Icons.podcasts),
                   title: Text(

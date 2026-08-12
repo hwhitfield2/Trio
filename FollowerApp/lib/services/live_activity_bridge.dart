@@ -19,6 +19,7 @@ export 'package:trio_live_activity/trio_live_activity.dart' show LiveActivitySup
 /// timestamps are seconds rather than milliseconds.
 class LiveActivityBridge {
   static const _enabledKey = 'trio_follower.live_activity_enabled';
+  static const _remoteUpdatesKey = 'trio_follower.live_activity_remote_updates';
 
   /// Roughly two hours at a five-minute cadence. The lock screen chart is small
   /// enough that more points would not be visible, and the budget is real.
@@ -35,6 +36,41 @@ class LiveActivityBridge {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enabledKey, enabled);
     if (!enabled) await TrioLiveActivity.end();
+  }
+
+  /// Whether the user has agreed to let the host update the Lock Screen
+  /// directly, by handing it the activity's push token.
+  ///
+  /// Off by default, and deliberately separate from [isEnabled]: ActivityKit
+  /// decodes the pushed content itself, so — unlike every other byte this app
+  /// exchanges with the host — a remote Live Activity update cannot be
+  /// end-to-end encrypted. Turning this on means Apple's push service carries
+  /// the displayed glucose, trend, IOB and COB as plain text.
+  static Future<bool> remoteUpdatesEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_remoteUpdatesKey) ?? false;
+  }
+
+  static Future<void> setRemoteUpdatesEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_remoteUpdatesKey, enabled);
+  }
+
+  /// The running activity's push token, or null when there is none.
+  static Future<String?> pushToken() => TrioLiveActivity.pushToken();
+
+  /// Watches for the system issuing or rotating the activity's push token.
+  static void onPushToken(void Function(String? token) handler) =>
+      TrioLiveActivity.onPushToken(handler);
+
+  /// Ends the activity and starts a fresh one for [snapshot].
+  ///
+  /// Used when remote updates are switched on: an activity only gets a push
+  /// token from the system at the moment it is requested, so one that is
+  /// already running can never gain one.
+  static Future<void> restart(StatusSnapshot? snapshot, {required String hostName}) async {
+    await stop();
+    await publish(snapshot, hostName: hostName);
   }
 
   /// Starts or refreshes the activity for a snapshot, if the user turned it on.

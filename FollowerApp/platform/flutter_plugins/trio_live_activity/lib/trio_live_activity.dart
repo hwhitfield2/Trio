@@ -51,6 +51,36 @@ class TrioLiveActivity {
 
   static Future<bool> end() => _invoke('end', const {});
 
+  /// The running activity's APNS push token, or null when no activity is
+  /// running or the system has not issued one yet.
+  ///
+  /// A host holding this token can update the Lock Screen directly, without
+  /// the app being woken — so it is only ever handed over when the user has
+  /// asked for it.
+  static Future<String?> pushToken() async {
+    if (!Platform.isIOS) return null;
+    try {
+      return await _channel.invokeMethod<String>('pushToken');
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// Called when the system issues or rotates the activity's push token, and
+  /// with null when the activity ends. The token changes during an activity's
+  /// life, so a caller that reads it once will end up stale.
+  static void onPushToken(void Function(String? token) handler) {
+    if (!Platform.isIOS) return;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onPushToken') {
+        handler(call.arguments as String?);
+      }
+      return null;
+    });
+  }
+
   static Future<bool> _invoke(String method, Map<String, dynamic> arguments) async {
     if (!Platform.isIOS) return false;
     try {

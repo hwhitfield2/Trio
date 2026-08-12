@@ -39,6 +39,12 @@ struct CommandPayload: Decodable, Sendable {
     /// "production" or "sandbox" (iOS followers only).
     var pushEnvironment: String?
 
+    /// APNS token of the follower's running Live Activity
+    /// (register_live_activity command), or the empty string when the follower
+    /// withdraws it. Lets the host update the follower's Lock Screen without
+    /// the follower app being woken.
+    var liveActivityToken: String?
+
     struct ReturnNotificationInfo: Decodable, Sendable {
         let productionEnvironment: Bool
         let deviceToken: String
@@ -75,6 +81,7 @@ struct CommandPayload: Decodable, Sendable {
         case pushTransport = "push_transport"
         case pushBundleId = "push_bundle_id"
         case pushEnvironment = "push_environment"
+        case liveActivityToken = "live_activity_token"
     }
 
     func humanReadableDescription() -> String {
@@ -114,6 +121,10 @@ struct CommandPayload: Decodable, Sendable {
             description += "Status request."
         case .registerFollower:
             description += "Follower push registration (\(pushTransport ?? "unknown transport"))."
+        case .registerLiveActivity:
+            description += (liveActivityToken ?? "").isEmpty
+                ? "Live Activity updates withdrawn."
+                : "Live Activity registration."
         }
 
         if let scheduledTime = scheduledTime {
@@ -139,6 +150,7 @@ extension TrioRemoteControl {
         case cancelOverride = "cancel_override"
         case statusRequest = "status_request"
         case registerFollower = "register_follower"
+        case registerLiveActivity = "register_live_activity"
 
         var description: String {
             switch self {
@@ -158,6 +170,8 @@ extension TrioRemoteControl {
                 return "Status Request"
             case .registerFollower:
                 return "Register Follower"
+            case .registerLiveActivity:
+                return "Register Live Activity"
             }
         }
     }
