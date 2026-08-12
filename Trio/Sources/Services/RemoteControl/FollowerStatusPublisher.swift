@@ -47,8 +47,9 @@ struct FollowerStatusSnapshot: Encodable {
     /// out-of-order snapshots.
     let timestamp: TimeInterval
     let units: String
-    /// Newest first, up to 6 hours.
-    let readings: [Reading]
+    /// Newest first. Trimmed from the oldest end when the encrypted payload
+    /// would not fit in an APNS background notification.
+    var readings: [Reading]
     let iob: Double?
     let cob: Double?
     /// Unix seconds of the last enacted loop determination.
@@ -134,7 +135,7 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
         do {
             let snapshot = try await buildSnapshot()
             let encoder = JSONEncoder()
-            let snapshotData = try encoder.encode(snapshot)
+            let snapshotData = try encodeWithinPushLimit(snapshot, using: encoder)
 
             for follower in followers {
                 guard let messenger = SecureMessenger(sharedSecret: follower.secret) else { continue }
@@ -154,6 +155,43 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
         }
     }
 
+    // MARK: - Push size budget
+
+    /// APNS rejects a background notification larger than 4 KB.
+    private static let apnsPayloadLimit = 4096
+    /// The `aps` dictionary, `follower_id` and the JSON scaffolding wrapped
+    /// around `encrypted_status`.
+    private static let apnsEnvelopeOverhead = 128
+
+    /// Encodes the snapshot, dropping the oldest readings until the payload it
+    /// will become fits an APNS background push.
+    ///
+    /// The snapshot is encrypted and base64-encoded before it is sent, which
+    /// inflates it by a third, so the plaintext budget is much smaller than the
+    /// 4 KB limit suggests: a full 6 hours of readings encodes to well over
+    /// 6 KB of payload. APNS answers those with 413 PayloadTooLarge, which the
+    /// follower only ever sees as a status that never arrives — so trim here
+    /// rather than let the push fail.
+    private func encodeWithinPushLimit(
+        _ snapshot: FollowerStatusSnapshot,
+        using encoder: JSONEncoder
+    ) throws -> Data {
+        var snapshot = snapshot
+        var data = try encoder.encode(snapshot)
+        while projectedPayloadSize(plaintextBytes: data.count) > Self.apnsPayloadLimit, !snapshot.readings.isEmpty {
+            // Readings are newest first, so the last one is the oldest.
+            snapshot.readings.removeLast()
+            data = try encoder.encode(snapshot)
+        }
+        return data
+    }
+
+    private func projectedPayloadSize(plaintextBytes: Int) -> Int {
+        let encrypted = 12 + plaintextBytes + 16 // nonce || ciphertext || GCM tag
+        let base64 = (encrypted + 2) / 3 * 4
+        return base64 + Self.apnsEnvelopeOverhead
+    }
+
     // MARK: - Snapshot assembly
 
     private func buildSnapshot() async throws -> FollowerStatusSnapshot {
@@ -167,12 +205,12 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
 
         return FollowerStatusSnapshot(
             type: "status",
-            timestamp: Date().timeIntervalSince1970,
+            timestamp: Date().timeIntervalSince1970.rounded(),
             units: settings.units.rawValue,
             readings: readings,
             iob: iob,
             cob: determination?.cob,
-            lastLoop: determination?.date?.timeIntervalSince1970,
+            lastLoop: determination?.date?.timeIntervalSince1970.rounded(),
             eventualBG: determination?.eventualBG,
             tempTarget: tempTarget,
             override: override,
@@ -188,7 +226,10 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             predicate: NSPredicate.predicateForSixHoursAgo,
             key: "date",
             ascending: false,
-            fetchLimit: 72
+            // ~4 hours at a 5-minute CGM cadence. Six hours (72) does not fit
+            // an APNS background push once encrypted and base64-encoded; see
+            // encodeWithinPushLimit, which enforces the real budget.
+            fetchLimit: 48
         )
 
         return await context.perform {
@@ -196,7 +237,11 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             return glucoseResults.map {
                 FollowerStatusSnapshot.Reading(
                     sgv: Int($0.glucose),
-                    date: ($0.date ?? Date()).timeIntervalSince1970,
+                    // Whole seconds: sub-second precision costs ~7 bytes per
+                    // reading in the payload and means nothing for a CGM.
+                    // Followers parse this as a number, so integers are
+                    // wire-compatible with already-released builds.
+                    date: ($0.date ?? Date()).timeIntervalSince1970.rounded(),
                     direction: $0.directionEnum?.rawValue
                 )
             }
