@@ -231,6 +231,22 @@ After pairing, the app automatically registers its push address with the host
 The home screen shows how fresh the host data is; pull to refresh sends a
 `status_request` and waits for the answering push.
 
+### Keeping in sync without pulling to refresh
+
+Status pushes are silent background pushes, which iOS and Android are free to
+delay, coalesce or drop — so the app does not rely on them alone. While it is
+on screen, and every time it comes back to the foreground, it checks the age
+of the newest snapshot and sends a `status_request` itself once nothing has
+arrived for longer than a CGM cycle (6 minutes). Pulling to refresh does the
+same thing on demand.
+
+The check is deliberately quiet, because every request costs the host a push:
+nothing is sent while snapshots keep arriving, requests are never sent more
+than once every 5 minutes, and the gap doubles up to 30 minutes while the host
+stays silent, resetting as soon as it answers. The policy lives in
+`lib/services/sync_scheduler.dart` and is covered by
+`test/sync_scheduler_test.dart`.
+
 ## Limitations
 
 - Command *delivery* is confirmed (APNS accepted the push); command
@@ -242,5 +258,6 @@ The home screen shows how fresh the host data is; pull to refresh sends a
   commands survive short offline windows via APNS storage, subject to the
   host's ±10 minute command freshness window.
 - iOS may throttle background status pushes when the follower app hasn't been
-  opened for a long time; opening the app and pulling to refresh always
-  fetches the current state.
+  opened for a long time, so the widgets and the Live Activity can lag behind.
+  Opening the app fetches the current state: it asks the host directly
+  whenever the data it has is older than a CGM cycle.

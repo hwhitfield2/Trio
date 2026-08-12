@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/command.dart';
@@ -12,15 +12,18 @@ import '../services/pairing_store.dart';
 import '../services/push_service.dart';
 import '../services/status_service.dart';
 import '../services/live_activity_bridge.dart';
+import '../services/sync_scheduler.dart';
 import '../services/widget_bridge.dart';
 
-class AppState extends ChangeNotifier {
-  AppState({PairingStore? store, PushService? push})
+class AppState extends ChangeNotifier with WidgetsBindingObserver {
+  AppState({PairingStore? store, PushService? push, SyncScheduler? scheduler})
       : _store = store ?? PairingStore(),
-        _push = push ?? PushService.instance;
+        _push = push ?? PushService.instance,
+        _scheduler = scheduler ?? SyncScheduler();
 
   final PairingStore _store;
   final PushService _push;
+  final SyncScheduler _scheduler;
 
   PairingBundle? bundle;
   CommandService? _commandService;
@@ -39,6 +42,15 @@ class AppState extends ChangeNotifier {
   List<CommandRecord> history = [];
 
   static const _historyKey = 'trio_follower.history';
+
+  /// How often the app re-checks, while it is on screen, whether the status is
+  /// still fresh. Also the cadence at which the "from host x min ago" label is
+  /// redrawn, since that text ages on its own.
+  static const _tickInterval = Duration(seconds: 30);
+
+  Timer? _ticker;
+  bool _observingLifecycle = false;
+  bool _statusRequestInFlight = false;
 
   bool get isPaired => bundle != null;
 
@@ -62,13 +74,43 @@ class AppState extends ChangeNotifier {
     _push.onMessage(_handlePushData);
     _push.onNewToken((_) => registerPush(force: true));
 
+    if (!_observingLifecycle) {
+      WidgetsBinding.instance.addObserver(this);
+      _observingLifecycle = true;
+    }
+
     notifyListeners();
 
     if (isPaired) {
+      _startTicker();
       await registerPush();
       // A registration also triggers a status push from the host; when the
       // token was already registered, ask explicitly so the UI is fresh.
       await requestStatus();
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopTicker();
+    if (_observingLifecycle) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observingLifecycle = false;
+    }
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (!isPaired) return;
+      _startTicker();
+      // Status pushes are silent background pushes, which the system drops or
+      // defers while the app is not running, so what is on screen right after
+      // a resume can be many minutes old.
+      unawaited(_syncIfStale());
+    } else {
+      _stopTicker();
     }
   }
 
@@ -78,6 +120,8 @@ class AppState extends ChangeNotifier {
     snapshot = null;
     await StatusService.clearPersisted();
     _rebuildServices();
+    _scheduler.reset();
+    _startTicker();
     notifyListeners();
     await WidgetBridge.clear();
     await LiveActivityBridge.stop();
@@ -90,6 +134,8 @@ class AppState extends ChangeNotifier {
     bundle = null;
     snapshot = null;
     _rebuildServices();
+    _scheduler.reset();
+    _stopTicker();
     notifyListeners();
     await WidgetBridge.clear();
     await LiveActivityBridge.stop();
@@ -129,25 +175,66 @@ class AppState extends ChangeNotifier {
   }
 
   /// Asks the host for a fresh snapshot and waits briefly for it to arrive.
+  ///
+  /// Used both by pull-to-refresh and by the app itself when a push has not
+  /// arrived in time; a request already in flight is never doubled up.
   Future<void> requestStatus() async {
     final service = _commandService;
-    if (service == null) return;
+    if (service == null || _statusRequestInFlight) return;
 
-    final before = snapshot?.timestamp;
-    final record = await service.send(TrioCommand.statusRequest());
-    if (!record.accepted) {
-      statusHint = 'Could not reach the host: ${record.detail}';
+    _statusRequestInFlight = true;
+    _scheduler.recordRequest(DateTime.now());
+    try {
+      final before = snapshot?.timestamp;
+      final record = await service.send(TrioCommand.statusRequest());
+      if (!record.accepted) {
+        _scheduler.recordFailure();
+        statusHint = 'Could not reach the host: ${record.detail}';
+        notifyListeners();
+        return;
+      }
+
+      // Wait up to 15 s for the answering push.
+      final arrived = await _waitForSnapshotChange(since: before, timeout: const Duration(seconds: 15));
+      if (arrived) {
+        _scheduler.recordSuccess();
+        statusHint = null;
+      } else {
+        _scheduler.recordFailure();
+        statusHint = 'The host has not answered yet. It may be offline — the '
+            'status will update as soon as it reconnects.';
+      }
       notifyListeners();
-      return;
+    } finally {
+      _statusRequestInFlight = false;
     }
+  }
 
-    // Wait up to 15 s for the answering push.
-    final arrived = await _waitForSnapshotChange(since: before, timeout: const Duration(seconds: 15));
-    statusHint = arrived
-        ? null
-        : 'The host has not answered yet. It may be offline — the status will '
-            'update as soon as it reconnects.';
-    notifyListeners();
+  /// Asks the host for a snapshot when none has been pushed for a while. Free
+  /// in the normal case: as long as pushes keep arriving, the scheduler finds
+  /// the status fresh and nothing is sent.
+  Future<void> _syncIfStale() async {
+    if (!isPaired || _statusRequestInFlight) return;
+    if (!_scheduler.shouldRequest(now: DateTime.now(), snapshotAt: snapshot?.timestamp)) return;
+    await requestStatus();
+  }
+
+  /// Runs only while the app is on screen — a Dart timer does not fire once
+  /// the app is suspended, and the host keeps the widgets and the Live
+  /// Activity current from its side in the meantime.
+  void _startTicker() {
+    _ticker?.cancel();
+    _ticker = Timer.periodic(_tickInterval, (_) {
+      // The freshness line is relative to now, so it needs a rebuild even when
+      // no new snapshot arrived.
+      notifyListeners();
+      unawaited(_syncIfStale());
+    });
+  }
+
+  void _stopTicker() {
+    _ticker?.cancel();
+    _ticker = null;
   }
 
   Future<CommandRecord?> sendCommand(TrioCommand command) async {
@@ -180,6 +267,8 @@ class AppState extends ChangeNotifier {
     if (updated != null) {
       snapshot = updated;
       statusHint = null;
+      // Pushes are getting through; no need to ask the host for anything.
+      _scheduler.recordSuccess();
       notifyListeners();
       // Pushes are also delivered in the background, so the widgets and the
       // Live Activity stay current without the app being opened.

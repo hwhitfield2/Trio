@@ -88,8 +88,9 @@ class _StatusCard extends StatelessWidget {
           children: [
             if (snapshot == null || latest == null) ...[
               const Text(
-                'Waiting for data from the host. Pull to refresh — the host '
-                'sends its status directly to this device.',
+                'Waiting for data from the host, which sends its status '
+                'directly to this device. This keeps retrying by itself — '
+                'pull to refresh to ask right now.',
               ),
             ] else ...[
               Row(
