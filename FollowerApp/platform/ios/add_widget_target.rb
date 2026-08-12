@@ -100,6 +100,20 @@ unless already_embedded
   build_file.settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
 end
 
+# The embed phase has to run before Flutter's "Thin Binary" script, which takes a
+# directory signature of Runner.app. Copying the extension in afterwards makes
+# each phase depend on the other, and Xcode refuses the build with
+# "Cycle inside Runner". A new phase is appended at the end, so move it up.
+thin_binary_index = runner.build_phases.index do |phase|
+  phase.respond_to?(:name) && phase.name == 'Thin Binary'
+end
+embed_index = runner.build_phases.index(embed_phase)
+
+if thin_binary_index && embed_index && embed_index > thin_binary_index
+  puts "==> Moving the embed phase before Thin Binary (was #{embed_index}, now #{thin_binary_index})"
+  runner.build_phases.move(embed_phase, thin_binary_index)
+end
+
 project.save
 
 puts "==> #{TARGET_NAME} ready (bundle id #{bundle_id}, app group #{app_group_id})"
