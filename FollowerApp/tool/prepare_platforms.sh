@@ -50,6 +50,7 @@ plist.setdefault('NSCameraUsageDescription',
                  'Scan the pairing QR code shown on the Trio host.')
 plist.setdefault('NSFaceIDUsageDescription',
                  'Confirm remote commands before they are sent.')
+plist['NSSupportsLiveActivities'] = True
 modes = plist.setdefault('UIBackgroundModes', [])
 if 'remote-notification' not in modes:
     modes.append('remote-notification')
@@ -107,6 +108,12 @@ if [ -f ios/Runner.xcodeproj/project.pbxproj ]; then
       name=$(basename "$file")
       sed "s|__APP_GROUP_ID__|${APP_GROUP_ID}|g" "$file" > "ios/TrioFollowerWidget/$name"
     done
+
+    # The Live Activity's attributes are compiled into both the widget extension
+    # (which renders the activity) and the plugin pod (which starts it), from the
+    # one source in platform/ios/Shared.
+    cp platform/ios/Shared/*.swift ios/TrioFollowerWidget/
+    cp platform/ios/Shared/*.swift platform/flutter_plugins/trio_live_activity/ios/Classes/
 
     ruby platform/ios/add_widget_target.rb "$APP_GROUP_ID"
   fi

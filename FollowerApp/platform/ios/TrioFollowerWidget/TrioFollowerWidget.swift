@@ -292,5 +292,6 @@ struct TrioFollowerWidget: Widget {
         TrioFollowerWidget()
         TrioFollowerTrendWidget()
         TrioFollowerLoopWidget()
+        TrioFollowerLiveActivity()
     }
 }

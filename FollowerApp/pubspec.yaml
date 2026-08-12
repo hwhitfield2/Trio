@@ -41,6 +41,11 @@ dependencies:
   # Shared storage + redraw trigger for the iOS and Android home screen widgets
   # (app group UserDefaults on iOS, SharedPreferences on Android)
   home_widget: ^0.7.0
+  # Local plugin: the iOS Live Activity bridge. Local rather than hand-registered
+  # so Flutter's generated registrant wires it up on whichever iOS template the
+  # SDK ships, and against the engine the background push handler runs on.
+  trio_live_activity:
+    path: platform/flutter_plugins/trio_live_activity
 
 dev_dependencies:
   flutter_test:

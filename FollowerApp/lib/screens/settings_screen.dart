@@ -32,6 +32,23 @@ class SettingsScreen extends StatelessWidget {
                   title: Text(bundle.verificationCode),
                   subtitle: const Text('Pairing verification code'),
                 ),
+                if (state.liveActivitySupport.available)
+                  SwitchListTile(
+                    secondary: const Icon(Icons.dashboard_customize),
+                    title: const Text('Live Activity'),
+                    subtitle: Text(
+                      state.liveActivitySupport.enabled
+                          ? 'Glucose on the Lock Screen and in the Dynamic Island while the host keeps sending updates.'
+                          : 'Turn Live Activities on for Trio Follower in iOS Settings to use this.',
+                    ),
+                    value: state.liveActivityEnabled,
+                    // Left visible but disabled when the user switched Live
+                    // Activities off for the app: hiding the row would leave no
+                    // hint about where to turn them back on.
+                    onChanged: state.liveActivitySupport.enabled
+                        ? (value) => context.read<AppState>().setLiveActivityEnabled(value)
+                        : null,
+                  ),
                 ListTile(
                   leading: const Icon(Icons.podcasts),
                   title: Text(

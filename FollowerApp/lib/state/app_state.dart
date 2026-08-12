@@ -11,6 +11,7 @@ import '../services/command_service.dart';
 import '../services/pairing_store.dart';
 import '../services/push_service.dart';
 import '../services/status_service.dart';
+import '../services/live_activity_bridge.dart';
 import '../services/widget_bridge.dart';
 
 class AppState extends ChangeNotifier {
@@ -29,6 +30,11 @@ class AppState extends ChangeNotifier {
 
   /// Latest status received from the host device (the only data source).
   StatusSnapshot? snapshot;
+
+  /// Whether this device can run Live Activities, and whether the user has left
+  /// them switched on for the app in iOS Settings.
+  LiveActivitySupport liveActivitySupport = LiveActivitySupport.unsupported;
+  bool liveActivityEnabled = false;
   String? statusHint;
   List<CommandRecord> history = [];
 
@@ -47,8 +53,11 @@ class AppState extends ChangeNotifier {
     _rebuildServices();
     await _loadHistory();
     snapshot = await _statusService?.loadPersisted();
+    liveActivitySupport = await LiveActivityBridge.support();
+    liveActivityEnabled = await LiveActivityBridge.isEnabled();
     initialized = true;
     await WidgetBridge.publish(snapshot);
+    await LiveActivityBridge.publish(snapshot, hostName: _hostName);
 
     _push.onMessage(_handlePushData);
     _push.onNewToken((_) => registerPush(force: true));
@@ -71,6 +80,7 @@ class AppState extends ChangeNotifier {
     _rebuildServices();
     notifyListeners();
     await WidgetBridge.clear();
+    await LiveActivityBridge.stop();
     await registerPush(force: true);
   }
 
@@ -82,6 +92,7 @@ class AppState extends ChangeNotifier {
     _rebuildServices();
     notifyListeners();
     await WidgetBridge.clear();
+    await LiveActivityBridge.stop();
   }
 
   /// Registers this device's push address with the host so it can deliver
@@ -170,9 +181,10 @@ class AppState extends ChangeNotifier {
       snapshot = updated;
       statusHint = null;
       notifyListeners();
-      // Pushes are also delivered in the background, so the widgets stay
-      // current without the app being opened.
+      // Pushes are also delivered in the background, so the widgets and the
+      // Live Activity stay current without the app being opened.
       await WidgetBridge.publish(updated);
+      await LiveActivityBridge.publish(updated, hostName: _hostName);
     }
   }
 
@@ -193,6 +205,19 @@ class AppState extends ChangeNotifier {
     removeListener(listener);
     return result;
   }
+
+  /// Turns the Live Activity on or off, starting or ending it immediately so
+  /// the switch has a visible effect.
+  Future<void> setLiveActivityEnabled(bool enabled) async {
+    liveActivityEnabled = enabled;
+    notifyListeners();
+    await LiveActivityBridge.setEnabled(enabled);
+    if (enabled) {
+      await LiveActivityBridge.publish(snapshot, hostName: _hostName);
+    }
+  }
+
+  String get _hostName => bundle?.hostName ?? 'Trio';
 
   void _rebuildServices() {
     final currentBundle = bundle;
