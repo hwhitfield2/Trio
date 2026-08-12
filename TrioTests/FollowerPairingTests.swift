@@ -73,7 +73,9 @@ import Testing
             ),
             override: nil,
             maxBolus: 6.5,
-            maxCarbs: 120
+            maxCarbs: 120,
+            low: 70,
+            high: 180
         )
 
         let data = try JSONEncoder().encode(snapshot)
@@ -92,6 +94,80 @@ import Testing
         let tempTarget = try #require(json["temp_target"] as? [String: Any])
         #expect(tempTarget["target"] as? Double == 140)
         #expect(tempTarget["started_at"] as? Double == 1_723_398_000)
+
+        // The follower colours its chart and widgets with these rather than
+        // assuming 70/180.
+        #expect(json["low"] as? Double == 70)
+        #expect(json["high"] as? Double == 180)
+    }
+
+    @Test("Per-follower thresholds replace the defaults in the snapshot") func snapshotThresholds() {
+        let snapshot = FollowerStatusSnapshot(
+            type: "status",
+            timestamp: 1_723_400_000,
+            units: "mg/dL",
+            readings: [],
+            iob: nil,
+            cob: nil,
+            lastLoop: nil,
+            eventualBG: nil,
+            tempTarget: nil,
+            override: nil,
+            maxBolus: 6.5,
+            maxCarbs: 120,
+            low: 70,
+            high: 180
+        )
+
+        var settings = FollowerAlertSettings.default
+        settings.low.threshold = 80
+        settings.high.threshold = 200
+
+        let personalised = snapshot.withThresholds(from: settings)
+        #expect(personalised.low == 80)
+        #expect(personalised.high == 200)
+    }
+
+    @Test("Alert thresholds stay ordered however they are edited") func thresholdClamping() {
+        var settings = FollowerAlertSettings.default
+        // Drag the low above the high; the store must not be left watching for a
+        // low that can never fire below a high that always does.
+        settings.low.threshold = 300
+        settings.clampThresholds()
+
+        #expect(settings.urgentLow.threshold < settings.low.threshold)
+        #expect(settings.low.threshold < settings.high.threshold)
+        #expect(settings.high.threshold < settings.urgentHigh.threshold)
+        #expect(settings.urgentHigh.threshold <= 400)
+    }
+
+    @Test("A condition holds until glucose clears it by the hysteresis margin") func alertHysteresis() {
+        let settings = FollowerAlertSettings.default
+
+        // Falling through 70 raises a low.
+        #expect(settings.kind(forGlucose: 69, previous: nil) == .low)
+        // Ticking back to 71 does not clear it, so it cannot re-fire at 69.
+        #expect(settings.kind(forGlucose: 71, previous: .low) == .low)
+        // Clear of the margin, it does.
+        #expect(settings.kind(forGlucose: 74, previous: .low) == nil)
+        // In range with nothing active stays quiet.
+        #expect(settings.kind(forGlucose: 120, previous: nil) == nil)
+        // The more severe condition wins.
+        #expect(settings.kind(forGlucose: 50, previous: .low) == .urgentLow)
+    }
+
+    @Test("Followers paired before alert settings existed still decode") func legacyFollowerDecoding() throws {
+        // Exactly what the keychain holds for a follower paired before this
+        // feature: no `alerts` key at all.
+        let json = Data(
+            #"{"id":"abc","name":"Mom","secret":"s","createdAt":760000000,"lastSequence":3}"#.utf8
+        )
+        let follower = try JSONDecoder().decode(PairedFollower.self, from: json)
+
+        #expect(follower.name == "Mom")
+        #expect(follower.alerts == nil)
+        // And it falls back to the defaults rather than alerting on nothing.
+        #expect(follower.alertSettings == FollowerAlertSettings.default)
     }
 
     @Test("Register-follower payload decodes push registration fields") func registerFollowerDecoding() throws {
