@@ -69,13 +69,17 @@ struct FollowerStatusSnapshot: Encodable {
     /// Whether insulin delivery is stopped right now, straight from the pump's
     /// own state. A follower only ever learns that its emergency suspension
     /// took effect from this — never from the push having been accepted.
-    let suspended: Bool
+    ///
+    /// Defaulted, so a snapshot built without mentioning suspension reads as
+    /// delivering — the safe way round, and the way every caller that predates
+    /// the emergency stop already means it.
+    var suspended: Bool = false
     /// The follower that asked for the suspension, when one did.
-    let suspendedBy: String?
+    var suspendedBy: String?
     /// Unix seconds when that request was made.
-    let suspendedAt: TimeInterval?
+    var suspendedAt: TimeInterval?
     /// Whether someone holding the host phone has answered the alarm.
-    let suspendAcknowledged: Bool
+    var suspendAcknowledged: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case type
