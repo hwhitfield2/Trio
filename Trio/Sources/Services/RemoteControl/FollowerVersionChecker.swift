@@ -64,7 +64,11 @@ import Foundation
     /// A pubspec line reads `version: 1.2.3+45`, where `+45` is the build. Only
     /// the part before the `+` is compared, so rebuilding the same version does
     /// not make every follower look out of date.
-    static func parseVersion(fromPubspec contents: String) -> String? {
+    /// Nonisolated because it touches nothing on the actor: this type is
+    /// @MainActor for its cache, but the parsing and comparison below are pure
+    /// and are called from wherever a follower's version is being judged —
+    /// `PairedFollower.isOutdated` among them, which is not actor-isolated.
+    nonisolated static func parseVersion(fromPubspec contents: String) -> String? {
         for line in contents.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             // Only the top-level key: `version:` nested under a dependency is
@@ -85,7 +89,7 @@ import Foundation
     /// unreported or unparsable version is never called out of date: telling
     /// someone to update when the host simply does not know is worse than
     /// staying quiet.
-    static func isVersion(_ available: String, newerThan installed: String) -> Bool {
+    nonisolated static func isVersion(_ available: String, newerThan installed: String) -> Bool {
         guard !available.isEmpty, !installed.isEmpty else { return false }
 
         let availableParts = available.split(separator: ".").map { Int($0) ?? 0 }
