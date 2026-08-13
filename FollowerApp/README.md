@@ -45,6 +45,26 @@ Follower app ──(AES-256-GCM encrypted command over APNS HTTP/2)──▶ App
   command on the host (max bolus, recent-bolus guards, etc.). The follower
   additionally enforces the host's limits in its UI before sending.
 
+### Versions and update notices
+
+Every registration reports this build's version to the host, and a registration
+is re-sent when the app updates — not only when the push token changes, which
+an app update usually does not.
+
+The host shows, under Settings → Remote Control:
+
+- the **latest follower release**, read from `FollowerApp/pubspec.yaml` on
+  `main` in the Trio repository (the same way Trio checks its own version
+  against `Config.xcconfig`), and
+- **each follower's version**, marked when it is behind.
+
+From there the host can send an outdated follower — or all of them — a
+notification saying a newer version exists. That nudge is a plain notification,
+not a command: it carries a version number for the app to show and nothing it
+acts on. Updating is still done by whoever holds the follower phone, through
+TestFlight or a new APK. A follower that has never reported a version is never
+called out of date; the host cannot know, so it does not guess.
+
 ### Pairing
 
 1. On the Trio host: Settings → Remote Control → enable remote control, enter

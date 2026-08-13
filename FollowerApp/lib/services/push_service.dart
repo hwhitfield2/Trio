@@ -25,6 +25,16 @@ class PushService {
     return info.packageName;
   }
 
+  /// This build's marketing version (e.g. "0.1.0"), reported to the host so it
+  /// can tell the user which followers are behind.
+  Future<String> get appVersion async => (await PackageInfo.fromPlatform()).version;
+
+  /// This build's number, which distinguishes two builds of one version.
+  Future<String> get appBuild async => (await PackageInfo.fromPlatform()).buildNumber;
+
+  /// "ios" or "android" — the host points the user at the right way to update.
+  String get platform => Platform.isIOS ? 'ios' : 'android';
+
   Future<bool> requestPermission() async {
     try {
       return await Push.instance.requestPermission();

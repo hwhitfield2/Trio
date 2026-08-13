@@ -17,6 +17,9 @@ class TrioCommand {
     this.pushBundleId,
     this.pushEnvironment,
     this.liveActivityToken,
+    this.appVersion,
+    this.appBuild,
+    this.appPlatform,
   });
 
   final String commandType;
@@ -40,6 +43,14 @@ class TrioCommand {
   /// APNS token of this device's running Live Activity, or the empty string to
   /// tell the host to stop pushing to it.
   final String? liveActivityToken;
+
+  /// This follower build, reported with every registration so the host can show
+  /// which of its followers are out of date.
+  final String? appVersion;
+  final String? appBuild;
+
+  /// "ios" or "android".
+  final String? appPlatform;
 
   factory TrioCommand.bolus(double units) => TrioCommand._(commandType: 'bolus', bolusAmount: units);
 
@@ -78,6 +89,9 @@ class TrioCommand {
     required String pushTransport,
     String? pushBundleId,
     String? pushEnvironment,
+    String? appVersion,
+    String? appBuild,
+    String? appPlatform,
   }) =>
       TrioCommand._(
         commandType: 'register_follower',
@@ -85,6 +99,9 @@ class TrioCommand {
         pushTransport: pushTransport,
         pushBundleId: pushBundleId,
         pushEnvironment: pushEnvironment,
+        appVersion: appVersion,
+        appBuild: appBuild,
+        appPlatform: appPlatform,
       );
 
   /// Hands the host the Live Activity's push token so it can update the Lock
@@ -121,6 +138,9 @@ class TrioCommand {
       if (pushBundleId != null) 'push_bundle_id': pushBundleId,
       if (pushEnvironment != null) 'push_environment': pushEnvironment,
       if (liveActivityToken != null) 'live_activity_token': liveActivityToken,
+      if (appVersion != null) 'app_version': appVersion,
+      if (appBuild != null) 'app_build': appBuild,
+      if (appPlatform != null) 'app_platform': appPlatform,
     };
   }
 

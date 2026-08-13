@@ -50,6 +50,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// extension reads these from the shared app group; this copy drives the
   /// settings screen.
   DisplayPreferences displayPreferences = const DisplayPreferences();
+
+  /// Version the host says is available, when it has nudged this device about
+  /// one. Informational only: unlike commands and status, a nudge rides in the
+  /// clear alongside a notification, so it is never acted on automatically —
+  /// it only puts a line on screen for the user to act on themselves.
+  String? updateAvailableVersion;
   String? statusHint;
   List<CommandRecord> history = [];
 
@@ -185,16 +191,27 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    if (!force && await _store.registeredPushToken == token) return;
+    final version = await _push.appVersion;
+    // An app update keeps the push token, so the version has to be part of what
+    // decides whether the host still knows this follower correctly.
+    if (!force &&
+        await _store.registeredPushToken == token &&
+        await _store.registeredAppVersion == version) {
+      return;
+    }
 
     final record = await service.send(TrioCommand.registerFollower(
       pushToken: token,
       pushTransport: _push.transport,
       pushBundleId: await _push.bundleId,
       pushEnvironment: _push.environment,
+      appVersion: version,
+      appBuild: await _push.appBuild,
+      appPlatform: _push.platform,
     ));
     if (record.accepted) {
       await _store.setRegisteredPushToken(token);
+      await _store.setRegisteredAppVersion(version);
       statusHint = null;
     } else {
       statusHint = 'Could not register with the host yet: ${record.detail}';
@@ -288,6 +305,13 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final followerId = data['follower_id'];
     if (followerId is String && followerId != currentBundle.followerId) return;
 
+    final update = data['update_available'];
+    if (update is String && update.isNotEmpty) {
+      updateAvailableVersion = update;
+      notifyListeners();
+      return;
+    }
+
     final encrypted = data['encrypted_status'];
     if (encrypted is! String || encrypted.isEmpty) return;
 
@@ -332,6 +356,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (enabled) {
       await LiveActivityBridge.publish(snapshot, hostName: _hostName);
     }
+  }
+
+  /// Puts away the host's update notice until it sends another one.
+  void dismissUpdateNotice() {
+    updateAvailableVersion = null;
+    notifyListeners();
   }
 
   /// Stores new layout choices and redraws everything that follows them.

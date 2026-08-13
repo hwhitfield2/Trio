@@ -29,6 +29,14 @@ struct PairedFollower: Codable, Identifiable, Equatable {
     /// "production" or "sandbox" for iOS followers.
     var pushEnvironment: String?
 
+    // The follower build that last registered. Optional for the same reason as
+    // the fields below: followers paired before this existed must still decode.
+    var appVersion: String?
+    var appBuild: String?
+    /// "ios" or "android".
+    var appPlatform: String?
+    var appVersionReportedAt: Date?
+
     /// APNS token of the follower's Live Activity, registered by the follower
     /// app when the user opts in to remote Lock Screen updates. Optional for
     /// the same reason as `alerts`: followers paired before this existed must
@@ -215,7 +223,10 @@ final class FollowerPairingManager: Injectable {
         token: String,
         transport: String,
         bundleId: String?,
-        environment: String?
+        environment: String?,
+        appVersion: String? = nil,
+        appBuild: String? = nil,
+        appPlatform: String? = nil
     ) {
         queue.sync {
             var all = loadFollowers()
@@ -224,6 +235,15 @@ final class FollowerPairingManager: Injectable {
             all[index].pushTransport = transport
             all[index].pushBundleId = bundleId
             all[index].pushEnvironment = environment
+            // Only overwrite what was actually reported: a follower too old to
+            // send its version should keep showing nothing rather than have the
+            // last known value wiped.
+            if let appVersion, !appVersion.isEmpty {
+                all[index].appVersion = appVersion
+                all[index].appBuild = appBuild
+                all[index].appPlatform = appPlatform
+                all[index].appVersionReportedAt = Date()
+            }
             saveFollowers(all)
         }
     }

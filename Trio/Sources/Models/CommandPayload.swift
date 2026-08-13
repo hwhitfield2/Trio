@@ -39,6 +39,14 @@ struct CommandPayload: Decodable, Sendable {
     /// "production" or "sandbox" (iOS followers only).
     var pushEnvironment: String?
 
+    // Which follower build is registering. Sent with every registration, and a
+    // registration is re-sent when the app updates, so the host can show which
+    // followers are behind the current release.
+    var appVersion: String?
+    var appBuild: String?
+    /// "ios" or "android".
+    var appPlatform: String?
+
     /// APNS token of the follower's running Live Activity
     /// (register_live_activity command), or the empty string when the follower
     /// withdraws it. Lets the host update the follower's Lock Screen without
@@ -82,6 +90,9 @@ struct CommandPayload: Decodable, Sendable {
         case pushBundleId = "push_bundle_id"
         case pushEnvironment = "push_environment"
         case liveActivityToken = "live_activity_token"
+        case appVersion = "app_version"
+        case appBuild = "app_build"
+        case appPlatform = "app_platform"
     }
 
     func humanReadableDescription() -> String {

@@ -185,9 +185,15 @@ class TrioRemoteControl: Injectable {
                 token: token,
                 transport: transport,
                 bundleId: commandPayload.pushBundleId,
-                environment: commandPayload.pushEnvironment
+                environment: commandPayload.pushEnvironment,
+                appVersion: commandPayload.appVersion,
+                appBuild: commandPayload.appBuild,
+                appPlatform: commandPayload.appPlatform
             )
-            debug(.remoteControl, "Follower push registration stored (transport: \(transport)).")
+            debug(
+                .remoteControl,
+                "Follower push registration stored (transport: \(transport), version: \(commandPayload.appVersion ?? "unreported"))."
+            )
         case .registerLiveActivity:
             guard let followerId = followerId else {
                 await logError(

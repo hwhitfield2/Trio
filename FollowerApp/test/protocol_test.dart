@@ -110,12 +110,20 @@ void main() {
         pushTransport: 'apns',
         pushBundleId: 'org.nightscout.triofollower',
         pushEnvironment: 'production',
+        appVersion: '0.1.0',
+        appBuild: '7',
+        appPlatform: 'ios',
       ).toPayload(user: 'Mom', sequence: 6);
       expect(register['command_type'], 'register_follower');
       expect(register['push_token'], 'abc123');
       expect(register['push_transport'], 'apns');
       expect(register['push_bundle_id'], 'org.nightscout.triofollower');
       expect(register['push_environment'], 'production');
+      // Read by the host to show which followers are behind the current
+      // release; keep in sync with CommandPayload.swift.
+      expect(register['app_version'], '0.1.0');
+      expect(register['app_build'], '7');
+      expect(register['app_platform'], 'ios');
     });
 
     test('live activity registration carries and clears the token', () {

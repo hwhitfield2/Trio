@@ -16,6 +16,14 @@ extension RemoteControlConfig {
         @Published var pairingPayload: String?
         @Published var pairingError: String?
 
+        // Follower app versions
+        /// Latest follower release, as published in the Trio repository.
+        @Published var latestFollowerVersion: String?
+        @Published var isCheckingFollowerVersion: Bool = false
+        /// Set after nudging, so the row can say the nudge went out (or why it
+        /// did not) without a modal.
+        @Published var nudgeResult: String?
+
         override func subscribe() {
             units = settingsManager.settings.units
             isTrioRemoteControlEnabled = UserDefaults.standard.bool(forKey: "isTrioRemoteControlEnabled")
@@ -26,6 +34,7 @@ extension RemoteControlConfig {
             apnsKeyId = FollowerPairingManager.shared.apnsKeyId
             apnsKey = FollowerPairingManager.shared.apnsKey
             fcmServiceAccountJSON = FollowerPairingManager.shared.fcmServiceAccountJSON
+            refreshLatestFollowerVersion()
 
             $isTrioRemoteControlEnabled
                 .receive(on: DispatchQueue.main)
@@ -68,6 +77,61 @@ extension RemoteControlConfig {
 
         func refreshFollowers() {
             followers = FollowerPairingManager.shared.followers
+        }
+
+        /// Looks up the current follower release. Cached for a day unless the
+        /// user asks again.
+        func refreshLatestFollowerVersion(force: Bool = false) {
+            Task { @MainActor in
+                // Show what was known before the fetch, so opening the screen
+                // offline still says something.
+                if latestFollowerVersion == nil {
+                    latestFollowerVersion = FollowerVersionChecker.shared.cachedLatestVersion
+                }
+                isCheckingFollowerVersion = true
+                latestFollowerVersion = await FollowerVersionChecker.shared.latestVersion(forceRefresh: force)
+                isCheckingFollowerVersion = false
+            }
+        }
+
+        /// Followers running something older than the current release. Ones that
+        /// have never reported a version are left out — the host cannot know
+        /// they are behind, so it should not say they are.
+        var outdatedFollowers: [PairedFollower] {
+            followers.filter { $0.isOutdated(comparedTo: latestFollowerVersion) }
+        }
+
+        /// Sends the follower a notification saying a newer build exists.
+        func nudgeFollower(id: String) {
+            guard let follower = FollowerPairingManager.shared.follower(withId: id),
+                  let latest = latestFollowerVersion
+            else { return }
+
+            Task { @MainActor in
+                do {
+                    try await FollowerPushSender.shared.sendUpdateNudge(latestVersion: latest, to: follower)
+                    nudgeResult = String(
+                        format: String(localized: "Update notice sent to %@.", comment: "Follower nudge confirmation"),
+                        follower.name
+                    )
+                } catch {
+                    nudgeResult = String(
+                        format: String(
+                            localized: "Could not reach %@: %@",
+                            comment: "Follower nudge failure, with the follower name and the reason"
+                        ),
+                        follower.name,
+                        error.localizedDescription
+                    )
+                }
+            }
+        }
+
+        /// Nudges every follower that is behind, in one go.
+        func nudgeOutdatedFollowers() {
+            for follower in outdatedFollowers {
+                nudgeFollower(id: follower.id)
+            }
         }
 
         /// Creates a new paired follower and prepares the QR payload. On

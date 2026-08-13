@@ -18,6 +18,7 @@ class PairingStore {
   static const _pairingKey = 'trio_follower.pairing';
   static const _sequenceKey = 'trio_follower.sequence';
   static const _registeredTokenKey = 'trio_follower.registered_push_token';
+  static const _registeredVersionKey = 'trio_follower.registered_app_version';
 
   Future<PairingBundle?> loadPairing() async {
     final raw = await _storage.read(key: _pairingKey);
@@ -38,6 +39,7 @@ class PairingStore {
     await _storage.delete(key: _pairingKey);
     await _storage.delete(key: _sequenceKey);
     await _storage.delete(key: _registeredTokenKey);
+    await _storage.delete(key: _registeredVersionKey);
   }
 
   /// The push token last successfully registered with the host, so we only
@@ -46,6 +48,14 @@ class PairingStore {
 
   Future<void> setRegisteredPushToken(String token) =>
       _storage.write(key: _registeredTokenKey, value: token);
+
+  /// The app version last reported to the host. An app update usually keeps the
+  /// same push token, so without this the host would go on showing whichever
+  /// version was current when the follower first registered.
+  Future<String?> get registeredAppVersion => _storage.read(key: _registeredVersionKey);
+
+  Future<void> setRegisteredAppVersion(String version) =>
+      _storage.write(key: _registeredVersionKey, value: version);
 
   /// Reserves and returns the next sequence number. The counter is advanced
   /// *before* the command is sent: if a send fails after APNS may have seen

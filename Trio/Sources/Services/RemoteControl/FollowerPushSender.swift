@@ -71,7 +71,8 @@ final class FollowerPushSender {
         title: String,
         body: String,
         sound: FollowerAlertSound,
-        to follower: PairedFollower
+        to follower: PairedFollower,
+        extraData: [String: String] = [:]
     ) async throws {
         guard let token = follower.pushToken, !token.isEmpty else {
             throw FollowerPushError.notRegistered
@@ -79,12 +80,63 @@ final class FollowerPushSender {
 
         switch follower.pushTransport {
         case "apns":
-            try await sendAlertViaAPNS(title: title, body: body, sound: sound, to: follower, token: token)
+            try await sendAlertViaAPNS(
+                title: title,
+                body: body,
+                sound: sound,
+                to: follower,
+                token: token,
+                extraData: extraData
+            )
         case "fcm":
-            try await sendAlertViaFCM(title: title, body: body, sound: sound, to: follower, token: token)
+            try await sendAlertViaFCM(
+                title: title,
+                body: body,
+                sound: sound,
+                to: follower,
+                token: token,
+                extraData: extraData
+            )
         default:
             throw FollowerPushError.transportFailure("Unknown push transport: \(follower.pushTransport ?? "nil")")
         }
+    }
+
+    /// Tells a follower that a newer build of the follower app exists.
+    ///
+    /// A plain notification, not a command: it carries no instruction the app
+    /// acts on, only a version for it to show. Updating is done by the person
+    /// holding the follower phone — TestFlight on iOS, a new APK on Android —
+    /// and nothing here can or should do it for them.
+    func sendUpdateNudge(latestVersion: String, to follower: PairedFollower) async throws {
+        let body: String
+        if let installed = follower.appVersion, !installed.isEmpty {
+            body = String(
+                format: String(
+                    localized: "Version %@ is available; this device is on %@.",
+                    comment: "Follower update nudge body, with the available and installed versions"
+                ),
+                latestVersion,
+                installed
+            )
+        } else {
+            body = String(
+                format: String(
+                    localized: "Version %@ is available.",
+                    comment: "Follower update nudge body when the installed version is unknown"
+                ),
+                latestVersion
+            )
+        }
+
+        try await sendAlert(
+            title: String(localized: "Trio Follower update", comment: "Follower update nudge title"),
+            body: body,
+            // A version is never urgent; it should not be able to sound like a low.
+            sound: .silent,
+            to: follower,
+            extraData: ["update_available": latestVersion]
+        )
     }
 
     /// Updates the follower's Live Activity directly, without the follower app
@@ -239,6 +291,7 @@ final class FollowerPushSender {
         sound: FollowerAlertSound,
         to follower: PairedFollower,
         token: String,
+        extraData: [String: String] = [:],
         allowEnvironmentRetry: Bool = true
     ) async throws {
         let manager = FollowerPairingManager.shared
@@ -277,10 +330,13 @@ final class FollowerPushSender {
             aps["sound"] = soundName
         }
 
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "aps": aps,
             "follower_id": follower.id
         ]
+        for (key, value) in extraData {
+            payload[key] = value
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -299,6 +355,7 @@ final class FollowerPushSender {
                 sound: sound,
                 to: flipped,
                 token: token,
+                extraData: extraData,
                 allowEnvironmentRetry: false
             )
             return
@@ -311,7 +368,8 @@ final class FollowerPushSender {
         body: String,
         sound: FollowerAlertSound,
         to follower: PairedFollower,
-        token: String
+        token: String,
+        extraData: [String: String] = [:]
     ) async throws {
         guard let account = FCMServiceAccount(json: FollowerPairingManager.shared.fcmServiceAccountJSON) else {
             throw FollowerPushError.missingFCMCredentials
@@ -329,16 +387,18 @@ final class FollowerPushSender {
 
         // Android binds the sound to the channel, so the sound choice is carried
         // as the channel id; the follower app creates one channel per sound.
-        let payload: [String: Any] = [
-            "message": [
-                "token": token,
-                "notification": ["title": title, "body": body],
-                "android": [
-                    "priority": "HIGH",
-                    "notification": ["channel_id": sound.androidChannelId]
-                ]
+        var message: [String: Any] = [
+            "token": token,
+            "notification": ["title": title, "body": body],
+            "android": [
+                "priority": "HIGH",
+                "notification": ["channel_id": sound.androidChannelId]
             ]
         ]
+        if !extraData.isEmpty {
+            message["data"] = extraData
+        }
+        let payload: [String: Any] = ["message": message]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)

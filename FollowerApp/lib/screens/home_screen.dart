@@ -37,6 +37,10 @@ class HomeScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (state.updateAvailableVersion != null) ...[
+              const _UpdateNotice(),
+              const SizedBox(height: 12),
+            ],
             const _StatusCard(),
             const SizedBox(height: 16),
             Text('Remote actions', style: theme.textTheme.titleMedium),
@@ -61,6 +65,45 @@ class HomeScreen extends StatelessWidget {
                   )),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown when the host has nudged this device about a newer follower build.
+///
+/// Deliberately just a message: the nudge arrives in the clear next to a
+/// notification rather than through the encrypted command channel, so it tells
+/// the user something and does nothing on its own.
+class _UpdateNotice extends StatelessWidget {
+  const _UpdateNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final theme = Theme.of(context);
+    final version = state.updateAvailableVersion;
+    if (version == null) return const SizedBox.shrink();
+
+    return Card(
+      color: theme.colorScheme.secondaryContainer,
+      child: ListTile(
+        leading: Icon(Icons.system_update, color: theme.colorScheme.onSecondaryContainer),
+        title: Text(
+          'Trio Follower $version is available',
+          style: TextStyle(color: theme.colorScheme.onSecondaryContainer),
+        ),
+        subtitle: Text(
+          'The host reported a newer version than the one on this device.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSecondaryContainer,
+          ),
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.close),
+          color: theme.colorScheme.onSecondaryContainer,
+          onPressed: () => context.read<AppState>().dismissUpdateNotice(),
         ),
       ),
     );

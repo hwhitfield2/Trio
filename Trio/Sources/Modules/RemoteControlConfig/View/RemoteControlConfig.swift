@@ -38,6 +38,24 @@ extension RemoteControlConfig {
             )
         }
 
+        /// The follower's own build, and whether it is behind the current
+        /// release. A follower that has never reported one is shown as unknown
+        /// rather than assumed current.
+        private func followerVersionText(_ follower: PairedFollower) -> String {
+            guard let version = follower.appVersion, !version.isEmpty else {
+                return String(
+                    localized: "Version unknown — it reports one the next time it connects",
+                    comment: "Follower with no reported app version"
+                )
+            }
+            let installed = String(
+                format: String(localized: "Version %@", comment: "Follower app version"),
+                version
+            )
+            guard follower.isOutdated(comparedTo: state.latestFollowerVersion) else { return installed }
+            return installed + " · " + String(localized: "Update available", comment: "Follower is behind the latest release")
+        }
+
         var body: some View {
             List {
                 SettingInputSection(
@@ -130,6 +148,20 @@ extension RemoteControlConfig {
                                         Text(followerDetailText(follower))
                                             .font(.caption)
                                             .foregroundColor(.secondary)
+                                        HStack(spacing: 4) {
+                                            if follower.isOutdated(comparedTo: state.latestFollowerVersion) {
+                                                Image(systemName: "arrow.up.circle.fill")
+                                                    .foregroundColor(.orange)
+                                                    .font(.caption)
+                                            }
+                                            Text(followerVersionText(follower))
+                                                .font(.caption)
+                                                .foregroundColor(
+                                                    follower.isOutdated(comparedTo: state.latestFollowerVersion)
+                                                        ? .orange
+                                                        : .secondary
+                                                )
+                                        }
                                     }
                                 }
                                 .swipeActions {
@@ -138,7 +170,67 @@ extension RemoteControlConfig {
                                     } label: {
                                         Label("Revoke", systemImage: "trash")
                                     }
+
+                                    if follower.isOutdated(comparedTo: state.latestFollowerVersion),
+                                       follower.isPushRegistered
+                                    {
+                                        Button {
+                                            state.nudgeFollower(id: follower.id)
+                                        } label: {
+                                            Label("Notify", systemImage: "bell.badge")
+                                        }
+                                        .tint(.orange)
+                                    }
                                 }
+                            }
+                        }
+
+                        if !state.followers.isEmpty {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Latest follower release")
+                                    Text(state.latestFollowerVersion ?? String(
+                                        localized: "Not checked yet",
+                                        comment: "The latest follower release could not be looked up"
+                                    ))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                if state.isCheckingFollowerVersion {
+                                    ProgressView()
+                                } else {
+                                    Button {
+                                        state.refreshLatestFollowerVersion(force: true)
+                                    } label: {
+                                        Image(systemName: "arrow.clockwise")
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                            }
+
+                            if !state.outdatedFollowers.isEmpty {
+                                Button {
+                                    state.nudgeOutdatedFollowers()
+                                } label: {
+                                    Label(
+                                        String(
+                                            format: String(
+                                                localized: "Notify %lld follower(s) to update",
+                                                comment: "Button that sends an update notice to every outdated follower"
+                                            ),
+                                            state.outdatedFollowers.count
+                                        ),
+                                        systemImage: "bell.badge"
+                                    )
+                                }
+                                .disabled(!state.isTrioRemoteControlEnabled)
+                            }
+
+                            if let nudgeResult = state.nudgeResult {
+                                Text(nudgeResult)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
                         }
 
