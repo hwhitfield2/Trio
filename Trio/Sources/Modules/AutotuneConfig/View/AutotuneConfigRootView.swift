@@ -105,6 +105,13 @@ extension AutotuneConfig {
                 )
 
                 if let autotune = state.autotune {
+                    DilutionUnitBanner(
+                        subject: String(localized: "the tuned results"),
+                        settings: state.settingsManager?.settings
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+
                     if !state.onlyAutotuneBasals {
                         Section {
                             HStack {

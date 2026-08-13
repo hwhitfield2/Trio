@@ -70,6 +70,11 @@ extension CarbRatioEditor {
                     ScrollView {
                         LazyVStack {
                             VStack(alignment: .leading, spacing: 0) {
+                                DilutionUnitBanner(
+                                    subject: String(localized: "carb ratios"),
+                                    settings: state.settingsManager?.settings
+                                )
+
                                 // Chart visualization
                                 if !state.items.isEmpty {
                                     carbRatioChart

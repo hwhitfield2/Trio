@@ -51,6 +51,30 @@ struct PumpHistoryEvent: JSON, Equatable, Identifiable {
         self.isExternal = isExternal
         self.isExternalInsulin = isExternalInsulin
     }
+
+    /// A copy with every insulin quantity multiplied by `scale`, for
+    /// re-expressing history recorded under an earlier insulin concentration
+    /// (see `InsulinConcentrationLedger`). Carb/time fields are untouched.
+    func scalingInsulin(by scale: Decimal) -> PumpHistoryEvent {
+        guard scale != 1 else { return self }
+        return PumpHistoryEvent(
+            id: id,
+            type: type,
+            timestamp: timestamp,
+            amount: amount.map { $0 * scale },
+            duration: duration,
+            durationMin: durationMin,
+            rate: rate.map { $0 * scale },
+            temp: temp,
+            carbInput: carbInput,
+            fatInput: fatInput,
+            proteinInput: proteinInput,
+            note: note,
+            isSMB: isSMB,
+            isExternal: isExternal,
+            isExternalInsulin: isExternalInsulin
+        )
+    }
 }
 
 enum EventType: String, JSON {

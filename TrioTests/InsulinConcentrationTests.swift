@@ -169,4 +169,106 @@ import Testing
         #expect(resolved != 0)
         #expect(abs(realGrid[resolved] - realRate) <= Decimal(0.006))
     }
+
+    // MARK: - Concentration ledger (re-reading history recorded on an old scale)
+
+    /// Therapy settings are rescaled in place at a switch, but pump history is
+    /// not: it records what the pump actually metered and must keep matching the
+    /// pump's screens and the uploads. The ledger is what lets IOB, TDD, and
+    /// autotune read pre-switch events on the scale now in force.
+    private func change(_ daysAgo: Double, scale: Decimal) -> InsulinConcentrationChange {
+        InsulinConcentrationChange(date: Date().addingTimeInterval(-daysAgo * 24 * 60 * 60), amountScale: scale)
+    }
+
+    @Test("no recorded switch leaves history untouched") func testLedgerIdentity() {
+        let ledger: [InsulinConcentrationChange] = []
+        #expect(ledger.isEmptyOrIdentity)
+        #expect(ledger.scale(forEventAt: Date()) == 1)
+    }
+
+    @Test("events before a switch scale, events after it do not") func testLedgerAppliesOnlyToOlderEvents() {
+        // Switched U-100 → U-10 one day ago: everything recorded before it was
+        // metered in ten-times-smaller volume units.
+        let ledger = [change(1, scale: 10)]
+
+        let beforeSwitch = Date().addingTimeInterval(-2 * 24 * 60 * 60)
+        let afterSwitch = Date().addingTimeInterval(-1 * 60 * 60)
+        #expect(ledger.scale(forEventAt: beforeSwitch) == 10)
+        #expect(ledger.scale(forEventAt: afterSwitch) == 1)
+    }
+
+    @Test("several switches inside one window compose") func testLedgerComposesSwitches() {
+        // U-100 → U-10 three days ago (x10), then U-10 → U-50 one day ago (x0.2).
+        let ledger = [change(3, scale: 10), change(1, scale: 0.2)]
+
+        // An event older than both must cross both switches.
+        #expect(ledger.scale(forEventAt: Date().addingTimeInterval(-5 * 24 * 60 * 60)) == 2)
+        // Between them: only the later switch applies.
+        #expect(ledger.scale(forEventAt: Date().addingTimeInterval(-2 * 24 * 60 * 60)) == Decimal(0.2))
+        // After both: unchanged.
+        #expect(ledger.scale(forEventAt: Date()) == 1)
+    }
+
+    @Test("a scaled bolus keeps its real meaning across a switch") func testScaledEventPreservesRealInsulin() {
+        let u100 = settings(allowDilution: false, concentration: 1)
+        let u10 = settings(allowDilution: true, concentration: 0.1)
+        let ledger = [change(1, scale: 10)]
+
+        // 0.2 U metered under U-100 = 0.2 U of actual insulin.
+        let recorded = PumpHistoryEvent(
+            id: "a", type: .bolus,
+            timestamp: Date().addingTimeInterval(-2 * 24 * 60 * 60),
+            amount: 0.2
+        )
+        let realBefore = u100.realInsulinAmount(fromVolume: recorded.amount ?? 0)
+
+        let normalised = recorded.scalingInsulin(by: ledger.scale(forEventAt: recorded.timestamp))
+        // Read on the U-10 scale it must still be 0.2 U of actual insulin.
+        #expect(normalised.amount == 2)
+        #expect(u10.realInsulinAmount(fromVolume: normalised.amount ?? 0) == realBefore)
+    }
+
+    @Test("scaling touches insulin only, never carbs or timing") func testScalingLeavesNonInsulinFields() {
+        let event = PumpHistoryEvent(
+            id: "b", type: .tempBasal, timestamp: Date(),
+            amount: 0.5, duration: 30, durationMin: 30, rate: 0.5,
+            carbInput: 40, note: "note"
+        )
+        let scaled = event.scalingInsulin(by: 10)
+        #expect(scaled.amount == 5)
+        #expect(scaled.rate == 5)
+        #expect(scaled.duration == 30)
+        #expect(scaled.durationMin == 30)
+        #expect(scaled.carbInput == 40)
+        #expect(scaled.timestamp == event.timestamp)
+        #expect(scaled.note == "note")
+    }
+
+    @Test("scaling by 1 is a no-op") func testScalingIdentity() {
+        let event = PumpHistoryEvent(id: "c", type: .bolus, timestamp: Date(), amount: 1.25)
+        #expect(event.scalingInsulin(by: 1) == event)
+    }
+
+    // MARK: - Unit disambiguation
+
+    /// Therapy settings are entered in actual insulin while everything Trio
+    /// delivers is shown in pumped units, and both are labelled "U". At U-100
+    /// they are the same number and the caption must stay out of the way.
+    @Test("no unit caption without dilution") func testNoCaptionAtU100() {
+        let u100 = settings(allowDilution: false, concentration: 1)
+        #expect(u100.pumpedEquivalentCaption(forRealAmount: 1.5, unit: "U") == nil)
+        #expect(u100.pumpedEquivalentCaption(forRealRatio: 45, unit: "mg/dL") == nil)
+    }
+
+    @Test("unit caption names both quantities under dilution") func testCaptionUnderDilution() {
+        let u10 = settings(allowDilution: true, concentration: 0.1)
+        let amount = u10.pumpedEquivalentCaption(forRealAmount: 1.5, unit: "U")
+        #expect(amount?.contains("1.5") == true)
+        #expect(amount?.contains("15") == true)
+
+        // Ratios move the other way: 500 mg/dL per real unit is 50 per pumped unit.
+        let ratio = u10.pumpedEquivalentCaption(forRealRatio: 500, unit: "mg/dL")
+        #expect(ratio?.contains("500") == true)
+        #expect(ratio?.contains("50") == true)
+    }
 }

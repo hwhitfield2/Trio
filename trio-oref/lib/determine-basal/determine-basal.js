@@ -637,11 +637,17 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
 
 // Adjust ISF based on sensitivityRatio
     var isfreason = ""
-    var profile_sens = round(sensitivity,1);
+    // ISF is rounded to 0.001, not 0.1. The quantum here is mg/dL per PUMPED
+    // unit, so a tenth of a unit is a tenth of a unit of *fluid*: under U-10
+    // dilution it quantises the real ISF to 1 mg/dL steps instead of 0.1, and
+    // sens divides straight into insulinReq. It was the one place where diluting
+    // made the algorithm coarser rather than finer, which broke the premise that
+    // oref is unit-agnostic (see trio-oref/tests/dilution-scale-invariance).
+    var profile_sens = round(sensitivity,3);
     var sens = sensitivity;
     if (typeof autosens_data !== 'undefined' && autosens_data) {
         sens = sensitivity / sensitivityRatio;
-        sens = round(sens, 1);
+        sens = round(sens, 3);
         if (sens !== sensitivity) {
             process.stderr.write("ISF from "+ convert_bg(sensitivity,profile) +" to " + convert_bg(sens,profile));
         } else {
@@ -1608,8 +1614,15 @@ var maxDelta_bg_threshold;
 
             var mealInsulinReq = round( meal_data.mealCOB / carbRatio ,3);
             var maxBolus = 0;
+            // The SMB size cap is rounded to 0.001 U, not 0.1 U. Rounding it to
+            // a tenth of a pumped unit both let the cap exceed the
+            // maxSMBBasalMinutes the user actually set (0.25 U of basal became a
+            // 0.3 U ceiling) and collapsed it to zero — disabling SMBs outright
+            // — for any basal rate under 0.1 U/hr. Deliverability is still
+            // enforced below, where the microbolus is floored to the pump's own
+            // bolus increment.
             if (typeof smbMinutesSetting === 'undefined' ) {
-                maxBolus = round(scale_basal *overrideFactor * 30 / 60 ,1);
+                maxBolus = round(scale_basal *overrideFactor * 30 / 60 ,3);
                 console.error("smbMinutesSetting undefined: defaulting to 30m");
 
                 if( insulinReq > maxBolus ) {
@@ -1619,17 +1632,17 @@ var maxDelta_bg_threshold;
                 console.error("IOB" + iob_data.iob + "> COB" + meal_data.mealCOB + "; mealInsulinReq =" + mealInsulinReq);
                 if (uamMinutesSetting) {
                     console.error("maxUAMSMBBasalMinutes: " + uamMinutesSetting + ", profile.current_basal: " + profile.current_basal * overrideFactor);
-                    maxBolus = round(scale_basal * overrideFactor * uamMinutesSetting / 60 ,1);
+                    maxBolus = round(scale_basal * overrideFactor * uamMinutesSetting / 60 ,3);
                 } else {
                     console.error("maxUAMSMBBasalMinutes undefined: defaulting to 30m");
-                    maxBolus = round( scale_basal  * overrideFactor * 30 / 60 ,1);
+                    maxBolus = round( scale_basal  * overrideFactor * 30 / 60 ,3);
                 }
                 if( insulinReq > maxBolus ) {
                   console.error("SMB limited by maxUAMSMBBasalMinutes [ " + uamMinutesSetting + "m ]: " + maxBolus + "U ( " + insulinReq + "U )");
                 } else { console.error("SMB is not limited by maxUAMSMBBasalMinutes. ( insulinReq: " + insulinReq + "U )"); }
             } else {
                 console.error(".maxSMBBasalMinutes: " + smbMinutesSetting + ", profile.current_basal: " + profile.current_basal * overrideFactor);
-                maxBolus = round(scale_basal  * overrideFactor * smbMinutesSetting / 60 ,1);
+                maxBolus = round(scale_basal  * overrideFactor * smbMinutesSetting / 60 ,3);
                 if( insulinReq > maxBolus ) {
                   console.error("SMB limited by maxSMBBasalMinutes: " + smbMinutesSetting + "m ]: " + maxBolus + "U ( insulinReq: " + insulinReq + "U )");
                 } else { console.error("SMB is not limited by maxSMBBasalMinutes. ( insulinReq: " + insulinReq + "U )"); }

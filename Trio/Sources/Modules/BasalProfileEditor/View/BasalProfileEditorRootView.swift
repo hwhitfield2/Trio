@@ -166,6 +166,11 @@ extension BasalProfileEditor {
                     ScrollView {
                         LazyVStack {
                             VStack(alignment: .leading, spacing: 0) {
+                                DilutionUnitBanner(
+                                    subject: String(localized: "basal rates"),
+                                    settings: state.settingsManager?.settings
+                                )
+
                                 if !state.canAdd {
                                     fullScheduleWarning
                                         .padding()

@@ -138,6 +138,13 @@ extension UnitsLimitsSettings {
             scaledToReal(PickerSettingsProvider.shared.settings.maxBasal, coveringCurrent: loadedMaxBasal)
         }
 
+        /// Caption under an insulin limit spelling out that it is entered in
+        /// actual insulin and what the pump meters for it — the limits and the
+        /// delivered amounts elsewhere in the app are both labelled "U".
+        func amountCaption(_ realValue: Decimal, unit: String) -> String? {
+            settingsManager?.settings.pumpedEquivalentCaption(forRealAmount: realValue, unit: unit)
+        }
+
         /// A concentration rescale preserves the real value, which can exceed
         /// the scaled grid's default ceiling (e.g. real Max Bolus 10 U vs a
         /// U-10 ceiling of 3 U) — extend the grid so the stored value stays
@@ -159,6 +166,9 @@ extension UnitsLimitsSettings {
             let stored = provider.settings()
             maxBasal = settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBasal)
             maxBolus = settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBolus)
+            // Max IOB is rescaled by the migration inside the provider, so read
+            // it back rather than assuming the displayed real value still holds.
+            maxIOB = settingsManager.settings.realInsulinAmount(fromVolume: settingsManager.preferences.maxIOB)
             // Snapshot for the picker grids: the ceiling must not follow the
             // wheel's own selection, or scrolling down would ratchet the
             // reachable range shut.
@@ -177,12 +187,6 @@ extension UnitsLimitsSettings {
             lastAppliedConcentration = newFactor
 
             let rescale = InsulinConcentrationRescale(from: oldFactor, to: newFactor)
-
-            // Max IOB (preferences): synchronous, so consecutive changes
-            // compose here the same way the chained file rescales do below.
-            var prefs = settingsManager.preferences
-            prefs.maxIOB *= rescale.amountScale
-            settingsManager.preferences = prefs
 
             // Rescale storage NOW, not on the chain: the concentration setting
             // has already been written, so until the files follow, every real

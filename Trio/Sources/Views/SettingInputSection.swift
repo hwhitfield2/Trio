@@ -38,6 +38,11 @@ struct SettingInputSection<VerboseHint: View>: View {
     /// Overrides the picker grid looked up by key — used by the insulin-limit
     /// settings, whose real-unit grids scale with the insulin concentration.
     var pickerSettingOverride: PickerSetting? = nil
+    /// Caption shown under the value, spelling out which unit it is in. Used by
+    /// the insulin-limit settings, which are entered in actual insulin while
+    /// everything Trio delivers is shown in pumped units. Returning nil (the
+    /// U-100 case) hides the line entirely.
+    var valueUnitCaption: ((Decimal) -> String?)? = nil
 
     @ObservedObject private var pickerSettingsProvider = PickerSettingsProvider.shared
     @State private var displayPicker: Bool = false
@@ -205,6 +210,15 @@ struct SettingInputSection<VerboseHint: View>: View {
                         displayPicker.wrappedValue.toggle()
                     }
             }.padding(.top)
+
+            if let caption = valueUnitCaption?(decimalValue.wrappedValue) {
+                HStack {
+                    Spacer()
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             if displayPicker.wrappedValue {
                 Picker(selection: decimalValue, label: Text(label)) {

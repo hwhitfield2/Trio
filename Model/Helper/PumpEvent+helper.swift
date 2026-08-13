@@ -219,6 +219,36 @@ enum PumpEventDTO: Encodable {
             try prime.encode(to: encoder)
         }
     }
+
+    /// When the event carries insulin, its timestamp — needed to decide which
+    /// past concentration switches still apply to it.
+    var insulinEventTimestamp: String? {
+        switch self {
+        case let .bolus(bolus): return bolus.timestamp
+        case let .tempBasal(tempBasal): return tempBasal.timestamp
+        default: return nil
+        }
+    }
+
+    /// A copy with every insulin quantity multiplied by `scale`, for
+    /// re-expressing history recorded under an earlier insulin concentration.
+    /// Durations, suspends, resumes, rewinds and primes carry no insulin and
+    /// pass through unchanged.
+    func scalingInsulin(by scale: Double) -> PumpEventDTO {
+        guard scale != 1 else { return self }
+        switch self {
+        case let .bolus(bolus):
+            var scaled = bolus
+            scaled.amount *= scale
+            return .bolus(scaled)
+        case let .tempBasal(tempBasal):
+            var scaled = tempBasal
+            scaled.rate *= scale
+            return .tempBasal(scaled)
+        default:
+            return self
+        }
+    }
 }
 
 // Extension with helper functions to map pump events to DTO objects via uniform masking enum

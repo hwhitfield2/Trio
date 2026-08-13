@@ -12,6 +12,15 @@ extension DeliveryCapEditor {
 
         var body: some View {
             List {
+                if (state.settingsManager?.settings.insulinConcentrationFactorDecimal ?? 1) != 1 {
+                    DilutionUnitBanner(
+                        subject: String(localized: "delivery caps"),
+                        settings: state.settingsManager?.settings
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
+
                 Section(
                     footer: Text(
                         "During a window the loop keeps running — determinations, forecasts, and audit records are produced every cycle — but delivery is capped at enactment. Max Basal 0 and Max SMB 0 means no insulin from the loop: SMBs are suppressed and a zero temp overrides scheduled basal. A cap below the current temp or scheduled basal actively enforces itself. Windows may cross midnight; overlapping windows apply the most restrictive values. Manual boluses are not affected."

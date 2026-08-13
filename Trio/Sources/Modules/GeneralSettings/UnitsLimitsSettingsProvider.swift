@@ -13,6 +13,7 @@ extension UnitsLimitsSettings {
     final class Provider: BaseProvider, UnitsLimitsSettingsProvider {
         private let processQueue = DispatchQueue(label: "UnitsLimitsSettingsProvider.processQueue")
         @Injected() private var broadcaster: Broadcaster!
+        @Injected() private var settingsManager: SettingsManager!
 
         func settings() -> PumpSettings {
             storage.retrieve(OpenAPS.Settings.settings, as: PumpSettings.self)
@@ -66,34 +67,31 @@ extension UnitsLimitsSettings {
             }.eraseToAnyPublisher()
         }
 
-        /// Rescales the stored (pump-volume-unit) therapy settings for a new
-        /// insulin concentration so their real-insulin meaning is preserved.
-        ///
-        /// ALL storage — ISF, CR, delivery caps, delivery limits, TDD history,
-        /// basal profile — is rescaled unconditionally first: the loop reads
-        /// these files, so they must stay mutually consistent even when the
-        /// pump is unreachable. Pump programming (basal schedule, delivery
-        /// limits) is attempted afterwards; failures come back as warning
-        /// strings rather than throws so a partial pump failure can never
-        /// leave storage half-rescaled.
-        func rescaleTherapySettings(_ rescale: InsulinConcentrationRescale) async -> [String] {
-            var warnings = rescaleStorage(rescale)
-            guard !rescale.isIdentity else { return warnings }
-            if let tddWarning = await rescale.rescaleTDDHistory() {
-                warnings.append(tddWarning)
-            }
-            warnings.append(contentsOf: await programPump())
-            return warnings
-        }
-
         /// The storage half of the migration: every volume-unit file rescaled
         /// in place, synchronously. It must not be queued behind pump I/O —
         /// until it runs, the stored files and the concentration setting
         /// disagree and every real value derived from them is off by the
         /// factor. TDD history and pump programming follow asynchronously.
+        ///
+        /// This is the ONE entry point for the storage migration: every stored
+        /// quantity denominated in pumped units is rescaled here, Max IOB
+        /// included, so no caller can migrate a partial set.
         func rescaleStorage(_ rescale: InsulinConcentrationRescale) -> [String] {
             guard !rescale.isIdentity else { return [] }
             var warnings: [String] = []
+
+            // Pump history is deliberately NOT rescaled — it records what the
+            // pump metered and must keep matching the pump's screens and the
+            // uploads — so the ledger is what lets IOB, TDD and autotune read
+            // pre-switch events in the new units. It belongs with the rest of
+            // this migration: every write below is a local, synchronous file
+            // write, and they only make sense as a set.
+            InsulinConcentrationLedger.record(rescale, in: storage)
+
+            // Max IOB (preferences): a limit on pumped units, like the rest.
+            var preferences = settingsManager.preferences
+            preferences.maxIOB *= rescale.amountScale
+            settingsManager.preferences = preferences
 
             // ISF: mg/dL per pumped unit.
             if let isf = storage.retrieve(OpenAPS.Settings.insulinSensitivities, as: InsulinSensitivities.self) {

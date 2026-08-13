@@ -242,10 +242,28 @@ final class OpenAPS {
         // which drives negative IOB and can cause excessive insulin delivery.
         let orphanedResumes = try await fetchOrphanedResumes()
 
+        // Pump history keeps the volume units it was recorded in — it is the log
+        // of what the pump metered, and must keep matching the pump's screens and
+        // the uploads. A concentration switch therefore leaves the window holding
+        // two scales at once, which oref would read as a step change in IOB.
+        // Re-express pre-switch events in the units now in force, on the way into
+        // the loop only. No-op unless dilution has actually been switched.
+        let concentrationChanges = await InsulinConcentrationLedger.loadAsync(from: storage)
+
         // Execute all operations on the background context
         return await context.perform {
             // Load and map pump events to DTOs
             var dtos = self.loadAndMapPumpEvents(pumpHistoryObjectIDs, orphanedResumes: orphanedResumes)
+
+            if !concentrationChanges.isEmptyOrIdentity {
+                dtos = dtos.map { dto in
+                    guard let timestamp = dto.insulinEventTimestamp,
+                          let date = PumpEventStored.dateFormatter.date(from: timestamp)
+                    else { return dto }
+                    let scale = concentrationChanges.scale(forEventAt: date)
+                    return dto.scalingInsulin(by: Double(truncating: scale as NSDecimalNumber))
+                }
+            }
 
             // Optionally add the IOB as a DTO
             if let simulatedBolusAmount = simulatedBolusAmount {

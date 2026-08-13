@@ -74,6 +74,11 @@ extension ISFEditor {
                     ScrollView {
                         LazyVStack {
                             VStack(alignment: .leading, spacing: 0) {
+                                DilutionUnitBanner(
+                                    subject: String(localized: "sensitivity factors"),
+                                    settings: state.settingsManager?.settings
+                                )
+
                                 // Chart visualization
                                 if !state.items.isEmpty {
                                     isfChart

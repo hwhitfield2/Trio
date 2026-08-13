@@ -1398,6 +1398,7 @@ extension SettingsExport.StateModel {
         backup.appVersion = "\(versionNumber) (\(buildNumber))"
         backup.branch = branch
         backup.trioSettings = settingsManager.settings
+        backup.insulinConcentrationFactor = settingsManager.settings.insulinConcentrationFactorDecimal
         backup.preferences = settingsManager.preferences
         backup.pumpSettings = settingsManager.pumpSettings
         backup.basalProfile = storage.retrieve(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self)
@@ -1497,7 +1498,35 @@ extension SettingsExport.StateModel {
                 return .validationFailed(String(localized: "Delivery limits must be greater than 0."))
             }
         }
+
+        // Every insulin figure in a backup is a pumped volume, so it only has a
+        // meaning together with the concentration it was written under. A backup
+        // that carries therapy data but no concentration (an older export, or one
+        // whose settings could not be read) cannot be placed on the scale — and
+        // guessing wrong is a 2–10x dosing error in either direction.
+        if backupConcentrationFactor(backup) == nil, hasInsulinDenominatedContent(backup) {
+            return .validationFailed(String(
+                localized: "This backup does not record which insulin concentration its therapy settings were saved under, so Trio cannot tell whether they match this device. Re-export the backup from the device it came from, or enter these settings manually."
+            ))
+        }
         return nil
+    }
+
+    /// The concentration the backup's therapy values are denominated in, or nil
+    /// when the backup does not say. Prefers the dedicated field; falls back to
+    /// the embedded Trio settings for backups written before it existed.
+    private func backupConcentrationFactor(_ backup: TrioSettingsBackup) -> Decimal? {
+        if let factor = backup.insulinConcentrationFactor, factor > 0, factor <= 1 {
+            return factor
+        }
+        return backup.trioSettings?.insulinConcentrationFactorDecimal
+    }
+
+    /// Whether the backup carries anything denominated in insulin units.
+    /// Glucose targets and presets are unaffected by the concentration.
+    private func hasInsulinDenominatedContent(_ backup: TrioSettingsBackup) -> Bool {
+        backup.basalProfile != nil || backup.insulinSensitivities != nil
+            || backup.carbRatios != nil || backup.pumpSettings != nil || backup.preferences != nil
     }
 
     /// Applies a validated backup to the app.
@@ -1522,15 +1551,31 @@ extension SettingsExport.StateModel {
             summary.appliedCategories.append(String(localized: "Trio Settings"))
         }
 
-        // The backup's therapy values are volume units self-consistent with the
-        // backup's own insulin concentration, so importing them needs no
-        // conversion. But local data NOT contained in the backup — scheduled
-        // delivery caps, TDD history, autotune output — still uses the previous
-        // concentration's volume scale and must be rescaled when the import
-        // changes the concentration, or safety caps and insulin-history-based
-        // recommendations silently shift in real meaning by up to 10x.
+        // Two different scales meet here, and conflating them is what makes
+        // imports dangerous:
+        //
+        // - `rescale` carries LOCAL data — anything the backup does not replace
+        //   — from the device's previous concentration to the one now in force.
+        // - `importRescale` carries the BACKUP's own therapy values from the
+        //   concentration they were written under to the one now in force. It is
+        //   identity in the ordinary case (the backup brought its own Trio
+        //   settings, so the device now runs exactly that concentration), and
+        //   non-identity when a backup's therapy data lands on a device that
+        //   keeps a different concentration — e.g. a backup with no Trio
+        //   settings section. validate() has already refused the case where the
+        //   backup's concentration is unknown.
         let newFactor = settingsManager.settings.insulinConcentrationFactorDecimal
         let rescale = InsulinConcentrationRescale(from: oldFactor, to: newFactor)
+        let importRescale = InsulinConcentrationRescale(
+            from: backupConcentrationFactor(backup) ?? newFactor,
+            to: newFactor
+        )
+        // Pump history is never rescaled — it is the record of what the pump
+        // metered. The ledger is what lets IOB/TDD/autotune read pre-switch
+        // events on the new scale (see InsulinConcentrationLedger). Recording an
+        // identity rescale is a no-op, so this needs no guard of its own.
+        InsulinConcentrationLedger.record(rescale, in: storage)
+
         if !rescale.isIdentity {
             // Scheduled delivery caps: pumped units and pumped units per hour.
             if let caps = storage.retrieve(OpenAPS.Settings.deliveryCaps, as: [DeliveryCapWindow].self) {
@@ -1616,13 +1661,27 @@ extension SettingsExport.StateModel {
             }
         }
 
-        if let importedPreferences = backup.preferences {
+        if !importRescale.isIdentity {
+            summary.notes.append(String(
+                localized: "The backup was saved under a different insulin concentration than this device uses. Its therapy settings were converted so they keep the same amount of actual insulin — check them before looping."
+            ))
+        }
+
+        if var importedPreferences = backup.preferences {
+            importedPreferences.maxIOB *= importRescale.amountScale
             settingsManager.preferences = importedPreferences
             summary.appliedCategories.append(String(localized: "Algorithm Preferences"))
         }
 
         if let pumpSettings = backup.pumpSettings {
-            storage.save(pumpSettings, as: OpenAPS.Settings.settings)
+            storage.save(
+                PumpSettings(
+                    insulinActionCurve: pumpSettings.insulinActionCurve,
+                    maxBolus: pumpSettings.maxBolus * importRescale.amountScale,
+                    maxBasal: pumpSettings.maxBasal * importRescale.amountScale
+                ),
+                as: OpenAPS.Settings.settings
+            )
             summary.appliedCategories.append(String(localized: "Delivery Limits"))
         }
 
@@ -1632,18 +1691,42 @@ extension SettingsExport.StateModel {
         }
 
         if let carbRatios = backup.carbRatios {
-            storage.save(carbRatios, as: OpenAPS.Settings.carbRatios)
+            storage.save(
+                CarbRatios(
+                    units: carbRatios.units,
+                    schedule: carbRatios.schedule.map {
+                        CarbRatioEntry(start: $0.start, offset: $0.offset, ratio: $0.ratio * importRescale.ratioScale)
+                    }
+                ),
+                as: OpenAPS.Settings.carbRatios
+            )
             summary.appliedCategories.append(String(localized: "Carb Ratios"))
         }
 
         if let sensitivities = backup.insulinSensitivities {
-            storage.save(sensitivities, as: OpenAPS.Settings.insulinSensitivities)
+            storage.save(
+                InsulinSensitivities(
+                    units: sensitivities.units,
+                    userPreferredUnits: sensitivities.userPreferredUnits,
+                    sensitivities: sensitivities.sensitivities.map {
+                        InsulinSensitivityEntry(
+                            sensitivity: $0.sensitivity * importRescale.ratioScale,
+                            offset: $0.offset,
+                            start: $0.start
+                        )
+                    }
+                ),
+                as: OpenAPS.Settings.insulinSensitivities
+            )
             summary.appliedCategories.append(String(localized: "Insulin Sensitivities"))
         }
 
         if let basalProfile = backup.basalProfile {
+            let scaledProfile = basalProfile.map {
+                BasalProfileEntry(start: $0.start, minutes: $0.minutes, rate: $0.rate * importRescale.amountScale)
+            }
             do {
-                try await saveBasalProfile(basalProfile)
+                try await saveBasalProfile(scaledProfile)
             } catch {
                 summary.notes.append(String(
                     localized: "Basal rates were imported, but re-programming the pump failed: \(error.localizedDescription). The pump still runs its previous schedule — re-save your basal rates with the pump connected to sync it."

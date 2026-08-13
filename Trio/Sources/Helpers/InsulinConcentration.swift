@@ -96,6 +96,43 @@ extension TrioSettings {
     func volumeInsulinRatio(fromReal real: Decimal) -> Decimal {
         real * insulinConcentrationFactorDecimal
     }
+
+    /// Spells out which "U" a therapy-settings value is, and what the pump will
+    /// actually meter for it.
+    ///
+    /// Under dilution the app shows two different quantities both labelled "U":
+    /// therapy settings in actual insulin, and everything delivered (IOB, TDD,
+    /// boluses, history, uploads) in pumped volume. A Max IOB of 1 U sitting
+    /// next to a home screen reading 3 U of IOB is not a contradiction, but it
+    /// looks like one — and a user who "fixes" it has moved a safety limit by
+    /// the concentration factor. Returns nil at U-100, where the two coincide
+    /// and the note would be noise.
+    func pumpedEquivalentCaption(forRealAmount real: Decimal, unit: String) -> String? {
+        guard insulinConcentrationFactorDecimal != 1 else { return nil }
+        let pumped = volumeInsulinAmount(fromReal: real)
+        return String(
+            localized: "\(Self.captionNumber(real)) \(unit) of actual insulin · pump meters \(Self.captionNumber(pumped)) \(unit)"
+        )
+    }
+
+    /// The ratio counterpart: ISF and carb ratio are *per unit*, so the pumped
+    /// figure is smaller, not larger.
+    func pumpedEquivalentCaption(forRealRatio real: Decimal, unit: String) -> String? {
+        guard insulinConcentrationFactorDecimal != 1 else { return nil }
+        let pumped = volumeInsulinRatio(fromReal: real)
+        return String(
+            localized: "\(Self.captionNumber(real)) \(unit) per unit of actual insulin · \(Self.captionNumber(pumped)) \(unit) per pumped unit"
+        )
+    }
+
+    /// Trims a converted value to something readable — the conversion can push
+    /// a tidy entry to several decimals that carry no meaning here.
+    private static func captionNumber(_ value: Decimal) -> String {
+        var input = value
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &input, 4, .plain)
+        return rounded.description
+    }
 }
 
 extension PickerSetting {
@@ -127,6 +164,69 @@ extension PickerSetting {
         var rounded = Decimal()
         NSDecimalRound(&rounded, &steps, 0, .up)
         return rounded
+    }
+}
+
+/// One recorded concentration switch: at `date`, every insulin quantity
+/// recorded *before* it must be multiplied by `amountScale` to read in the
+/// volume units in force afterwards.
+struct InsulinConcentrationChange: JSON, Equatable {
+    var date: Date
+    var amountScale: Decimal
+}
+
+/// The record of past concentration switches, used to re-express pump history
+/// recorded under an earlier concentration.
+///
+/// Therapy *settings* are rescaled in place when the concentration changes, but
+/// pump history deliberately is not: it is the log of what the pump actually
+/// metered, and it must keep matching the pump's own screens, Nightscout, and
+/// Apple Health. That leaves every history-derived quantity — IOB, COB from
+/// bolus history, TDD, autotune — mixing two volume scales for as long as
+/// pre-switch events stay in the window.
+///
+/// This ledger closes that gap at the *computation* boundary only: history is
+/// stored and displayed exactly as recorded, and normalised on the way into the
+/// loop. `scale(forEventAt:)` returns the product of every switch that happened
+/// after an event, so several switches inside one window compose correctly.
+enum InsulinConcentrationLedger {
+    /// Longest history any consumer looks back over (autotune reaches ~30 days);
+    /// older entries can never apply and are pruned on write.
+    static let retention: TimeInterval = 45 * 24 * 60 * 60
+
+    static func load(from storage: FileStorage) -> [InsulinConcentrationChange] {
+        storage.retrieve(OpenAPS.Settings.insulinConcentrationHistory, as: [InsulinConcentrationChange].self) ?? []
+    }
+
+    static func loadAsync(from storage: FileStorage) async -> [InsulinConcentrationChange] {
+        await storage.retrieveAsync(OpenAPS.Settings.insulinConcentrationHistory, as: [InsulinConcentrationChange].self) ?? []
+    }
+
+    /// Appends a switch. Identity rescales are not recorded — they would only
+    /// add no-op entries that later multiply to 1 anyway.
+    static func record(_ rescale: InsulinConcentrationRescale, at date: Date = Date(), in storage: FileStorage) {
+        guard !rescale.isIdentity else { return }
+        let cutoff = date.addingTimeInterval(-retention)
+        var entries = load(from: storage).filter { $0.date >= cutoff }
+        entries.append(InsulinConcentrationChange(date: date, amountScale: rescale.amountScale))
+        storage.save(entries.sorted { $0.date < $1.date }, as: OpenAPS.Settings.insulinConcentrationHistory)
+    }
+}
+
+extension Array where Element == InsulinConcentrationChange {
+    /// Multiplier that carries an insulin amount recorded at `date` into the
+    /// volume units currently in force. 1 when no switch has happened since.
+    func scale(forEventAt date: Date) -> Decimal {
+        reduce(Decimal(1)) { product, change in
+            change.date > date ? product * change.amountScale : product
+        }
+    }
+
+    /// True when no recorded switch would change any amount, so callers can skip
+    /// walking their history entirely — the case for every user who has never
+    /// touched the concentration setting, which is nearly all of them.
+    var isEmptyOrIdentity: Bool {
+        isEmpty || allSatisfy { $0.amountScale == 1 }
     }
 }
 

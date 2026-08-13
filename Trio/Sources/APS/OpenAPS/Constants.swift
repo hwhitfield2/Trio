@@ -40,6 +40,7 @@ extension OpenAPS {
         static let tempTargets = "settings/temptargets.json"
         static let model = "settings/model.json"
         static let deliveryCaps = "settings/delivery_caps.json"
+        static let insulinConcentrationHistory = "settings/insulin_concentration_history.json"
     }
 
     enum Monitor {

@@ -47,6 +47,16 @@ final class BaseTDDStorage: TDDStorage, Injectable {
     ) async throws -> TDDResult {
         debug(.apsManager, "Starting TDD calculation with \(pumpHistory.count) pump events")
 
+        // History keeps the volume units it was recorded in, so a concentration
+        // switch inside the 24 h window would otherwise total two different
+        // scales together — and that total feeds dynamic ISF, TDD-adjusted
+        // basal, and the ISF/CR calculator for days afterwards. Re-express
+        // pre-switch events in the units now in force. No-op without dilution.
+        let concentrationChanges = await InsulinConcentrationLedger.loadAsync(from: storage)
+        let pumpHistory = concentrationChanges.isEmptyOrIdentity ? pumpHistory : pumpHistory.map {
+            $0.scalingInsulin(by: concentrationChanges.scale(forEventAt: $0.timestamp))
+        }
+
         // Log the first and last pump history events if available
         let earliestEvent: String
         let latestEvent: String

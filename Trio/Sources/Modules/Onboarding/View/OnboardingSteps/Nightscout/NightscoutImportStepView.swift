@@ -65,6 +65,28 @@ struct NightscoutImportStepView: View {
                     .font(.footnote)
                     .foregroundStyle(Color.secondary)
                     .multilineTextAlignment(.leading)
+
+                    // Trio uploads profiles in pumped units, so a profile it
+                    // wrote round-trips exactly. A profile authored anywhere
+                    // else — the usual reason to import one — is in actual
+                    // insulin, and reading it as pumped units silently divides
+                    // the whole therapy by the concentration factor.
+                    if state.isDilutionEnabled {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Color.orange)
+                            Text(
+                                "You use diluted insulin. Trio reads a Nightscout profile as **pumped units**, which is correct only for a profile Trio itself uploaded. If this profile was written by your care team or another app, its values are in actual insulin and the imported settings will be wrong by the dilution factor — check every value on the next steps before continuing."
+                            )
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding()
+                        .background(Color.orange.opacity(0.12))
+                        .cornerRadius(10)
+                        .padding(.horizontal)
+                        .font(.footnote)
+                        .multilineTextAlignment(.leading)
+                    }
                 }
             }
         }

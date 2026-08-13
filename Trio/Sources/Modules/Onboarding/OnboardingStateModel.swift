@@ -110,6 +110,14 @@ extension Onboarding {
         var isConnectedToNS: Bool = false
         var nightscoutImportError: NightscoutImportError?
         var nightscoutImportStatus: ImportStatus = .none
+
+        /// Whether diluted insulin is configured, so the import steps can warn
+        /// that a Nightscout profile is read as pumped — not actual — units.
+        /// Defaults to false before the resolver injects settingsManager — an
+        /// unknown concentration must not raise a dilution warning.
+        var isDilutionEnabled: Bool {
+            (settingsManager?.settings.insulinConcentrationFactorDecimal ?? 1) != 1
+        }
         var isUploadEnabled: Bool = true
         var uploadGlucose: Bool = true
 

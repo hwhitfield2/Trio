@@ -137,6 +137,15 @@ extension UnitsLimitsSettings {
                     }
                 ).listRowBackground(Color.chart)
 
+                if state.allowDilution {
+                    DilutionUnitBanner(
+                        subject: String(localized: "the insulin limits"),
+                        settings: state.settingsManager?.settings
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
+
                 SettingInputSection(
                     decimalValue: $state.maxIOB,
                     booleanValue: $booleanPlaceholder,
@@ -189,7 +198,8 @@ extension UnitsLimitsSettings {
                         }
                     }
                     .fixedSize(horizontal: false, vertical: true),
-                    pickerSettingOverride: state.maxIOBPickerSetting
+                    pickerSettingOverride: state.maxIOBPickerSetting,
+                    valueUnitCaption: { state.amountCaption($0, unit: "U") }
                 )
 
                 SettingInputSection(
@@ -216,7 +226,8 @@ extension UnitsLimitsSettings {
                         Text("Most set this to their largest meal bolus. Then, adjust if needed.")
                         Text("If you attempt to request a bolus larger than this, the bolus will not be accepted.")
                     },
-                    pickerSettingOverride: state.maxBolusPickerSetting
+                    pickerSettingOverride: state.maxBolusPickerSetting,
+                    valueUnitCaption: { state.amountCaption($0, unit: "U") }
                 )
 
                 SettingInputSection(
@@ -241,7 +252,8 @@ extension UnitsLimitsSettings {
                             "This is the maximum basal rate allowed to be set or scheduled. This applies to both automatic and manual basal rates."
                         )
                     },
-                    pickerSettingOverride: state.maxBasalPickerSetting
+                    pickerSettingOverride: state.maxBasalPickerSetting,
+                    valueUnitCaption: { state.amountCaption($0, unit: "U/hr") }
                 )
 
                 SettingInputSection(
