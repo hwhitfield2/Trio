@@ -59,6 +59,9 @@ extension Home {
         @State var activeEntryKind: HomeEntryKind?
         @State var showDockSheet = false
         @State var plusButtonPressed = false
+        /// Set when the + button's long press fires so the tap that lands on
+        /// finger-lift does not also pop the quick actions over the full editor.
+        @State var plusLongPressFired = false
         @State var dockToastText: String?
         @State var pendingChipActivation: DockChipActivation?
 
@@ -1125,7 +1128,7 @@ extension Home {
             }
         }
 
-        // MARK: - Quick actions (long-press on the + tab button)
+        // MARK: - Quick actions (tap on the + tab button)
 
         private var quickActions: [HomeQuickAction] {
             var items: [HomeQuickAction] = [
@@ -1432,8 +1435,8 @@ extension Home {
                 }
         }
 
-        /// Center + button: tap pops the quick actions menu (long-press still
-        /// works for muscle memory, with press scale/glow feedback).
+        /// Center + button: tap pops the quick actions menu, long-press skips
+        /// straight to the full Treatments editor (with press scale/glow feedback).
         var plusButton: some View {
             ZStack {
                 Circle()
@@ -1453,18 +1456,33 @@ extension Home {
             .padding(.horizontal, 24)
             .contentShape(Circle())
             .accessibilityLabel(String(localized: "Add treatment"))
+            .accessibilityHint(String(localized: "Double tap for quick actions, or touch and hold for the full editor"))
+            .accessibilityAction(named: Text("Open Full Editor")) { openFullEditor() }
             .onTapGesture {
+                // A long press ends with the finger lifting, which SwiftUI can also
+                // report as a tap; the flag keeps that from stacking the quick
+                // actions on top of the editor the long press just opened.
+                guard !plusLongPressFired else { return }
                 let impactLight = UIImpactFeedbackGenerator(style: .light)
                 impactLight.impactOccurred()
                 withAnimation(.easeOut(duration: 0.18)) { showQuickActions = true }
             }
             .onLongPressGesture(minimumDuration: 0.42) {
+                plusLongPressFired = true
                 let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
                 impactHeavy.impactOccurred()
-                withAnimation(.easeOut(duration: 0.18)) { showQuickActions = true }
+                openFullEditor()
             } onPressingChanged: { pressing in
+                if pressing { plusLongPressFired = false }
                 withAnimation(.easeOut(duration: 0.12)) { plusButtonPressed = pressing }
             }
+        }
+
+        /// Opens the full Treatments editor, closing the quick actions card first so
+        /// it cannot linger behind the modal.
+        private func openFullEditor() {
+            withAnimation(.easeIn(duration: 0.14)) { showQuickActions = false }
+            state.showModal(for: .treatmentView)
         }
 
         var body: some View {
