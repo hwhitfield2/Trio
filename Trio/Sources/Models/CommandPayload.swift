@@ -138,6 +138,8 @@ struct CommandPayload: Decodable, Sendable {
                 : "Live Activity registration."
         case .suspendInsulin:
             description += "Emergency suspend of all insulin delivery."
+        case .unknown:
+            description += "Command not recognized by this version of Trio."
         }
 
         if let scheduledTime = scheduledTime {
@@ -155,6 +157,16 @@ struct CommandPayload: Decodable, Sendable {
 
 extension TrioRemoteControl {
     enum CommandType: String, Codable {
+        /// A command name this build does not know.
+        ///
+        /// The follower app is rebuilt by CI on every change, while Trio has to
+        /// be rebuilt and reinstalled by hand, so a follower running ahead of
+        /// its host is ordinary rather than exotic. Without this case the
+        /// unknown name throws out of `JSONDecoder` inside `SecureMessenger`,
+        /// where the only thing the caller can say is "decryption failed" —
+        /// which sends the user hunting for a broken shared secret when the
+        /// real answer is that this phone needs a newer Trio.
+        case unknown
         case bolus
         case tempTarget = "temp_target"
         case cancelTempTarget = "cancel_temp_target"
@@ -166,8 +178,15 @@ extension TrioRemoteControl {
         case registerLiveActivity = "register_live_activity"
         case suspendInsulin = "suspend_insulin"
 
+        init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = CommandType(rawValue: raw) ?? .unknown
+        }
+
         var description: String {
             switch self {
+            case .unknown:
+                return "Unrecognized Command"
             case .bolus:
                 return "Bolus"
             case .tempTarget:

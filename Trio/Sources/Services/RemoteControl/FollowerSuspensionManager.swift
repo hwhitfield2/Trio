@@ -93,6 +93,10 @@ final class FollowerSuspensionManager: Injectable {
             return .notPermitted
         }
 
+        // Drop a finished record first, so an earlier suspension that was
+        // answered and resumed cannot be mistaken for this one.
+        clearIfResumed()
+
         // Already suspended by an earlier request: keep the original record, so
         // the elapsed time the follower sees is time without insulin, not time
         // since the last of several presses.

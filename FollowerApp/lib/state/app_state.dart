@@ -62,6 +62,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// dangerous state than "insulin is stopped", and must never be shown as if
   /// it were the latter.
   DateTime? suspendRequestedAt;
+
+  /// Why the host refused or could not carry out the last command, when it
+  /// told us. An accepted push says only that Apple took the message, so
+  /// without this a rejected command looks identical to one still in flight.
+  String? commandError;
   String? statusHint;
   List<CommandRecord> history = [];
 
@@ -294,6 +299,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// host's next status snapshot, which reports the pump's own state. An
   /// accepted push means Apple took the message, nothing more.
   Future<CommandRecord?> suspendInsulin() async {
+    commandError = null;
     final record = await sendCommand(TrioCommand.suspendInsulin());
     if (record != null && record.accepted) {
       suspendRequestedAt = DateTime.now();
@@ -327,6 +333,16 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
     final followerId = data['follower_id'];
     if (followerId is String && followerId != currentBundle.followerId) return;
+
+    final failure = data['command_error'];
+    if (failure is String && failure.isNotEmpty) {
+      commandError = failure;
+      // Also on the status card, so a rejected temp target or bolus — which
+      // have no banner of their own — is not silent either.
+      statusHint = failure;
+      notifyListeners();
+      return;
+    }
 
     final update = data['update_available'];
     if (update is String && update.isNotEmpty) {

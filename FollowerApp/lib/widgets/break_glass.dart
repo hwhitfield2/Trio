@@ -134,6 +134,35 @@ class SuspensionBanner extends StatelessWidget {
     // Asked for, but the host has not yet reported a stopped pump.
     if (snapshot?.suspended != true) {
       if (requestedAt == null) return const SizedBox.shrink();
+
+      final waiting = DateTime.now().difference(requestedAt);
+      final error = state.commandError;
+
+      // The host said no, or could not do it.
+      if (error != null) {
+        return _Banner(
+          color: theme.colorScheme.errorContainer,
+          onColor: theme.colorScheme.onErrorContainer,
+          icon: Icons.error,
+          title: 'Insulin was NOT suspended',
+          body: '$error Insulin is still running.',
+        );
+      }
+
+      // Nothing came back. After a minute this has stopped being "in flight"
+      // and started being "no answer", and saying so is the difference between
+      // waiting and going to check on someone.
+      if (waiting.inSeconds >= 60) {
+        return _Banner(
+          color: theme.colorScheme.errorContainer,
+          onColor: theme.colorScheme.onErrorContainer,
+          icon: Icons.help,
+          title: 'No answer from the host',
+          body: 'Asked ${_describe(waiting)} ago and the host has not confirmed. '
+              'Assume insulin is still running and reach them another way.',
+        );
+      }
+
       return _Banner(
         color: theme.colorScheme.tertiaryContainer,
         onColor: theme.colorScheme.onTertiaryContainer,

@@ -77,6 +77,28 @@ import Testing
         #expect(!restored.isAwaitingAcknowledgement)
     }
 
+    @Test("A command name this build does not know decodes instead of throwing")
+    func unknownCommandDecodes() throws {
+        // The follower app is rebuilt by CI on every change while Trio is
+        // rebuilt and reinstalled by hand, so a follower running ahead of its
+        // host is ordinary rather than exotic. Before this, an unknown name
+        // threw out of JSONDecoder inside SecureMessenger, where the only thing
+        // the caller could report was "decryption failed" — sending the user
+        // after a broken shared secret instead of an out-of-date host.
+        let json = Data(#"{"user":"Mom","command_type":"something_newer","timestamp":1700000000,"sequence":4}"#.utf8)
+
+        let payload = try JSONDecoder().decode(CommandPayload.self, from: json)
+        #expect(payload.commandType == .unknown)
+        #expect(payload.user == "Mom")
+        #expect(payload.sequence == 4)
+    }
+
+    @Test("Known command names still decode to themselves") func knownCommandDecodes() throws {
+        let json = Data(#"{"user":"Mom","command_type":"suspend_insulin","timestamp":1700000000,"sequence":5}"#.utf8)
+
+        #expect(try JSONDecoder().decode(CommandPayload.self, from: json).commandType == .suspendInsulin)
+    }
+
     @Test("The alarm repeats often enough to wake someone, and legally")
     func alarmInterval() {
         // iOS rejects a repeating time-interval trigger under 60 seconds, and

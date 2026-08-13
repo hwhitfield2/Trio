@@ -122,6 +122,31 @@ class TrioRemoteControl: Injectable {
         await statusPublisher.publish(toFollowerId: followerId)
     }
 
+    /// Tells a follower why its command did not do what it asked.
+    ///
+    /// Without this a rejected command is silent on the follower: the push was
+    /// accepted, so its screen keeps saying it is waiting for the host, with no
+    /// way to learn that the host said no. That is tolerable for a temp target
+    /// and not for an emergency stop.
+    private func notifyFollower(_ followerId: String?, _ reason: String) async {
+        guard let followerId,
+              let follower = FollowerPairingManager.shared.follower(withId: followerId),
+              follower.isPushRegistered
+        else { return }
+
+        do {
+            try await FollowerPushSender.shared.sendAlert(
+                title: String(localized: "Command not carried out", comment: "Title of the alert sent to a follower whose command failed"),
+                body: reason,
+                sound: .silent,
+                to: follower,
+                extraData: ["command_error": reason]
+            )
+        } catch {
+            debug(.remoteControl, "Could not tell follower \(follower.name) why the command failed: \(error)")
+        }
+    }
+
     private func isTimestampAcceptable(for commandPayload: CommandPayload) async -> Bool {
         let currentTime = Date().timeIntervalSince1970
         let timeDifference = currentTime - commandPayload.timestamp
@@ -144,6 +169,13 @@ class TrioRemoteControl: Injectable {
 
     private func dispatch(_ commandPayload: CommandPayload, followerId: String?) async throws {
         switch commandPayload.commandType {
+        case .unknown:
+            let message = String(
+                localized: "This version of Trio does not recognize that command. Update Trio on the host phone.",
+                comment: "Error when a follower sends a command a older host build does not know"
+            )
+            await logError("Command rejected: \(message)", payload: commandPayload)
+            await notifyFollower(followerId, message)
         case .bolus:
             try await handleBolusCommand(commandPayload)
         case .tempTarget:
@@ -216,12 +248,27 @@ class TrioRemoteControl: Injectable {
                     )
                 )
             case .notPermitted:
+                let message = String(
+                    localized: "This follower is not allowed to suspend insulin on that host.",
+                    comment: "Told to a follower whose suspend permission has been withdrawn"
+                )
                 await logError(
                     "Insulin suspension rejected: \(follower.name) is not allowed to suspend delivery.",
                     payload: commandPayload
                 )
+                await notifyFollower(followerId, message)
             case let .failed(reason):
                 await logError("Insulin suspension failed: \(reason)", payload: commandPayload)
+                await notifyFollower(
+                    followerId,
+                    String(
+                        format: String(
+                            localized: "Insulin was not suspended: %@",
+                            comment: "Told to a follower when the pump refused to suspend"
+                        ),
+                        reason
+                    )
+                )
             }
         case .registerLiveActivity:
             guard let followerId = followerId else {
