@@ -177,6 +177,13 @@ import Testing
         #expect(FollowerLiveActivityState.oneDecimal(0.25) == "0.3")
         #expect(FollowerLiveActivityState.oneDecimal(0.35) == "0.3")
         #expect(FollowerLiveActivityState.oneDecimal(2) == "2.0")
+        // 9.95 is really 9.949999…, so it rounds down and does not carry;
+        // 0.05 is really 0.05000000000000000277…, so it rounds up. Both were
+        // checked against Dart, and both catch a carry bug in either direction.
+        #expect(FollowerLiveActivityState.oneDecimal(9.95) == "9.9")
+        #expect(FollowerLiveActivityState.oneDecimal(0.05) == "0.1")
+        // Nothing sensible to print, but nothing that may crash a Lock Screen.
+        #expect(FollowerLiveActivityState.oneDecimal(.nan) == "nan")
     }
 
     @Test("Trend arrows match the follower app's glyphs") func trendArrows() {

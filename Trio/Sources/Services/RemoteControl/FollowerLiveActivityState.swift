@@ -117,13 +117,45 @@ struct FollowerLiveActivityState: Encodable, Equatable {
 
     /// One decimal place, rounded the way Dart's `toStringAsFixed` rounds.
     ///
-    /// `String(format: "%.1f")` rounds a half to even, Dart rounds it away
-    /// from zero — so 1.25 U would print as "1.2" here and "1.3" in the app,
-    /// and the Lock Screen would disagree with the screen behind it whenever
-    /// the value landed exactly on a half.
+    /// Dart rounds the double's *exact* value to the nearest tenth, and on an
+    /// exact tie takes the one further from zero. Two obvious shortcuts each
+    /// get half of that wrong:
+    ///
+    ///   * `(value * 10).rounded()` — 0.35 is really 0.34999999999999997…, but
+    ///     multiplying by ten rounds it up to exactly 3.5 before the second
+    ///     rounding ever sees it, giving "0.4" where Dart gives "0.3".
+    ///   * `String(format: "%.1f")` — correct on 0.35, but it breaks an exact
+    ///     tie to even, giving "1.2" for 1.25 where Dart gives "1.3".
+    ///
+    /// So the decision is made on the exact decimal digits instead. Printing
+    /// twenty places is far more than enough to tell a true tie (0.25 →
+    /// 0.25000…) from a near miss (0.35 → 0.34999…).
+    ///
+    /// This matters because the same number is formatted here for a pushed
+    /// Live Activity and in Dart for a local one; a Lock Screen reading 0.4
+    /// above an app reading 0.3 is exactly what these two must never do.
     static func oneDecimal(_ value: Double) -> String {
-        let rounded = (value * 10).rounded(.toNearestOrAwayFromZero) / 10
-        return String(format: "%.1f", rounded)
+        let digits = String(format: "%.20f", abs(value))
+        let parts = digits.split(separator: ".")
+
+        guard parts.count == 2, var whole = Int(parts[0]), let first = parts[1].first,
+              var tenths = first.wholeNumberValue
+        else {
+            return String(format: "%.1f", value)
+        }
+
+        // The first dropped digit decides it: 5 or more rounds away from zero,
+        // which covers both "past the half" and "exactly on it".
+        if let next = parts[1].dropFirst().first, next >= "5" {
+            tenths += 1
+            if tenths == 10 {
+                tenths = 0
+                whole += 1
+            }
+        }
+
+        let sign = value < 0 ? "-" : ""
+        return "\(sign)\(whole).\(tenths)"
     }
 
     /// The same glyphs the follower app draws for a trend, so a remote update
