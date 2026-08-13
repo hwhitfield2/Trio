@@ -130,6 +130,61 @@ extension RemoteControlConfig {
                         "Pair the Trio Follower app (iOS or Android) by QR code. Each follower gets its own secret and can be revoked individually. Commands from followers are replay-protected and follow the same safety limits as this device. Tap a follower to choose which glucose alerts it receives and what they sound like."
                     ),
                     content: {
+                        if let suspension = state.suspension, suspension.isAwaitingAcknowledgement {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label {
+                                    Text("Insulin suspended by \(suspension.followerName)")
+                                        .fontWeight(.bold)
+                                } icon: {
+                                    Image(systemName: "exclamationmark.octagon.fill")
+                                        .foregroundColor(.red)
+                                }
+
+                                Text(
+                                    "Stopped at \(suspension.requestedAt.formatted(date: .omitted, time: .shortened)). Delivery stays stopped until you answer, and this phone keeps alarming until then."
+                                )
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                                Button {
+                                    state.acknowledgeSuspension(resumeDelivery: true)
+                                } label: {
+                                    Label("I'm OK — resume insulin", systemImage: "play.circle")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .foregroundColor(.white)
+
+                                Button {
+                                    state.acknowledgeSuspension(resumeDelivery: false)
+                                } label: {
+                                    Label("I'm OK — stay suspended", systemImage: "pause.circle")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            .padding(.vertical, 4)
+                        } else if let suspension = state.suspension {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Insulin suspended by \(suspension.followerName)")
+                                Text(
+                                    suspension.resumedAt == nil
+                                        ? String(localized: "Acknowledged — delivery is still stopped.")
+                                        : String(localized: "Acknowledged — delivery resumed.")
+                                )
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                                if suspension.resumedAt == nil {
+                                    Button {
+                                        state.acknowledgeSuspension(resumeDelivery: true)
+                                    } label: {
+                                        Label("Resume insulin", systemImage: "play.circle")
+                                    }
+                                }
+                            }
+                        }
+
                         if state.followers.isEmpty {
                             Text("No followers paired yet.")
                                 .foregroundColor(.secondary)
@@ -140,7 +195,11 @@ extension RemoteControlConfig {
                                         followerName: follower.name,
                                         units: state.units,
                                         settings: state.alertSettings(forFollowerId: follower.id),
-                                        onChange: { state.updateAlertSettings(followerId: follower.id, $0) }
+                                        onChange: { state.updateAlertSettings(followerId: follower.id, $0) },
+                                        maySuspendInsulin: follower.maySuspendInsulin,
+                                        onSuspendPermissionChange: {
+                                            state.setMaySuspendInsulin(followerId: follower.id, $0)
+                                        }
                                     )
                                 } label: {
                                     VStack(alignment: .leading, spacing: 2) {

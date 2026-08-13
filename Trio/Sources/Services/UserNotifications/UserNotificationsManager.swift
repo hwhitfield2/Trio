@@ -128,10 +128,15 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
             let glucoseCategory = NotificationCategoryFactory
                 .createGlucoseCategory(includeCaregiverMessageAction: includeCaregiverAction)
 
+            let suspensionCategory = NotificationCategoryFactory.createFollowerSuspensionCategory()
+
             // Remove any previously registered variant of the glucose category before inserting,
             // since categories with the same identifier but different actions are not equal.
-            var categories = existingCategories.filter { $0.identifier != glucoseCategory.identifier }
+            var categories = existingCategories.filter {
+                $0.identifier != glucoseCategory.identifier && $0.identifier != suspensionCategory.identifier
+            }
             categories.insert(glucoseCategory)
+            categories.insert(suspensionCategory)
             // UNUserNotificationCenter methods should be called on main thread
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -716,6 +721,16 @@ extension BaseUserNotificationsManager: UNUserNotificationCenterDelegate {
         if response.actionIdentifier == CaregiverNotificationAction.identifier {
             Task { @MainActor [weak self] in
                 self?.router.mainModalScreen.send(.caregiverQuickMessage)
+            }
+            return
+        }
+
+        // Handle the answers to a follower's insulin suspension alarm.
+        if let suspensionAction = FollowerSuspensionAction(rawValue: response.actionIdentifier) {
+            Task {
+                await FollowerSuspensionManager.shared.acknowledge(
+                    resumeDelivery: suspensionAction == .acknowledgeAndResume
+                )
             }
             return
         }

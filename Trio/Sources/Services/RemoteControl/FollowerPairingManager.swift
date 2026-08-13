@@ -43,6 +43,15 @@ struct PairedFollower: Codable, Identifiable, Equatable {
     /// still decode.
     var liveActivityToken: String?
 
+    /// Whether this follower may stop insulin delivery in an emergency.
+    ///
+    /// Optional, and treated as allowed when absent: followers paired before
+    /// this existed keep working, and the feature is there to be reached for.
+    /// Turn it off for a follower who should be able to watch but not act.
+    var maySuspend: Bool?
+
+    var maySuspendInsulin: Bool { maySuspend ?? true }
+
     /// Which alerts this follower receives, and how loudly.
     ///
     /// Optional because the keychain already holds followers paired before this
@@ -244,6 +253,16 @@ final class FollowerPairingManager: Injectable {
                 all[index].appPlatform = appPlatform
                 all[index].appVersionReportedAt = Date()
             }
+            saveFollowers(all)
+        }
+    }
+
+    /// Allows or forbids this follower stopping insulin delivery.
+    func setMaySuspendInsulin(followerId: String, _ allowed: Bool) {
+        queue.sync {
+            var all = loadFollowers()
+            guard let index = all.firstIndex(where: { $0.id == followerId }) else { return }
+            all[index].maySuspend = allowed
             saveFollowers(all)
         }
     }

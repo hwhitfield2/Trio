@@ -136,6 +136,8 @@ struct CommandPayload: Decodable, Sendable {
             description += (liveActivityToken ?? "").isEmpty
                 ? "Live Activity updates withdrawn."
                 : "Live Activity registration."
+        case .suspendInsulin:
+            description += "Emergency suspend of all insulin delivery."
         }
 
         if let scheduledTime = scheduledTime {
@@ -162,6 +164,7 @@ extension TrioRemoteControl {
         case statusRequest = "status_request"
         case registerFollower = "register_follower"
         case registerLiveActivity = "register_live_activity"
+        case suspendInsulin = "suspend_insulin"
 
         var description: String {
             switch self {
@@ -183,6 +186,8 @@ extension TrioRemoteControl {
                 return "Register Follower"
             case .registerLiveActivity:
                 return "Register Live Activity"
+            case .suspendInsulin:
+                return "Suspend Insulin"
             }
         }
     }

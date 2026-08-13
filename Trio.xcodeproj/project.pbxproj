@@ -424,6 +424,7 @@
 		FA000000000000000000000A /* FollowerStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000009 /* FollowerStatusPublisher.swift */; };
 		FA000000000000000000000C /* FollowerLiveActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000B /* FollowerLiveActivityState.swift */; };
 		FA0000000000000000000010 /* FollowerVersionChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000F /* FollowerVersionChecker.swift */; };
+		FA0000000000000000000014 /* FollowerSuspensionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000013 /* FollowerSuspensionManager.swift */; };
 		FA0000000000000000000004 /* FollowerPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* FollowerPairingView.swift */; };
 		AB0800000000000000000B01 /* FollowerAlertSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0800000000000000000A01 /* FollowerAlertSettings.swift */; };
 		AB0800000000000000000B02 /* FollowerAlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0800000000000000000A02 /* FollowerAlertManager.swift */; };
@@ -431,6 +432,7 @@
 		FA0000000000000000000006 /* FollowerPairingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* FollowerPairingTests.swift */; };
 		FA000000000000000000000E /* FollowerLiveActivityStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000D /* FollowerLiveActivityStateTests.swift */; };
 		FA0000000000000000000012 /* FollowerVersionCheckerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000011 /* FollowerVersionCheckerTests.swift */; };
+		FA0000000000000000000016 /* FollowerSuspensionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000015 /* FollowerSuspensionTests.swift */; };
 		B015AFE32E500000000D7351 /* BolusSafetyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFE12E500000000D7351 /* BolusSafetyValidator.swift */; };
 		B015AFE52E500000000D7351 /* BolusSafetyValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFE42E500000000D7351 /* BolusSafetyValidatorTests.swift */; };
 		B3A991EE84DF9BD0905EBEDA /* CaregiverMessagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE19A2EC80F05A97313201B /* CaregiverMessagingTests.swift */; };
@@ -1587,6 +1589,7 @@
 		FA0000000000000000000009 /* FollowerStatusPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerStatusPublisher.swift; sourceTree = "<group>"; };
 		FA000000000000000000000B /* FollowerLiveActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerLiveActivityState.swift; sourceTree = "<group>"; };
 		FA000000000000000000000F /* FollowerVersionChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerVersionChecker.swift; sourceTree = "<group>"; };
+		FA0000000000000000000013 /* FollowerSuspensionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerSuspensionManager.swift; sourceTree = "<group>"; };
 		FA0000000000000000000003 /* FollowerPairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerPairingView.swift; sourceTree = "<group>"; };
 		AB0800000000000000000A01 /* FollowerAlertSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerAlertSettings.swift; sourceTree = "<group>"; };
 		AB0800000000000000000A02 /* FollowerAlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerAlertManager.swift; sourceTree = "<group>"; };
@@ -1594,6 +1597,7 @@
 		FA0000000000000000000005 /* FollowerPairingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerPairingTests.swift; sourceTree = "<group>"; };
 		FA000000000000000000000D /* FollowerLiveActivityStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerLiveActivityStateTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000011 /* FollowerVersionCheckerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerVersionCheckerTests.swift; sourceTree = "<group>"; };
+		FA0000000000000000000015 /* FollowerSuspensionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerSuspensionTests.swift; sourceTree = "<group>"; };
 		CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryLimitsSyncTests.swift; sourceTree = "<group>"; };
 		D11E0000000000000000A002 /* InsulinConcentrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsulinConcentrationTests.swift; sourceTree = "<group>"; };
 		CC6C406D2ACDD69E009B8058 /* RawFetchedProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawFetchedProfile.swift; sourceTree = "<group>"; };
@@ -3260,6 +3264,7 @@
 				FA0000000000000000000005 /* FollowerPairingTests.swift */,
 				FA000000000000000000000D /* FollowerLiveActivityStateTests.swift */,
 				FA0000000000000000000011 /* FollowerVersionCheckerTests.swift */,
+				FA0000000000000000000015 /* FollowerSuspensionTests.swift */,
 				AB0300000000000000000A09 /* ClinicReportTests.swift */,
 				AB0200000000000000000A07 /* InsightsEngineTests.swift */,
 				AB0400000000000000000A0C /* FoodLibraryTests.swift */,
@@ -4245,6 +4250,7 @@
 				FA0000000000000000000009 /* FollowerStatusPublisher.swift */,
 				FA000000000000000000000B /* FollowerLiveActivityState.swift */,
 				FA000000000000000000000F /* FollowerVersionChecker.swift */,
+				FA0000000000000000000013 /* FollowerSuspensionManager.swift */,
 				AB0800000000000000000A01 /* FollowerAlertSettings.swift */,
 				AB0800000000000000000A02 /* FollowerAlertManager.swift */,
 				DD17A0312E3FEA1F008E1BF0 /* RemoteNotificationResponseManager.swift */,
@@ -5268,6 +5274,7 @@
 				FA000000000000000000000A /* FollowerStatusPublisher.swift in Sources */,
 				FA000000000000000000000C /* FollowerLiveActivityState.swift in Sources */,
 				FA0000000000000000000010 /* FollowerVersionChecker.swift in Sources */,
+				FA0000000000000000000014 /* FollowerSuspensionManager.swift in Sources */,
 				FA0000000000000000000004 /* FollowerPairingView.swift in Sources */,
 				AB0800000000000000000B01 /* FollowerAlertSettings.swift in Sources */,
 				AB0800000000000000000B02 /* FollowerAlertManager.swift in Sources */,
@@ -5806,6 +5813,7 @@
 				FA0000000000000000000006 /* FollowerPairingTests.swift in Sources */,
 				FA000000000000000000000E /* FollowerLiveActivityStateTests.swift in Sources */,
 				FA0000000000000000000012 /* FollowerVersionCheckerTests.swift in Sources */,
+				FA0000000000000000000016 /* FollowerSuspensionTests.swift in Sources */,
 				AB0300000000000000000B09 /* ClinicReportTests.swift in Sources */,
 				AB0200000000000000000B07 /* InsightsEngineTests.swift in Sources */,
 				AB0400000000000000000B0C /* FoodLibraryTests.swift in Sources */,

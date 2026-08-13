@@ -56,6 +56,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// clear alongside a notification, so it is never acted on automatically —
   /// it only puts a line on screen for the user to act on themselves.
   String? updateAvailableVersion;
+
+  /// When this device last asked the host to stop insulin. Kept so the screen
+  /// can say "asked, not yet confirmed" — which is a different and more
+  /// dangerous state than "insulin is stopped", and must never be shown as if
+  /// it were the latter.
+  DateTime? suspendRequestedAt;
   String? statusHint;
   List<CommandRecord> history = [];
 
@@ -282,6 +288,23 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _ticker = null;
   }
 
+  /// Emergency stop. Sends the suspend command and remembers that it was sent.
+  ///
+  /// Whether insulin actually stopped is not decided here: it is read from the
+  /// host's next status snapshot, which reports the pump's own state. An
+  /// accepted push means Apple took the message, nothing more.
+  Future<CommandRecord?> suspendInsulin() async {
+    final record = await sendCommand(TrioCommand.suspendInsulin());
+    if (record != null && record.accepted) {
+      suspendRequestedAt = DateTime.now();
+      notifyListeners();
+      // Ask for status straight away rather than waiting for the host's own
+      // push, so the screen stops saying "waiting" as soon as it can.
+      unawaited(requestStatus());
+    }
+    return record;
+  }
+
   Future<CommandRecord?> sendCommand(TrioCommand command) async {
     final service = _commandService;
     if (service == null) return null;
@@ -318,6 +341,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final updated = await statusService.handleEncryptedStatus(encrypted, current: snapshot);
     if (updated != null) {
       snapshot = updated;
+      // Once the host reports insulin running again, the pending marker has
+      // served its purpose; leaving it would make a resumed pump look pending.
+      if (!updated.suspended && suspendRequestedAt != null && updated.suspendAcknowledged) {
+        suspendRequestedAt = null;
+      }
       statusHint = null;
       // Pushes are getting through; no need to ask the host for anything.
       _scheduler.recordSuccess();

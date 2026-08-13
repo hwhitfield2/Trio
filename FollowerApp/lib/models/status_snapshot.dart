@@ -16,6 +16,10 @@ class StatusSnapshot {
     this.maxCarbs,
     this.lowThreshold,
     this.highThreshold,
+    this.suspended = false,
+    this.suspendedBy,
+    this.suspendedAt,
+    this.suspendAcknowledged = false,
   });
 
   final DateTime timestamp;
@@ -41,6 +45,21 @@ class StatusSnapshot {
   /// app's own defaults.
   final double? lowThreshold;
   final double? highThreshold;
+
+  /// Whether insulin delivery is stopped on the host right now, as reported by
+  /// the pump itself. This — and only this — is what tells a follower that an
+  /// emergency suspension actually took effect.
+  final bool suspended;
+
+  /// The follower that asked for the suspension, when one did.
+  final String? suspendedBy;
+  final DateTime? suspendedAt;
+
+  /// Whether someone holding the host phone has answered the alarm.
+  final bool suspendAcknowledged;
+
+  /// Insulin is stopped and nobody on the host has responded yet.
+  bool get suspensionUnacknowledged => suspended && !suspendAcknowledged;
 
   GlucoseReading? get latest => readings.isEmpty ? null : readings.first;
 
@@ -90,6 +109,12 @@ class StatusSnapshot {
       maxCarbs: (json['max_carbs'] as num?)?.toDouble(),
       lowThreshold: (json['low'] as num?)?.toDouble(),
       highThreshold: (json['high'] as num?)?.toDouble(),
+      suspended: json['suspended'] == true,
+      suspendedBy: json['suspended_by'] as String?,
+      suspendedAt: json['suspended_at'] is num
+          ? DateTime.fromMillisecondsSinceEpoch(((json['suspended_at'] as num) * 1000).round())
+          : null,
+      suspendAcknowledged: json['suspend_acknowledged'] == true,
     );
   }
 }

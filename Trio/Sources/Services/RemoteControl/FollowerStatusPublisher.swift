@@ -66,6 +66,17 @@ struct FollowerStatusSnapshot: Encodable {
     var low: Double
     var high: Double
 
+    /// Whether insulin delivery is stopped right now, straight from the pump's
+    /// own state. A follower only ever learns that its emergency suspension
+    /// took effect from this — never from the push having been accepted.
+    let suspended: Bool
+    /// The follower that asked for the suspension, when one did.
+    let suspendedBy: String?
+    /// Unix seconds when that request was made.
+    let suspendedAt: TimeInterval?
+    /// Whether someone holding the host phone has answered the alarm.
+    let suspendAcknowledged: Bool
+
     enum CodingKeys: String, CodingKey {
         case type
         case timestamp
@@ -81,6 +92,10 @@ struct FollowerStatusSnapshot: Encodable {
         case maxCarbs = "max_carbs"
         case low
         case high
+        case suspended
+        case suspendedBy = "suspended_by"
+        case suspendedAt = "suspended_at"
+        case suspendAcknowledged = "suspend_acknowledged"
     }
 }
 
@@ -99,6 +114,7 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
     @Injected() private var broadcaster: Broadcaster!
     @Injected() private var settingsManager: SettingsManager!
     @Injected() private var iobService: IOBService!
+    @Injected() private var apsManager: APSManager!
 
     private let context = CoreDataStack.shared.newTaskContext()
     private let throttleQueue = DispatchQueue(label: "BaseFollowerStatusPublisher.throttle")
@@ -242,6 +258,12 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
         let iob = iobService.currentIOB.map { Double(truncating: $0 as NSNumber) }
         let settings = settingsManager.settings
 
+        // The pump's own state, not a record of what was asked for: a
+        // suspension that failed to reach the pump must never read as success
+        // on a follower's screen.
+        let suspended = apsManager.isSuspended
+        let suspension = suspended ? FollowerSuspensionManager.shared.current : nil
+
         return FollowerStatusSnapshot(
             type: "status",
             timestamp: Date().timeIntervalSince1970.rounded(),
@@ -256,7 +278,11 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             maxBolus: Double(truncating: settingsManager.pumpSettings.maxBolus as NSNumber),
             maxCarbs: Double(truncating: settings.maxCarbs as NSNumber),
             low: Double(truncating: FollowerAlertSettings.default.low.threshold as NSNumber),
-            high: Double(truncating: FollowerAlertSettings.default.high.threshold as NSNumber)
+            high: Double(truncating: FollowerAlertSettings.default.high.threshold as NSNumber),
+            suspended: suspended,
+            suspendedBy: suspension?.followerName,
+            suspendedAt: suspension?.requestedAt.timeIntervalSince1970.rounded(),
+            suspendAcknowledged: suspension?.acknowledgedAt != nil
         )
     }
 

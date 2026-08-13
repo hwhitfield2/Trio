@@ -83,6 +83,13 @@ class TrioCommand {
   /// Asks the host to push a fresh status snapshot to this follower.
   factory TrioCommand.statusRequest() => TrioCommand._(commandType: 'status_request');
 
+  /// Emergency stop: asks the host to suspend all insulin delivery.
+  ///
+  /// Nothing restarts it on its own — not the host's loop, which will not enact
+  /// against a suspended pump, and not this app. Someone holding the host phone
+  /// has to answer the alarm it raises.
+  factory TrioCommand.suspendInsulin() => TrioCommand._(commandType: 'suspend_insulin');
+
   /// Tells the host where to deliver encrypted status pushes.
   factory TrioCommand.registerFollower({
     required String pushToken,
@@ -164,6 +171,8 @@ class TrioCommand {
         return 'Cancel override';
       case 'status_request':
         return 'Status refresh';
+      case 'suspend_insulin':
+        return 'Suspend all insulin delivery';
       case 'register_follower':
         return 'Push registration';
       case 'register_live_activity':

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/status_snapshot.dart';
 import '../state/app_state.dart';
+import '../widgets/break_glass.dart';
 import '../widgets/glucose_chart.dart';
 import 'bolus_screen.dart';
 import 'meal_screen.dart';
@@ -37,6 +38,11 @@ class HomeScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Above everything, including the reading: if insulin is stopped,
+            // that is the most important thing on this screen.
+            const SuspensionBanner(),
+            if (state.snapshot?.suspended == true || state.suspendRequestedAt != null)
+              const SizedBox(height: 12),
             if (state.updateAvailableVersion != null) ...[
               const _UpdateNotice(),
               const SizedBox(height: 12),
@@ -46,6 +52,8 @@ class HomeScreen extends StatelessWidget {
             Text('Remote actions', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             const _ActionGrid(),
+            const SizedBox(height: 12),
+            const BreakGlassButton(),
             const SizedBox(height: 16),
             if (state.history.isNotEmpty) ...[
               Text('Recent commands', style: theme.textTheme.titleMedium),

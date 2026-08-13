@@ -126,6 +126,15 @@ void main() {
       expect(register['app_platform'], 'ios');
     });
 
+    test('emergency suspend is its own command type', () {
+      final suspend = TrioCommand.suspendInsulin().toPayload(user: 'Mom', sequence: 9);
+      expect(suspend['command_type'], 'suspend_insulin');
+      // Carries nothing else: the host decides everything about what stopping
+      // delivery means, and a payload field could only weaken that.
+      expect(suspend.containsKey('bolus_amount'), isFalse);
+      expect(TrioCommand.suspendInsulin().describe(), 'Suspend all insulin delivery');
+    });
+
     test('live activity registration carries and clears the token', () {
       final register = TrioCommand.registerLiveActivity(liveActivityToken: 'deadbeef')
           .toPayload(user: 'Mom', sequence: 7);
@@ -171,6 +180,59 @@ void main() {
       expect(snapshot.tempTarget?.until, isNotNull);
       expect(snapshot.override, isNull);
       expect(snapshot.maxBolus, 6.5);
+    });
+
+    test('reads the suspension state the host reports', () {
+      final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      final snapshot = StatusSnapshot.fromJson({
+        'type': 'status',
+        'timestamp': now,
+        'units': 'mg/dL',
+        'readings': [
+          {'sgv': 104, 'date': now - 60, 'direction': 'Flat'},
+        ],
+        'suspended': true,
+        'suspended_by': 'Mom',
+        'suspended_at': now - 300,
+        'suspend_acknowledged': false,
+      });
+
+      expect(snapshot!.suspended, isTrue);
+      expect(snapshot.suspendedBy, 'Mom');
+      expect(snapshot.suspendedAt, isNotNull);
+      expect(snapshot.suspendAcknowledged, isFalse);
+      expect(snapshot.suspensionUnacknowledged, isTrue);
+    });
+
+    test('a host that reports no suspension is treated as delivering', () {
+      // Absent fields must never read as "suspended": a follower that assumed
+      // insulin was stopped when it was not would be the worst way to be wrong.
+      final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      final snapshot = StatusSnapshot.fromJson({
+        'type': 'status',
+        'timestamp': now,
+        'units': 'mg/dL',
+        'readings': <dynamic>[],
+      });
+
+      expect(snapshot!.suspended, isFalse);
+      expect(snapshot.suspensionUnacknowledged, isFalse);
+      expect(snapshot.suspendedBy, isNull);
+    });
+
+    test('an acknowledged suspension is no longer waiting on anyone', () {
+      final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      final snapshot = StatusSnapshot.fromJson({
+        'type': 'status',
+        'timestamp': now,
+        'units': 'mg/dL',
+        'readings': <dynamic>[],
+        'suspended': true,
+        'suspend_acknowledged': true,
+      });
+
+      expect(snapshot!.suspended, isTrue);
+      expect(snapshot.suspensionUnacknowledged, isFalse);
     });
 
     test('rejects non-status payloads', () {

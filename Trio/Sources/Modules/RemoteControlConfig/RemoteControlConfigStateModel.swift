@@ -24,6 +24,10 @@ extension RemoteControlConfig {
         /// did not) without a modal.
         @Published var nudgeResult: String?
 
+        // Emergency stop
+        /// The follower suspension in force, if any.
+        @Published var suspension: FollowerSuspension?
+
         override func subscribe() {
             units = settingsManager.settings.units
             isTrioRemoteControlEnabled = UserDefaults.standard.bool(forKey: "isTrioRemoteControlEnabled")
@@ -34,6 +38,7 @@ extension RemoteControlConfig {
             apnsKeyId = FollowerPairingManager.shared.apnsKeyId
             apnsKey = FollowerPairingManager.shared.apnsKey
             fcmServiceAccountJSON = FollowerPairingManager.shared.fcmServiceAccountJSON
+            suspension = FollowerSuspensionManager.shared.current
             refreshLatestFollowerVersion()
 
             $isTrioRemoteControlEnabled
@@ -77,6 +82,22 @@ extension RemoteControlConfig {
 
         func refreshFollowers() {
             followers = FollowerPairingManager.shared.followers
+            suspension = FollowerSuspensionManager.shared.current
+        }
+
+        func setMaySuspendInsulin(followerId: String, _ allowed: Bool) {
+            FollowerPairingManager.shared.setMaySuspendInsulin(followerId: followerId, allowed)
+            refreshFollowers()
+        }
+
+        /// Answers the alarm a follower's suspension raised, optionally starting
+        /// insulin again. The same two answers the notification offers, for
+        /// someone who opened the app instead of tapping it.
+        func acknowledgeSuspension(resumeDelivery: Bool) {
+            Task { @MainActor in
+                await FollowerSuspensionManager.shared.acknowledge(resumeDelivery: resumeDelivery)
+                refreshFollowers()
+            }
         }
 
         /// Looks up the current follower release. Cached for a day unless the
@@ -160,6 +181,9 @@ extension RemoteControlConfig {
 
         func revokeFollower(id: String) {
             FollowerPairingManager.shared.removeFollower(withId: id)
+            // A suspension outlives the pairing that caused it otherwise, and
+            // would go on alarming for a follower that no longer exists.
+            FollowerSuspensionManager.shared.clearState(followerId: id)
             // Drop any armed alert condition with the pairing, so re-pairing the
             // same device does not inherit a stale "already alerted" state.
             FollowerAlertManager.shared.clearState(followerId: id)

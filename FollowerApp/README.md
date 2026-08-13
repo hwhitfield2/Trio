@@ -45,6 +45,47 @@ Follower app ──(AES-256-GCM encrypted command over APNS HTTP/2)──▶ App
   command on the host (max bolus, recent-bolus guards, etc.). The follower
   additionally enforces the host's limits in its UI before sending.
 
+### Emergency stop
+
+The follower's home screen carries a **Suspend all insulin** button. It asks
+the host to stop delivery — basal and automated dosing alike — and the host
+then alarms until someone holding it answers.
+
+What happens, in order:
+
+1. The follower confirms twice: an explicit dialog naming the consequences,
+   then the same biometric gate every other command uses.
+2. The host suspends the pump, records which follower asked and when, and
+   starts a **repeating time-sensitive alarm** on its own screen.
+3. The alarm offers two answers, on the notification itself: *I'm OK — resume
+   insulin* and *I'm OK — stay suspended*. Both also live in Settings →
+   Remote Control for someone who opens the app instead.
+4. The follower watches the state: **requested**, **suspended · not
+   acknowledged** with a running clock, or **acknowledged**.
+
+The rules this holds to are deliberate:
+
+- **Nothing resumes insulin on its own.** Not the host's loop, which already
+  refuses to enact against a suspended pump, and not a timer. Insulin
+  restarting unattended, into someone who may be in the state that prompted
+  the suspension, is the worse failure of the two.
+- **The follower never claims insulin stopped until the pump says so.** An
+  accepted push means Apple took the message. "Suspended" on the follower's
+  screen comes only from the host's status snapshot reporting the pump's own
+  state; until then it says *waiting — assume insulin is still running*.
+- **Answering the alarm and resuming delivery are separate choices.** Someone
+  woken by it should not have to agree to restart insulin in order to say they
+  are alright.
+
+The cost of never auto-resuming is real: a suspension nobody answers stays in
+force, and hours without insulin carry their own danger. That is why the
+follower shows how long it has gone unacknowledged — so a caregiver escalates
+by calling or going there, rather than trusting this to sort itself out.
+
+Each follower can be allowed or refused this individually, on the host, under
+Settings → Remote Control → tap a follower → **Allow Suspending Insulin**.
+Followers paired before this existed are allowed by default.
+
 ### Versions and update notices
 
 Every registration reports this build's version to the host, and a registration

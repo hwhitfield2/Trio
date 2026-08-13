@@ -194,6 +194,35 @@ class TrioRemoteControl: Injectable {
                 .remoteControl,
                 "Follower push registration stored (transport: \(transport), version: \(commandPayload.appVersion ?? "unreported"))."
             )
+        case .suspendInsulin:
+            guard let followerId = followerId,
+                  let follower = FollowerPairingManager.shared.follower(withId: followerId)
+            else {
+                await logError(
+                    "Insulin suspension rejected: only paired followers can suspend delivery.",
+                    payload: commandPayload
+                )
+                return
+            }
+
+            switch await FollowerSuspensionManager.shared.suspend(requestedBy: follower) {
+            case .suspended:
+                await logSuccess(
+                    "Insulin delivery suspended at the request of \(follower.name).",
+                    payload: commandPayload,
+                    customNotificationMessage: String(
+                        localized: "Insulin suspended by a follower",
+                        comment: "Notification shown on the host when a follower suspends insulin"
+                    )
+                )
+            case .notPermitted:
+                await logError(
+                    "Insulin suspension rejected: \(follower.name) is not allowed to suspend delivery.",
+                    payload: commandPayload
+                )
+            case let .failed(reason):
+                await logError("Insulin suspension failed: \(reason)", payload: commandPayload)
+            }
         case .registerLiveActivity:
             guard let followerId = followerId else {
                 await logError(
