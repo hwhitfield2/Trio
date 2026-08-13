@@ -47,6 +47,7 @@ class HomeScreen extends StatelessWidget {
               const _UpdateNotice(),
               const SizedBox(height: 12),
             ],
+            const _LiveActivityNotice(),
             const _StatusCard(),
             const SizedBox(height: 16),
             Text('Remote actions', style: theme.textTheme.titleMedium),
@@ -112,6 +113,46 @@ class _UpdateNotice extends StatelessWidget {
           icon: const Icon(Icons.close),
           color: theme.colorScheme.onSecondaryContainer,
           onPressed: () => context.read<AppState>().dismissUpdateNotice(),
+        ),
+      ),
+    );
+  }
+}
+
+/// Offered when the Live Activity is switched on but is not on the Lock Screen.
+///
+/// A dismissed activity cannot be brought back from the Lock Screen itself, and
+/// the system retires one every few hours on its own — so without somewhere to
+/// say "put it back", the setting looks broken and the glucose that was meant
+/// to be a glance away is simply gone.
+class _LiveActivityNotice extends StatelessWidget {
+  const _LiveActivityNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final theme = Theme.of(context);
+
+    final missing = state.liveActivitySupport.available &&
+        state.liveActivityEnabled &&
+        !state.liveActivityRunning &&
+        state.snapshot?.latest != null;
+    if (!missing) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        color: theme.colorScheme.surfaceContainerHighest,
+        child: ListTile(
+          leading: const Icon(Icons.dashboard_customize),
+          title: const Text('Live Activity is not on the Lock Screen'),
+          subtitle: const Text(
+            'It was dismissed, or the system ended it after a few hours.',
+          ),
+          trailing: TextButton(
+            onPressed: () => context.read<AppState>().restartLiveActivity(),
+            child: const Text('Restart'),
+          ),
         ),
       ),
     );
@@ -209,7 +250,12 @@ class _StatusCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              GlucoseChart(readings: snapshot.readings),
+              GlucoseChart(
+                readings: snapshot.readings,
+                units: state.units,
+                lowThreshold: snapshot.lowThreshold,
+                highThreshold: snapshot.highThreshold,
+              ),
               const SizedBox(height: 8),
               _FreshnessRow(snapshot: snapshot),
             ],

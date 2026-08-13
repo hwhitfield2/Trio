@@ -63,14 +63,47 @@ class LiveActivityBridge {
   static void onPushToken(void Function(String? token) handler) =>
       TrioLiveActivity.onPushToken(handler);
 
+  /// Watches for the activity leaving the Lock Screen.
+  static void onActivityEnded(void Function() handler) =>
+      TrioLiveActivity.onActivityEnded(handler);
+
+  /// Whether an activity is on the Lock Screen right now.
+  ///
+  /// False when Live Activities are switched off for the app, so callers get
+  /// one answer to "is there something to see", not two.
+  static Future<bool> isRunning() async {
+    try {
+      if (!await isEnabled()) return false;
+      return await TrioLiveActivity.isRunning();
+    } catch (error) {
+      debugPrint('Live Activity state unavailable: $error');
+      return false;
+    }
+  }
+
   /// Ends the activity and starts a fresh one for [snapshot].
   ///
-  /// Used when remote updates are switched on: an activity only gets a push
-  /// token from the system at the moment it is requested, so one that is
-  /// already running can never gain one.
+  /// Used when remote updates are switched on, and whenever the activity has
+  /// to come back after being dismissed: an activity only gets a push token
+  /// from the system at the moment it is requested, so one that is already
+  /// running can never gain one — and one that was dismissed cannot be
+  /// updated back into existence.
   static Future<void> restart(StatusSnapshot? snapshot, {required String hostName}) async {
-    await stop();
-    await publish(snapshot, hostName: hostName);
+    try {
+      if (!await isEnabled()) return;
+
+      if (snapshot == null || snapshot.latest == null) {
+        await TrioLiveActivity.end();
+        return;
+      }
+
+      await TrioLiveActivity.restart(
+        hostName: hostName,
+        state: jsonEncode(stateFor(snapshot)),
+      );
+    } catch (error) {
+      debugPrint('Live Activity restart skipped: $error');
+    }
   }
 
   /// Starts or refreshes the activity for a snapshot, if the user turned it on.

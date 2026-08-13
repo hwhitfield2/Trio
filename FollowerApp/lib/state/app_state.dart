@@ -41,6 +41,15 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   LiveActivitySupport liveActivitySupport = LiveActivitySupport.unsupported;
   bool liveActivityEnabled = false;
 
+  /// Whether an activity is actually on the Lock Screen right now.
+  ///
+  /// Separate from [liveActivityEnabled], which is only what the user asked
+  /// for: the system retires activities after a few hours, and they can be
+  /// swiped away at any time, so "switched on" and "on screen" routinely
+  /// disagree — and the difference is the whole reason there is a way to
+  /// start a new one by hand.
+  bool liveActivityRunning = false;
+
   /// Whether the host may update the Live Activity directly over APNS. Off
   /// unless the user turns it on: it is the one path where the push service
   /// carries readable data rather than ciphertext.
@@ -85,6 +94,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// changed is not re-sent on every activity update.
   String? _registeredLiveActivityToken;
 
+  /// Set when the activity ended while the app was there to see it, which in
+  /// practice means the user swiped it off the Lock Screen. It then stays off
+  /// until they ask for it back: an activity that reappears every time the app
+  /// is opened is not a feature, it is an argument. An activity the *system*
+  /// retired, or one lost while the app was not running, carries no such flag
+  /// and comes back on its own.
+  bool _liveActivityDismissedByUser = false;
+
   bool get isPaired => bundle != null;
 
   /// Live limits: prefer the host's latest snapshot over the pairing-time
@@ -107,11 +124,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     // then already has the choices it should draw with.
     await WidgetBridge.publishPreferences(displayPreferences);
     await WidgetBridge.publish(snapshot);
-    await LiveActivityBridge.publish(snapshot, hostName: _hostName);
+    await _publishLiveActivity(snapshot);
 
     _push.onMessage(_handlePushData);
     _push.onNewToken((_) => registerPush(force: true));
     LiveActivityBridge.onPushToken(_handleLiveActivityToken);
+    LiveActivityBridge.onActivityEnded(_handleLiveActivityEnded);
 
     if (!_observingLifecycle) {
       WidgetsBinding.instance.addObserver(this);
@@ -123,10 +141,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (isPaired) {
       _startTicker();
       await registerPush();
-      // Re-register the Live Activity token: an activity started before the
-      // app was last killed is still running, and the host may have been
-      // re-paired or restored since.
-      await _handleLiveActivityToken(await LiveActivityBridge.pushToken());
+      // The activity may have been dismissed or retired since the app last
+      // ran, in which case this starts a new one; when it is still up, this
+      // re-registers its token, since the host may have been re-paired or
+      // restored in the meantime.
+      await _restoreLiveActivity();
       // A registration also triggers a status push from the host; when the
       // token was already registered, ask explicitly so the UI is fresh.
       await requestStatus();
@@ -152,6 +171,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       // defers while the app is not running, so what is on screen right after
       // a resume can be many minutes old.
       unawaited(_syncIfStale());
+      // Same for the Lock Screen, which may have been dismissed or retired
+      // while the app was away — and which nothing else would bring back.
+      unawaited(_restoreLiveActivity());
     } else {
       _stopTicker();
     }
@@ -165,6 +187,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _rebuildServices();
     _scheduler.reset();
     _registeredLiveActivityToken = null;
+    // A new host means a new activity; whatever the user did with the last
+    // one has nothing to say about this one.
+    _liveActivityDismissedByUser = false;
+    liveActivityRunning = false;
     _startTicker();
     notifyListeners();
     await WidgetBridge.clear();
@@ -180,6 +206,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _rebuildServices();
     _scheduler.reset();
     _registeredLiveActivityToken = null;
+    _liveActivityDismissedByUser = false;
+    liveActivityRunning = false;
     _stopTicker();
     notifyListeners();
     await WidgetBridge.clear();
@@ -369,7 +397,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       // Pushes are also delivered in the background, so the widgets and the
       // Live Activity stay current without the app being opened.
       await WidgetBridge.publish(updated);
-      await LiveActivityBridge.publish(updated, hostName: _hostName);
+      await _publishLiveActivity(updated);
     }
   }
 
@@ -395,11 +423,99 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// the switch has a visible effect.
   Future<void> setLiveActivityEnabled(bool enabled) async {
     liveActivityEnabled = enabled;
+    // Switching it on is as clear a request for it back as the restart button.
+    if (enabled) _liveActivityDismissedByUser = false;
     notifyListeners();
     await LiveActivityBridge.setEnabled(enabled);
     if (enabled) {
-      await LiveActivityBridge.publish(snapshot, hostName: _hostName);
+      await _publishLiveActivity(snapshot);
+    } else {
+      liveActivityRunning = false;
+      notifyListeners();
     }
+  }
+
+  /// Starts a fresh activity, replacing any that is still running.
+  ///
+  /// The way back after the Lock Screen was swiped away — and the only one
+  /// that works. A dismissed activity cannot be updated back into existence,
+  /// and the system only hands out a push token when an activity is
+  /// *requested*, so the host has to be given the new one before it can update
+  /// anything remotely again.
+  Future<void> restartLiveActivity() async {
+    if (!liveActivityEnabled) return;
+    _liveActivityDismissedByUser = false;
+    // The old token died with the old activity. Forget it, so the replacement
+    // is registered even if the host was never told the first one had gone.
+    _registeredLiveActivityToken = null;
+
+    await LiveActivityBridge.restart(snapshot, hostName: _hostName);
+    liveActivityRunning = await LiveActivityBridge.isRunning();
+    notifyListeners();
+
+    // The token usually turns up on the stream a moment later, but ask as
+    // well in case the system had one ready straight away.
+    await _handleLiveActivityToken(await LiveActivityBridge.pushToken());
+  }
+
+  /// Puts the Lock Screen back, and keeps what is on it honest.
+  ///
+  /// Run whenever the app comes to the front, because that is the first moment
+  /// it can find out what happened while it was away: the system retires
+  /// activities after a few hours, silent status pushes that would have
+  /// refreshed one are dropped at the system's discretion, and neither leaves
+  /// any trace the app could have read earlier.
+  Future<void> _restoreLiveActivity() async {
+    if (!isPaired) return;
+
+    final running = await LiveActivityBridge.isRunning();
+    if (running != liveActivityRunning) {
+      liveActivityRunning = running;
+      notifyListeners();
+    }
+    if (!liveActivityEnabled) return;
+
+    if (running) {
+      // Still up, but possibly showing a reading from before the app was
+      // suspended. Republishing refreshes both the content and the stale date
+      // the system dims it by.
+      await _publishLiveActivity(snapshot);
+      // And retries a token registration that failed while the host was
+      // unreachable: nothing else would, and until it succeeds the Lock Screen
+      // is only ever updated while this app happens to be awake.
+      await _handleLiveActivityToken(await LiveActivityBridge.pushToken());
+      return;
+    }
+
+    if (_liveActivityDismissedByUser) return;
+    // Nothing worth putting on the Lock Screen yet; the first snapshot starts
+    // one through the ordinary publish path.
+    if (snapshot?.latest == null) return;
+    await restartLiveActivity();
+  }
+
+  /// Puts a snapshot on the Lock Screen, unless the user has swiped it away.
+  ///
+  /// The bridge would otherwise start a new activity for any snapshot that
+  /// found none running — which is exactly the recovery an activity retired by
+  /// the system needs, and exactly the wrong answer to one the user just
+  /// dismissed.
+  Future<void> _publishLiveActivity(StatusSnapshot? updated) async {
+    if (_liveActivityDismissedByUser) return;
+    await LiveActivityBridge.publish(updated, hostName: _hostName);
+    final running = await LiveActivityBridge.isRunning();
+    if (running == liveActivityRunning) return;
+    liveActivityRunning = running;
+    notifyListeners();
+  }
+
+  /// The activity left the Lock Screen while the app was running.
+  void _handleLiveActivityEnded() {
+    liveActivityRunning = false;
+    _liveActivityDismissedByUser = true;
+    // The token goes with it; a new activity will bring a new one.
+    _registeredLiveActivityToken = null;
+    notifyListeners();
   }
 
   /// Puts away the host's update notice until it sends another one.
@@ -418,7 +534,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
     await DisplayPreferencesStore.save(preferences);
     await WidgetBridge.publishPreferences(preferences);
-    await LiveActivityBridge.publish(snapshot, hostName: _hostName);
+    await _publishLiveActivity(snapshot);
   }
 
   /// Lets the host update the Live Activity directly, or takes that back.
@@ -432,11 +548,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await LiveActivityBridge.setRemoteUpdatesEnabled(enabled);
 
     if (enabled) {
-      await LiveActivityBridge.restart(snapshot, hostName: _hostName);
-      // The token usually arrives on the stream a moment later, but ask too:
-      // an activity that was already running with a token has nothing new to
-      // report.
-      await _handleLiveActivityToken(await LiveActivityBridge.pushToken());
+      // Restarting is what mints the token, and it registers the new one.
+      await restartLiveActivity();
     } else {
       // Forced: this app may have been restarted since the token was
       // registered, so it cannot tell from memory whether the host still holds

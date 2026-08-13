@@ -48,6 +48,10 @@ struct FollowerActivityAttributes: ActivityAttributes {
         /// Seconds since epoch of the host's last loop cycle.
         let lastLoop: Double?
 
+        /// Matches the widgets and Trio itself: older than six minutes is no
+        /// longer current.
+        static let staleAfter: TimeInterval = 6 * 60
+
         var reading: Date { Date(timeIntervalSince1970: readingDate) }
 
         var lastLoopDate: Date? { lastLoop.map { Date(timeIntervalSince1970: $0) } }
@@ -55,10 +59,14 @@ struct FollowerActivityAttributes: ActivityAttributes {
         var isOverrideActive: Bool { !(overrideName ?? "").isEmpty }
         var isTempTargetActive: Bool { !(tempTargetName ?? "").isEmpty }
 
-        /// Matches the widgets and Trio itself: older than six minutes is no
-        /// longer current.
+        /// When this reading stops being current. Handed to ActivityKit as the
+        /// activity's stale date, which is what gets the system to re-render
+        /// the Lock Screen at that moment — nothing else would, because a Live
+        /// Activity is only redrawn when new content arrives.
+        var staleDate: Date { reading.addingTimeInterval(Self.staleAfter) }
+
         func isStale(asOf date: Date) -> Bool {
-            date.timeIntervalSince(reading) > 6 * 60
+            date.timeIntervalSince(reading) > Self.staleAfter
         }
 
         var glucoseValue: Double? { Double(bg) }

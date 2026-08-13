@@ -25,6 +25,10 @@ class LiveActivitySupport {
 class TrioLiveActivity {
   static const MethodChannel _channel = MethodChannel('trio_follower/live_activity');
 
+  static void Function(String? token)? _pushTokenHandler;
+  static void Function()? _activityEndedHandler;
+  static bool _handlerInstalled = false;
+
   static Future<LiveActivitySupport> support() async {
     if (!Platform.isIOS) return LiveActivitySupport.unsupported;
     try {
@@ -41,6 +45,22 @@ class TrioLiveActivity {
     }
   }
 
+  /// Whether an activity is on the Lock Screen right now.
+  ///
+  /// Worth asking rather than assuming: the system retires activities after a
+  /// few hours and the user can dismiss one whenever they like, both of which
+  /// normally happen while the app is not running.
+  static Future<bool> isRunning() async {
+    if (!Platform.isIOS) return false;
+    try {
+      return await _channel.invokeMethod<bool>('isRunning') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// Starts the activity, or updates it when one is already running.
   static Future<bool> start({required String hostName, required String state}) =>
       _invoke('start', {'hostName': hostName, 'state': state});
@@ -48,6 +68,14 @@ class TrioLiveActivity {
   /// Updates the running activity, starting one if the system already ended it.
   static Future<bool> update({required String hostName, required String state}) =>
       _invoke('update', {'hostName': hostName, 'state': state});
+
+  /// Ends any running activity and starts a fresh one.
+  ///
+  /// Not the same as [update]: only a newly requested activity is issued a push
+  /// token, so this is what a dismissed activity — and a host that needs to
+  /// address a new one — actually requires.
+  static Future<bool> restart({required String hostName, required String state}) =>
+      _invoke('restart', {'hostName': hostName, 'state': state});
 
   static Future<bool> end() => _invoke('end', const {});
 
@@ -73,9 +101,30 @@ class TrioLiveActivity {
   /// life, so a caller that reads it once will end up stale.
   static void onPushToken(void Function(String? token) handler) {
     if (!Platform.isIOS) return;
+    _pushTokenHandler = handler;
+    _installHandler();
+  }
+
+  /// Called when the activity leaves the Lock Screen — swiped away by the user,
+  /// or retired by the system — while the app is running to hear it.
+  static void onActivityEnded(void Function() handler) {
+    if (!Platform.isIOS) return;
+    _activityEndedHandler = handler;
+    _installHandler();
+  }
+
+  /// One channel handler for both callbacks: `setMethodCallHandler` keeps a
+  /// single handler per channel, so registering the second listener would
+  /// silently unregister the first.
+  static void _installHandler() {
+    if (_handlerInstalled) return;
+    _handlerInstalled = true;
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'onPushToken') {
-        handler(call.arguments as String?);
+      switch (call.method) {
+        case 'onPushToken':
+          _pushTokenHandler?.call(call.arguments as String?);
+        case 'onActivityEnded':
+          _activityEndedHandler?.call();
       }
       return null;
     });

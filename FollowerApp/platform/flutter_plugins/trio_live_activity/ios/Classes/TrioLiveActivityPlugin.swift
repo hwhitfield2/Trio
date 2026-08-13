@@ -17,6 +17,8 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
     /// Watches the running activity's push token. One activity at a time, so
     /// one task at a time.
     private var tokenTask: Task<Void, Never>?
+    /// Watches whether that activity is still on the Lock Screen at all.
+    private var stateTask: Task<Void, Never>?
     private var pushToken: String?
 
     init(channel: FlutterMethodChannel) {
@@ -40,15 +42,25 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
         switch call.method {
         case "isSupported":
             result(supportInfo())
+        case "isRunning":
+            result(isRunning())
         case "start":
-            perform(call, result: result) { try self.start(arguments: $0) }
+            perform(call, result: result) { try await self.start(arguments: $0) }
         case "update":
-            perform(call, result: result) { try self.update(arguments: $0) }
+            perform(call, result: result) { try await self.update(arguments: $0) }
+        case "restart":
+            perform(call, result: result) { try await self.restart(arguments: $0) }
         case "pushToken":
             result(pushToken)
         case "end":
-            Task { await self.endAll() }
-            result(true)
+            // Awaited rather than fire-and-forget: an activity is usually ended
+            // in order to start another one, and a `request` that lands while
+            // the old activity is still up quietly updates it instead — leaving
+            // the caller with the dead push token it was trying to replace.
+            Task {
+                await self.endAll()
+                self.reply(result, true)
+            }
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -57,18 +69,26 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
     private func perform(
         _ call: FlutterMethodCall,
         result: @escaping FlutterResult,
-        _ body: @escaping ([String: Any]) throws -> Void
+        _ body: @escaping ([String: Any]) async throws -> Void
     ) {
         guard let arguments = call.arguments as? [String: Any] else {
             result(FlutterError(code: "bad_arguments", message: "Expected a map", details: nil))
             return
         }
-        do {
-            try body(arguments)
-            result(true)
-        } catch {
-            result(FlutterError(code: "live_activity_failed", message: "\(error)", details: nil))
+        Task {
+            do {
+                try await body(arguments)
+                self.reply(result, true)
+            } catch {
+                self.reply(result, FlutterError(code: "live_activity_failed", message: "\(error)", details: nil))
+            }
         }
+    }
+
+    /// Answers a method call on the platform thread, which is the only thread
+    /// a `FlutterResult` may be called on.
+    private func reply(_ result: @escaping FlutterResult, _ value: Any?) {
+        DispatchQueue.main.async { result(value) }
     }
 
     /// Two separate answers: whether the OS can do Live Activities at all, and
@@ -87,35 +107,65 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
         return ["available": false, "enabled": false]
     }
 
-    // MARK: - ActivityKit
-
-    private func start(arguments: [String: Any]) throws {
+    /// Whether an activity is on the Lock Screen right now.
+    ///
+    /// Asked rather than remembered: the system ends activities on its own
+    /// after a few hours, and the user can swipe one away at any moment — both
+    /// of which usually happen while the app is not running to be told about
+    /// it, so what the app last knew is worth nothing after a resume.
+    private func isRunning() -> Bool {
         #if canImport(ActivityKit)
             if #available(iOS 16.2, *) {
-                let hostName = arguments["hostName"] as? String ?? "Trio"
+                return Activity<FollowerActivityAttributes>.activities.contains { activity in
+                    switch activity.activityState {
+                    case .ended,
+                         .dismissed:
+                        return false
+                    default:
+                        // `.active`, and `.stale` — which is still on screen,
+                        // just showing content the system knows is old.
+                        return true
+                    }
+                }
+            }
+        #endif
+        return false
+    }
+
+    // MARK: - ActivityKit
+
+    private func start(arguments: [String: Any]) async throws {
+        #if canImport(ActivityKit)
+            if #available(iOS 16.2, *) {
                 let state = try Self.contentState(from: arguments)
 
                 // Only ever one activity: replace rather than stack.
                 if let existing = Activity<FollowerActivityAttributes>.activities.first {
-                    Task {
-                        await existing.update(Self.content(state))
-                    }
+                    await existing.update(Self.content(state))
                     observe(existing)
                     return
                 }
 
-                // `.token` asks the system for an APNS token addressed straight
-                // at this activity. The host can then update the Lock Screen
-                // without the app being woken at all, which is the only way the
-                // activity stays current while the app is suspended. The token
-                // is only ever sent to the host when the user opts in; minting
-                // one costs nothing on its own.
-                let activity = try Activity.request(
-                    attributes: FollowerActivityAttributes(hostName: hostName),
-                    content: Self.content(state),
-                    pushType: .token
-                )
-                observe(activity)
+                try request(hostName: Self.hostName(from: arguments), state: state)
+                return
+            }
+        #endif
+        throw LiveActivityError.unsupported
+    }
+
+    /// Ends whatever is running and starts a fresh activity in its place.
+    ///
+    /// The way back after the user swiped the activity away, and the only
+    /// correct way to restart one: the system hands out a push token when an
+    /// activity is *requested*, so one that is merely updated can never gain
+    /// its own — the host would go on pushing at an address that no longer
+    /// draws anything.
+    private func restart(arguments: [String: Any]) async throws {
+        #if canImport(ActivityKit)
+            if #available(iOS 16.2, *) {
+                let state = try Self.contentState(from: arguments)
+                await endAll()
+                try request(hostName: Self.hostName(from: arguments), state: state)
                 return
             }
         #endif
@@ -132,7 +182,24 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
     }
 
     #if canImport(ActivityKit)
-        /// Follows the activity's push token for as long as it lives.
+        @available(iOS 16.2, *)
+        private func request(hostName: String, state: FollowerActivityAttributes.ContentState) throws {
+            // `.token` asks the system for an APNS token addressed straight
+            // at this activity. The host can then update the Lock Screen
+            // without the app being woken at all, which is the only way the
+            // activity stays current while the app is suspended. The token
+            // is only ever sent to the host when the user opts in; minting
+            // one costs nothing on its own.
+            let activity = try Activity.request(
+                attributes: FollowerActivityAttributes(hostName: hostName),
+                content: Self.content(state),
+                pushType: .token
+            )
+            observe(activity)
+        }
+
+        /// Follows the activity's push token, and its life, for as long as it
+        /// has one.
         ///
         /// The token is not available synchronously after `request`, and the
         /// system rotates it during the activity's life, so the stream is the
@@ -147,6 +214,27 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
                     DispatchQueue.main.async { self?.publish(token: token) }
                 }
             }
+
+            stateTask?.cancel()
+            stateTask = Task { [weak self] in
+                for await state in activity.activityStateUpdates {
+                    switch state {
+                    case .ended,
+                         .dismissed:
+                        DispatchQueue.main.async {
+                            // Nothing else would tell the app the Lock Screen
+                            // went away: the user swipes an activity off, or the
+                            // system retires it, without the app being involved.
+                            self?.publish(token: nil)
+                            self?.channel.invokeMethod("onActivityEnded", arguments: nil)
+                        }
+                    default:
+                        // `.stale` is not the end of anything — the activity is
+                        // still there, showing content the system knows is old.
+                        break
+                    }
+                }
+            }
         }
     #endif
 
@@ -158,7 +246,7 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
         channel.invokeMethod("onPushToken", arguments: token)
     }
 
-    private func update(arguments: [String: Any]) throws {
+    private func update(arguments: [String: Any]) async throws {
         #if canImport(ActivityKit)
             if #available(iOS 16.2, *) {
                 let state = try Self.contentState(from: arguments)
@@ -167,13 +255,11 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
                     // Nothing running: treat an update as a start, so an activity
                     // the system ended after its 8-hour limit comes back on the
                     // next reading rather than staying gone until the app is opened.
-                    try start(arguments: arguments)
+                    try await start(arguments: arguments)
                     return
                 }
-                Task {
-                    for activity in activities {
-                        await activity.update(Self.content(state))
-                    }
+                for activity in activities {
+                    await activity.update(Self.content(state))
                 }
                 return
             }
@@ -182,6 +268,14 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
     }
 
     private func endAll() async {
+        // Cancelled before the activity is ended, not after: a deliberate end
+        // is not the user dismissing anything, and Dart must not be told it
+        // lost an activity that is in the middle of being replaced.
+        tokenTask?.cancel()
+        tokenTask = nil
+        stateTask?.cancel()
+        stateTask = nil
+
         #if canImport(ActivityKit)
             if #available(iOS 16.2, *) {
                 for activity in Activity<FollowerActivityAttributes>.activities {
@@ -189,11 +283,13 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
                 }
             }
         #endif
-        tokenTask?.cancel()
-        tokenTask = nil
         // The token dies with the activity; tell Dart so the host is told to
         // stop pushing to it rather than pushing into the void.
         DispatchQueue.main.async { self.publish(token: nil) }
+    }
+
+    private static func hostName(from arguments: [String: Any]) -> String {
+        arguments["hostName"] as? String ?? "Trio"
     }
 
     #if canImport(ActivityKit)
@@ -201,9 +297,12 @@ public class TrioLiveActivityPlugin: NSObject, FlutterPlugin {
         private static func content(
             _ state: FollowerActivityAttributes.ContentState
         ) -> ActivityContent<FollowerActivityAttributes.ContentState> {
-            // The system dims the activity once it is stale. Six minutes matches
-            // when the widgets strike the reading through.
-            ActivityContent(state: state, staleDate: state.reading.addingTimeInterval(6 * 60))
+            // The stale date is what makes the Lock Screen admit it has stopped
+            // keeping up: the system re-renders the activity when it passes, and
+            // the views draw the reading struck through from then on. Without it
+            // an activity nobody updates keeps showing its last number as though
+            // it had just arrived. Six minutes matches the widgets.
+            ActivityContent(state: state, staleDate: state.staleDate)
         }
 
         @available(iOS 16.2, *)

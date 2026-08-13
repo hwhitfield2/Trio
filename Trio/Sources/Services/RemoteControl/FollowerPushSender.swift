@@ -174,11 +174,17 @@ final class FollowerPushSender {
         request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue("liveactivity", forHTTPHeaderField: "apns-push-type")
-        // Priority 5 is not drawn from the system's ActivityKit budget, so a
-        // reading every five minutes never gets the follower throttled. A
-        // Live Activity update is never urgent enough to spend the budget:
-        // anything that is urgent goes out as an alert push instead.
-        request.setValue("5", forHTTPHeaderField: "apns-priority")
+        // Priority 10, not 5. A priority 5 update is explicitly deliverable
+        // "at a time that is power-efficient for the device", which for a
+        // reading every five minutes means the Lock Screen routinely sits
+        // minutes behind the app — the update is not lost, it simply arrives
+        // too late to be the current glucose.
+        //
+        // Spending the budget is the point rather than the cost here: the
+        // follower app declares NSSupportsLiveActivitiesFrequentUpdates, which
+        // is exactly the allowance a CGM cadence asks for, and leaves the user
+        // a switch in iOS Settings if they would rather have the battery.
+        request.setValue("10", forHTTPHeaderField: "apns-priority")
         // Live Activity pushes have their own topic suffix.
         request.setValue("\(follower.pushBundleId ?? "").push-type.liveactivity", forHTTPHeaderField: "apns-topic")
 

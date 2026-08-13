@@ -66,6 +66,22 @@ class SettingsScreen extends StatelessWidget {
                         ? (value) => context.read<AppState>().setLiveActivityRemoteUpdates(value)
                         : null,
                   ),
+                if (state.liveActivitySupport.available && state.liveActivityEnabled)
+                  ListTile(
+                    leading: const Icon(Icons.restart_alt),
+                    title: const Text('Start a new Live Activity'),
+                    subtitle: Text(
+                      state.liveActivityRunning
+                          ? 'Replaces the one on the Lock Screen with a fresh '
+                              'one. Use this if it has stopped keeping up.'
+                          : 'There is none on the Lock Screen right now — it was '
+                              'dismissed, or the system ended it. This puts it back.',
+                    ),
+                    // Nothing to show until the host has sent a reading; the
+                    // activity would be started and immediately ended again.
+                    enabled: state.snapshot?.latest != null,
+                    onTap: () => context.read<AppState>().restartLiveActivity(),
+                  ),
                 if (state.liveActivitySupport.available)
                   ListTile(
                     leading: const Icon(Icons.tune),

@@ -14,6 +14,12 @@ It also shows live glucose, IOB, COB, loop state and active targets/overrides
 — **pushed end-to-end encrypted straight from the host device**. There is no
 Nightscout and no other third-party data service anywhere in the loop.
 
+**Touch and hold the glucose chart** — or drag sideways across it — to read a
+single reading's value and time; the readings are five minutes apart and the
+chart is small, so there is otherwise no way to tell what any given dot was.
+Releasing puts the chart back. The same readout is published as the chart's
+accessibility value, since painted text is invisible to a screen reader.
+
 The same data is available on the **home screen**, on both platforms: an iOS
 widget (small, medium, and the three lock screen sizes) and an Android app
 widget. Both are redrawn whenever a status push arrives, including while the
@@ -180,8 +186,9 @@ or **Widgets** → **Trio Follower** on Android.
   whatever size you give it.
 
 Both show glucose and trend, the delta, IOB, COB and the time of the reading,
-coloured with the same 70/180 mg/dL thresholds as the in-app chart, and strike
-the value through once the reading is more than six minutes old.
+coloured with the same thresholds as the in-app chart — the ones the host
+alerts on, or 70/180 mg/dL until it reports them — and strike the value
+through once the reading is more than six minutes old.
 
 How it works: `lib/services/widget_bridge.dart` formats every displayed value
 and writes one JSON payload to shared storage whenever a status push arrives —
@@ -324,9 +331,13 @@ being woken at all:
 2. With **Settings → Let the host update it directly** switched on, the app
    sends that token to the host (`register_live_activity`).
 3. The host then pushes an `apns-push-type: liveactivity` update to it on
-   every reading, at `apns-priority: 5` — a priority that does not count
-   against the system's ActivityKit budget, so a five-minute cadence is not
-   throttled.
+   every reading, at `apns-priority: 10`. Priority 5 is the one that stays out
+   of the system's ActivityKit budget, but it is also explicitly deliverable
+   whenever the device finds it power-efficient — which for a five-minute
+   cadence leaves the Lock Screen minutes behind the app. The app declares
+   `NSSupportsLiveActivitiesFrequentUpdates`, which is the allowance a CGM
+   cadence asks for, and leaves the user a switch in iOS Settings if they
+   would rather have the battery.
 
 The system draws these itself, so the Lock Screen and Dynamic Island stay
 current while the app is suspended or has been swiped away — the cases where
@@ -380,6 +391,40 @@ Two more things worth knowing:
   time it runs. Reviving it remotely would need a push-to-start token
   (iOS 17.2+), which is not implemented — and Apple requires start pushes to
   carry a user-visible alert.
+
+### Staleness, and getting the activity back
+
+Two different failures look the same from the Lock Screen — the activity is
+showing an old number, or it is not there at all — and they need different
+answers.
+
+**Showing an old number.** A Live Activity is only re-rendered when new
+content arrives, so a view that worked out staleness from the current time
+would draw the last reading as current forever once updates stopped. Every
+content state therefore carries a **stale date** six minutes past its reading,
+which is what makes the system re-render at that moment and set
+`context.isStale`; the views read that flag, and strike the glucose through
+when it is set. Alongside it, every layout shows the reading's age as a
+relative date, which SwiftUI keeps counting up on its own without any update
+at all — so on iOS 16, where `isStale` does not exist, the Lock Screen still
+cannot look fresher than its data.
+
+**Not there at all.** An activity ends when the user swipes it away or when
+the system retires it, usually while the app is not running to hear about it.
+So:
+
+- The app asks ActivityKit whether one is running rather than remembering,
+  every time it comes to the front, and starts a fresh one if not.
+- **Settings → Start a new Live Activity**, and a card on the home screen when
+  one is missing, do the same on demand.
+- Restarting means *ending and requesting*, never updating: the system issues
+  a push token when an activity is requested, so an activity that is merely
+  updated can never gain one — the host would go on pushing at a dead address.
+  The new token is registered with the host as part of the restart.
+- A dismissal the app *witnesses* is taken as a decision and left alone until
+  the user asks for the activity back (or the app is next launched). One it
+  finds after the fact is not: that is the system's doing, and comes back by
+  itself.
 
 ## Limitations
 

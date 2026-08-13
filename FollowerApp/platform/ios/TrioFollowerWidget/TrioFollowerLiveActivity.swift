@@ -38,7 +38,7 @@ struct TrioFollowerLiveActivity: Widget {
             let state = context.state
             let preferences = FollowerDisplayPreferences.load()
             let scheme = preferences.glucoseColor
-            let stale = state.isStale(asOf: Date())
+            let stale = context.readingIsStale
             let glucoseColor = state.glucoseColor(scheme)
 
             return DynamicIsland {
@@ -59,6 +59,7 @@ struct TrioFollowerLiveActivity: Widget {
                         Text(verbatim: "IOB \(state.iob)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        FollowerReadingAge(state: state, stale: stale)
                     }
                     .padding(.trailing, 4)
                 }

@@ -19,6 +19,44 @@ extension FollowerActivityAttributes.ContentState {
     }
 }
 
+@available(iOS 16.2, *)
+extension ActivityViewContext where Attributes == FollowerActivityAttributes {
+    /// Whether the reading on screen has aged out.
+    ///
+    /// The `isStale` half is the one that matters. A Live Activity view is
+    /// rendered only when new content arrives, so a view that decided this
+    /// from `Date()` alone would draw the last reading as current forever once
+    /// updates stopped — which is exactly what a stale Lock Screen looks like.
+    /// The system re-renders at the activity's stale date and flips this flag,
+    /// so the strikethrough appears without anything having to be pushed.
+    ///
+    /// The date comparison is the iOS 16 fallback, and also catches a state
+    /// that was already old when it arrived.
+    var readingIsStale: Bool {
+        if #available(iOS 17.0, *), isStale { return true }
+        return state.isStale(asOf: Date())
+    }
+}
+
+/// How long ago the reading was taken, counting up by itself.
+///
+/// A relative date is the one thing on the Lock Screen that keeps moving
+/// without a content update, on every iOS version — so the activity can never
+/// look fresher than the data behind it.
+@available(iOS 16.2, *)
+struct FollowerReadingAge: View {
+    let state: FollowerActivityAttributes.ContentState
+    let stale: Bool
+
+    var body: some View {
+        Text(state.reading, style: .relative)
+            .font(.caption2)
+            .monospacedDigit()
+            .lineLimit(1)
+            .foregroundStyle(stale ? .red.opacity(0.8) : .secondary)
+    }
+}
+
 /// Whether the activity is being drawn in the Apple Watch Smart Stack or on
 /// CarPlay rather than on the phone.
 ///
@@ -207,7 +245,7 @@ struct FollowerLiveActivityView: View {
     let preferences: FollowerDisplayPreferences
 
     private var state: FollowerActivityAttributes.ContentState { context.state }
-    private var stale: Bool { state.isStale(asOf: Date()) }
+    private var stale: Bool { context.readingIsStale }
     private var scheme: FollowerDisplayPreferences.GlucoseColorScheme { preferences.glucoseColor }
 
     var body: some View {
@@ -249,9 +287,10 @@ struct FollowerLiveActivityView: View {
 
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(state.change).font(.headline)
-                    Text(state.reading, style: .time)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    // How old, not when: the Smart Stack card can sit
+                    // untouched for hours, and a clock time there says
+                    // nothing about whether it is still worth reading.
+                    FollowerReadingAge(state: state, stale: stale)
                 }
             }
         }
@@ -282,10 +321,14 @@ struct FollowerLiveActivityView: View {
                     }
                 }
 
-                Text(context.attributes.hostName)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(context.attributes.hostName)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text(verbatim: "·").font(.caption2).foregroundStyle(.secondary)
+                    FollowerReadingAge(state: state, stale: stale)
+                }
             }
         } else {
             VStack(spacing: 6) {
@@ -305,6 +348,7 @@ struct FollowerLiveActivityView: View {
                             .lineLimit(1)
                         Text(verbatim: "IOB \(state.iob) · COB \(state.cob)")
                             .font(.caption)
+                        FollowerReadingAge(state: state, stale: stale)
                     }
                 }
                 .foregroundStyle(stale ? .secondary : state.glucoseColor(scheme))
