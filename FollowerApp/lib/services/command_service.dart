@@ -27,8 +27,17 @@ class CommandService {
     final payload = command.toPayload(user: followerName, sequence: sequence);
     final encrypted = await _messenger.encrypt(payload);
 
+    // Null for a status refresh or a registration, which the host handles
+    // without announcing anything.
+    final alert = command.hostAlert(followerName: followerName);
+
     try {
-      await _apns.send(encryptedData: encrypted, followerId: bundle.followerId);
+      await _apns.send(
+        encryptedData: encrypted,
+        followerId: bundle.followerId,
+        alertTitle: alert?.title,
+        alertBody: alert?.body,
+      );
       return CommandRecord(
         description: command.describe(),
         sentAt: DateTime.now(),

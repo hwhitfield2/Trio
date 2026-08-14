@@ -116,6 +116,11 @@ extension Home {
         /// Set by the unannounced meal detector while the app is active; the Home
         /// view presents a prompt offering to open the carbs entry.
         var unannouncedMealSuggestion: UnannouncedMealSuggestion?
+        /// The insulin suspension a follower asked for, while it is still in
+        /// force. The Home view puts it on screen so the two answers to the
+        /// alarm are reachable inside the app, not only on the notification —
+        /// which is easy to swipe away, and gone for good once it is.
+        var followerSuspension: FollowerSuspension?
         private(set) var setupPumpType: PumpConfig.PumpType = .minimed
         var minForecast: [Int] = []
         var maxForecast: [Int] = []
@@ -166,6 +171,17 @@ extension Home {
 
             // Parallelize Setup functions
             setupHomeViewConcurrently()
+        }
+
+        /// Pulls the follower suspension that is still waiting for an answer
+        /// into view state. An acknowledged one is dropped: the Remote Control
+        /// screen carries the rest of its story, and Home should not keep
+        /// blocking the numbers once the alarm has been answered.
+        func refreshFollowerSuspension() {
+            let suspension = FollowerSuspensionManager.shared.current
+            Task { @MainActor [weak self] in
+                self?.followerSuspension = suspension?.isAwaitingAcknowledgement == true ? suspension : nil
+            }
         }
 
         private func setupHomeViewConcurrently() {
@@ -322,6 +338,23 @@ extension Home {
             broadcaster.register(PumpReservoirObserver.self, observer: self)
             broadcaster.register(PumpDeactivatedObserver.self, observer: self)
             broadcaster.register(UnannouncedMealObserver.self, observer: self)
+
+            // A follower's suspension can land while Home is already on screen
+            // (the push is handled in the background) or before the app was
+            // ever opened, so read the stored state now and follow it after.
+            refreshFollowerSuspension()
+
+            NotificationCenter.default
+                .publisher(for: FollowerSuspensionManager.stateDidChangeNotification)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshFollowerSuspension() }
+                .store(in: &subscriptions)
+
+            NotificationCenter.default
+                .publisher(for: UIApplication.didBecomeActiveNotification)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshFollowerSuspension() }
+                .store(in: &subscriptions)
 
             timer.eventHandler = {
                 DispatchQueue.main.async { [weak self] in

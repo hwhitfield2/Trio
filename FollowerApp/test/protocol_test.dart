@@ -126,6 +126,39 @@ void main() {
       expect(register['app_platform'], 'ios');
     });
 
+    test('only commands that change something get a banner on the host', () {
+      // Information retrieval and registrations run on a schedule; a banner
+      // for each one is noise on the host's phone.
+      for (final quiet in [
+        TrioCommand.statusRequest(),
+        TrioCommand.registerFollower(pushToken: 'abc', pushTransport: 'apns'),
+        TrioCommand.registerLiveActivity(liveActivityToken: 'tok'),
+        TrioCommand.registerLiveActivity(),
+      ]) {
+        expect(quiet.changesSomething, isFalse, reason: quiet.commandType);
+        expect(quiet.hostAlert(followerName: 'Mom'), isNull, reason: quiet.commandType);
+      }
+    });
+
+    test('a command that changes something names the follower and what it did', () {
+      final alert = TrioCommand.bolus(2.5).hostAlert(followerName: 'Mom');
+      expect(alert, isNotNull);
+      expect(alert!.title, 'Remote command from Mom');
+      expect(alert.body, 'Bolus 2.50 U');
+
+      expect(
+        TrioCommand.suspendInsulin().hostAlert(followerName: 'Dad')?.body,
+        'Suspend all insulin delivery',
+      );
+      expect(
+        TrioCommand.tempTarget(targetMgdl: 140, durationMinutes: 90).hostAlert(followerName: 'Mom')?.body,
+        'Temp target 140 mg/dL for 90 min',
+      );
+
+      // A nameless follower still gets a banner — it just cannot say who.
+      expect(TrioCommand.bolus(1).hostAlert(followerName: '  ')?.title, 'Remote command');
+    });
+
     test('emergency suspend is its own command type', () {
       final suspend = TrioCommand.suspendInsulin().toPayload(user: 'Mom', sequence: 9);
       expect(suspend['command_type'], 'suspend_insulin');

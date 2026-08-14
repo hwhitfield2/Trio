@@ -50,6 +50,15 @@ Follower app ──(AES-256-GCM encrypted command over APNS HTTP/2)──▶ App
 - Commands run through the exact same safety validation as any other remote
   command on the host (max bolus, recent-bolus guards, etc.). The follower
   additionally enforces the host's limits in its UI before sending.
+- **Only commands that change something make a sound on the host.** A command
+  that alters therapy — bolus, meal, temp target, override, emergency stop —
+  is sent as an alert push whose banner names the follower and what it asked
+  for ("Remote command from Mom · Bolus 2.50 U"). Status refreshes and push /
+  Live Activity registrations run on a schedule and change nothing, so they go
+  out as silent background pushes: the host still wakes, decrypts and answers
+  them, without putting anything on anyone's screen. A command type this build
+  does not recognize counts as changing something, so it is announced rather
+  than arriving unnoticed.
 
 ### Emergency stop
 
@@ -64,8 +73,13 @@ What happens, in order:
 2. The host suspends the pump, records which follower asked and when, and
    starts a **repeating time-sensitive alarm** on its own screen.
 3. The alarm offers two answers, on the notification itself: *I'm OK — resume
-   insulin* and *I'm OK — stay suspended*. Both also live in Settings →
-   Remote Control for someone who opens the app instead.
+   insulin* and *I'm OK — stay suspended*. The same two sit on a banner across
+   the top of the host's Home screen for as long as the suspension goes
+   unanswered — a notification can be swiped away and is then gone, and the
+   answers must not go with it. (The banner deliberately does not dim the
+   screen behind it: deciding whether to restart insulin means looking at the
+   glucose the banner would otherwise cover.) Both also remain in Settings →
+   Remote Control.
 4. The follower watches the state: **requested**, **suspended · not
    acknowledged** with a running clock, or **acknowledged**.
 

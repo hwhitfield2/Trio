@@ -416,6 +416,7 @@
 		98641AF4F92123DA668AB931 /* CarbRatioEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BDC6993C1087310EDFC428 /* CarbRatioEditorRootView.swift */; };
 		A33352ED40476125EBAC6EE0 /* CarbRatioEditorDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E22146D3DF4853786C78132 /* CarbRatioEditorDataFlow.swift */; };
 		A664B9E921BE53F94969C1EF /* HomeEntryDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42DD8EBD7DECD0B4F21F9CC1 /* HomeEntryDrawerView.swift */; };
+		DDB0BBA02026081400000102 /* HomeFollowerSuspensionBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB0BBA02026081400000101 /* HomeFollowerSuspensionBanner.swift */; };
 		AC19EF2C94084B5BA0175D1D /* SettingsSearchHighlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B83503461B4F8D97B30115 /* SettingsSearchHighlight.swift */; };
 		AD3D2CD42CD01B9EB8F26522 /* PumpConfigDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF65DA88F972B56090AD6AC3 /* PumpConfigDataFlow.swift */; };
 		AEC49BE7B933E7171AFFF218 /* CaregiverMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */; };
@@ -1339,6 +1340,7 @@
 		3F8A87AA037BD079BA3528BA /* ConfigEditorDataFlow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConfigEditorDataFlow.swift; sourceTree = "<group>"; };
 		42369F66CF91F30624C0B3A6 /* BasalProfileEditorProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BasalProfileEditorProvider.swift; sourceTree = "<group>"; };
 		42DD8EBD7DECD0B4F21F9CC1 /* HomeEntryDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeEntryDrawerView.swift; sourceTree = "<group>"; };
+		DDB0BBA02026081400000101 /* HomeFollowerSuspensionBanner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HomeFollowerSuspensionBanner.swift; sourceTree = "<group>"; };
 		44080E4709E3AE4B73054563 /* ConfigEditorProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConfigEditorProvider.swift; sourceTree = "<group>"; };
 		48B83503461B4F8D97B30115 /* SettingsSearchHighlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSearchHighlight.swift; sourceTree = "<group>"; };
 		49090A8C2E9FE8D200D0F5DB /* GarminWatchSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GarminWatchSettings.swift; sourceTree = "<group>"; };
@@ -2621,6 +2623,7 @@
 				379FF177B5B90C8CACBD7F5A /* HomeAdjustmentsDockView.swift */,
 				B577AC963BE2C1AC81829BEE /* HomeQuickActionsView.swift */,
 				42DD8EBD7DECD0B4F21F9CC1 /* HomeEntryDrawerView.swift */,
+				DDB0BBA02026081400000101 /* HomeFollowerSuspensionBanner.swift */,
 			);
 			path = View;
 			sourceTree = "<group>";
@@ -5801,6 +5804,7 @@
 				6597A118249A6D9D43C3ED87 /* HomeQuickActionsView.swift in Sources */,
 				8589D95020F216CA26C5E7A5 /* HistoryRootView+Timeline.swift in Sources */,
 				A664B9E921BE53F94969C1EF /* HomeEntryDrawerView.swift in Sources */,
+				DDB0BBA02026081400000102 /* HomeFollowerSuspensionBanner.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

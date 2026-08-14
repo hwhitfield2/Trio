@@ -58,6 +58,11 @@ final class FollowerSuspensionManager: Injectable {
 
     static let notificationIdentifier = "Trio.followerSuspensionAlarm"
 
+    /// Posted on the main queue whenever the stored suspension changes, so a
+    /// screen that is already open can show the alarm rather than waiting for
+    /// the user to leave and come back.
+    static let stateDidChangeNotification = Notification.Name("Trio.followerSuspensionDidChange")
+
     init(resolver: Resolver = TrioApp.resolver) {
         injectServices(resolver)
     }
@@ -115,7 +120,7 @@ final class FollowerSuspensionManager: Injectable {
             followerName: follower.name,
             requestedAt: Date()
         )
-        queue.sync { save(suspension) }
+        persist(suspension)
         await scheduleAlarm(for: suspension)
 
         debug(.remoteControl, "Insulin suspended at the request of follower \(follower.name)")
@@ -146,7 +151,7 @@ final class FollowerSuspensionManager: Injectable {
         }
 
         suspension.acknowledgedAt = Date()
-        queue.sync { save(suspension) }
+        persist(suspension)
 
         // Let the followers who are watching know, rather than making them wait
         // for the next reading.
@@ -165,7 +170,7 @@ final class FollowerSuspensionManager: Injectable {
         guard let suspension = current, suspension.acknowledgedAt != nil else { return }
         guard apsManager?.isSuspended == false else { return }
         cancelAlarm()
-        queue.sync { save(nil) }
+        persist(nil)
     }
 
     /// Drops the record for a follower being revoked, so a re-pairing does not
@@ -173,7 +178,7 @@ final class FollowerSuspensionManager: Injectable {
     func clearState(followerId: String) {
         guard let suspension = current, suspension.followerId == followerId else { return }
         cancelAlarm()
-        queue.sync { save(nil) }
+        persist(nil)
     }
 
     // MARK: - Alarm
@@ -275,6 +280,16 @@ final class FollowerSuspensionManager: Injectable {
               let decoded = try? JSONDecoder().decode(FollowerSuspension.self, from: data)
         else { return nil }
         return decoded
+    }
+
+    /// Stores the suspension and tells anything on screen that it changed.
+    /// Every mutation goes through here so no path can update the record
+    /// without the UI hearing about it.
+    private func persist(_ suspension: FollowerSuspension?) {
+        queue.sync { save(suspension) }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Self.stateDidChangeNotification, object: nil)
+        }
     }
 
     private func save(_ suspension: FollowerSuspension?) {

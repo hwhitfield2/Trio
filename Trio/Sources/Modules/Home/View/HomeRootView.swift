@@ -933,6 +933,27 @@ extension Home {
             }
         }
 
+        /// Answers a follower's emergency stop from inside the app — the same
+        /// two answers the alarm notification offers, so the choice does not
+        /// depend on the notification still being in Notification Center.
+        ///
+        /// Resuming can fail at the pump, and the banner leaves as soon as the
+        /// alarm is answered either way, so a failed resume has to say so here
+        /// or it would look like insulin had restarted when it had not.
+        private func acknowledgeFollowerSuspension(resumeDelivery: Bool) {
+            Task { @MainActor in
+                let resumed = await FollowerSuspensionManager.shared.acknowledge(resumeDelivery: resumeDelivery)
+                state.refreshFollowerSuspension()
+                if resumeDelivery, !resumed {
+                    showDockToast(String(localized: "Insulin was not resumed — check the pump"))
+                } else if resumeDelivery {
+                    showDockToast(String(localized: "Insulin resumed"))
+                } else {
+                    showDockToast(String(localized: "Alarm answered — insulin stays suspended"))
+                }
+            }
+        }
+
         @ViewBuilder private func dockBolusRow(_ progress: Decimal) -> some View {
             /// ensure that state.lastPumpBolus has a value, i.e. there is a last bolus done by the pump and not an external bolus
             if let bolusTotal = state.lastPumpBolus?.bolus?.amount {
@@ -1521,18 +1542,34 @@ extension Home {
                     }
                 }
 
-                if let dockToastText {
-                    VStack {
-                        HomeToastView(text: dockToastText)
-                            .padding(.top, 8)
+                // Top stack, in priority order: an unanswered emergency stop
+                // outranks anything else on this screen, and the toast stacks
+                // under it rather than on top of it.
+                if state.followerSuspension != nil || dockToastText != nil {
+                    VStack(spacing: 8) {
+                        if let suspension = state.followerSuspension {
+                            HomeFollowerSuspensionBanner(
+                                suspension: suspension,
+                                now: state.timerDate,
+                                onAcknowledge: { acknowledgeFollowerSuspension(resumeDelivery: $0) }
+                            )
+                        }
+                        if let dockToastText {
+                            HomeToastView(text: dockToastText)
+                        }
                         Spacer()
                     }
+                    .padding(.top, 8)
                 }
 
                 if state.waitForSuggestion {
                     CustomProgressView(text: String(localized: "Updating IOB...", comment: "Progress text when updating IOB"))
                 }
             }
+            // On the container, so the banner's own transition runs when the
+            // suspension appears or is answered — it is set from an async hop,
+            // which a withAnimation at the call site would not cover.
+            .animation(.easeInOut(duration: 0.2), value: state.followerSuspension)
             .sheet(item: $activeEntryKind) { kind in
                 HomeEntryDrawer(
                     kind: kind,

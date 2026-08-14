@@ -151,6 +151,41 @@ class TrioCommand {
     };
   }
 
+  /// Whether this command changes anything on the host, as opposed to only
+  /// asking it for information or telling it where to send pushes.
+  ///
+  /// This decides whether the host's phone is allowed to make a sound about it.
+  /// Status refreshes and registrations run on a schedule and in the
+  /// background, so banners for those are pure noise on someone else's phone —
+  /// they are sent silently. An unrecognized command type counts as changing
+  /// something, so a newer command added later is announced by default rather
+  /// than arriving unnoticed.
+  bool get changesSomething {
+    switch (commandType) {
+      case 'status_request':
+      case 'register_follower':
+      case 'register_live_activity':
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  /// The banner the host phone should show for this command, or null when it
+  /// should show nothing at all.
+  ///
+  /// The title names the follower because the host may have several paired, and
+  /// "a command arrived" is not worth waking someone for if they cannot tell
+  /// who sent it or what it did.
+  ({String title, String body})? hostAlert({required String followerName}) {
+    if (!changesSomething) return null;
+    final who = followerName.trim();
+    return (
+      title: who.isEmpty ? 'Remote command' : 'Remote command from $who',
+      body: describe(),
+    );
+  }
+
   String describe() {
     switch (commandType) {
       case 'bolus':

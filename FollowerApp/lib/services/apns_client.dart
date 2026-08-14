@@ -46,17 +46,34 @@ class ApnsClient {
 
   /// Sends the encrypted command envelope. Throws [ApnsException] unless APNS
   /// answers 200.
+  ///
+  /// Pass [alertTitle] and [alertBody] for a command that changes something on
+  /// the host: the push then carries a banner naming the follower and what it
+  /// asked for, so whoever holds the host phone sees who did what. Omit them
+  /// for a status refresh or a registration and the push is silent — the host
+  /// still wakes and answers it, without a notification.
+  ///
+  /// The two kinds of push are also delivered differently, because Apple treats
+  /// them differently: an alert push may be shown even when Trio has been force
+  /// quit, which is what makes an emergency stop worth sending as one, while a
+  /// background push must go out at priority 5 and is delivered at the system's
+  /// discretion — acceptable for a refresh that will simply be retried.
   Future<void> send({
     required String encryptedData,
     required String followerId,
+    String? alertTitle,
+    String? alertBody,
   }) async {
+    final silent = alertTitle == null || alertBody == null;
     final body = jsonEncode({
       'aps': {
-        'alert': {'title': 'Trio', 'body': 'Remote command received'},
+        if (!silent) ...{
+          'alert': {'title': alertTitle, 'body': alertBody},
+          'interruption-level': 'time-sensitive',
+        },
         // content-available wakes Trio in the background so the command is
         // processed without the user tapping the notification.
         'content-available': 1,
-        'interruption-level': 'time-sensitive',
       },
       'encrypted_data': encryptedData,
       'follower_id': followerId,
@@ -86,8 +103,9 @@ class ApnsClient {
           Header.ascii(':authority', _host),
           Header.ascii('authorization', 'bearer $token'),
           Header.ascii('apns-topic', apns.bundleId),
-          Header.ascii('apns-push-type', 'alert'),
-          Header.ascii('apns-priority', '10'),
+          Header.ascii('apns-push-type', silent ? 'background' : 'alert'),
+          // Apple rejects a background push sent at priority 10.
+          Header.ascii('apns-priority', silent ? '5' : '10'),
           Header.ascii('apns-expiration', '0'),
           Header.ascii('content-type', 'application/json'),
           Header.ascii('content-length', bodyBytes.length.toString()),

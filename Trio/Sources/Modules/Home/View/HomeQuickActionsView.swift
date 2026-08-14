@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One entry of the long-press quick actions menu on the + tab button.
+/// One entry of the quick actions menu on the + tab button.
 struct HomeQuickAction: Identifiable {
     let id = UUID()
     let name: String
@@ -10,7 +10,8 @@ struct HomeQuickAction: Identifiable {
     let action: () -> Void
 }
 
-/// The quick actions card that pops above the tab bar on a long-press of +.
+/// The quick actions card that pops above the tab bar on a tap of +.
+/// A long press on + skips this and opens the full Treatments editor.
 struct HomeQuickActionsCard: View {
     let actions: [HomeQuickAction]
     let onClose: () -> Void
