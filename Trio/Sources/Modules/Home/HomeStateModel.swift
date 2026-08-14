@@ -344,13 +344,13 @@ extension Home {
             // ever opened, so read the stored state now and follow it after.
             refreshFollowerSuspension()
 
-            NotificationCenter.default
+            Foundation.NotificationCenter.default
                 .publisher(for: FollowerSuspensionManager.stateDidChangeNotification)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.refreshFollowerSuspension() }
                 .store(in: &subscriptions)
 
-            NotificationCenter.default
+            Foundation.NotificationCenter.default
                 .publisher(for: UIApplication.didBecomeActiveNotification)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.refreshFollowerSuspension() }

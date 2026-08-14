@@ -288,7 +288,7 @@ final class FollowerSuspensionManager: Injectable {
     private func persist(_ suspension: FollowerSuspension?) {
         queue.sync { save(suspension) }
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: Self.stateDidChangeNotification, object: nil)
+            Foundation.NotificationCenter.default.post(name: Self.stateDidChangeNotification, object: nil)
         }
     }
 
