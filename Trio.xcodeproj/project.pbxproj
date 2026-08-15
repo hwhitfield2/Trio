@@ -587,6 +587,7 @@
 		C967DACD3B1E638F8B43BE06 /* ManualTempBasalStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFCFE0781F9074C2917890E8 /* ManualTempBasalStateModel.swift */; };
 		CA02000000000000000010C2 /* DeliveryLimitsSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */; };
 		D11E0000000000000000B002 /* InsulinConcentrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11E0000000000000000A002 /* InsulinConcentrationTests.swift */; };
+		D11E0000000000000000B010 /* DeliveryDiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11E0000000000000000A010 /* DeliveryDiagnosticsTests.swift */; };
 		CA370FC152BC98B3D1832968 /* BasalProfileEditorRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF8BCB0C37DEB5EC377B9612 /* BasalProfileEditorRootView.swift */; };
 		CC6C406E2ACDD69E009B8058 /* RawFetchedProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6C406D2ACDD69E009B8058 /* RawFetchedProfile.swift */; };
 		CC76E9512BD4812E008BEB61 /* Forecast+helper.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC76E9502BD4812E008BEB61 /* Forecast+helper.swift */; };
@@ -881,6 +882,12 @@
 		FA630397F76B582C8D8681A7 /* BasalProfileEditorProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42369F66CF91F30624C0B3A6 /* BasalProfileEditorProvider.swift */; };
 		FAB1E5000000000000000012 /* SafetyEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000002 /* SafetyEnvelope.swift */; };
 		FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000003 /* DecisionAudit.swift */; };
+		FAB1E5000000000000000070 /* DeliveryDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000060 /* DeliveryDiagnostics.swift */; };
+		FAB1E5000000000000000071 /* DeliveryDiagnosticsExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000061 /* DeliveryDiagnosticsExporter.swift */; };
+		FAB1E5000000000000000072 /* DeliveryDiagnosticsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000062 /* DeliveryDiagnosticsDataFlow.swift */; };
+		FAB1E5000000000000000073 /* DeliveryDiagnosticsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000063 /* DeliveryDiagnosticsProvider.swift */; };
+		FAB1E5000000000000000074 /* DeliveryDiagnosticsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000064 /* DeliveryDiagnosticsStateModel.swift */; };
+		FAB1E5000000000000000075 /* DeliveryDiagnosticsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000065 /* DeliveryDiagnosticsRootView.swift */; };
 		FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000004 /* DosingAlgorithm.swift */; };
 		FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000005 /* MLDataExporter.swift */; };
 		FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */; };
@@ -1603,6 +1610,7 @@
 		FA0000000000000000000015 /* FollowerSuspensionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerSuspensionTests.swift; sourceTree = "<group>"; };
 		CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryLimitsSyncTests.swift; sourceTree = "<group>"; };
 		D11E0000000000000000A002 /* InsulinConcentrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsulinConcentrationTests.swift; sourceTree = "<group>"; };
+		D11E0000000000000000A010 /* DeliveryDiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryDiagnosticsTests.swift; sourceTree = "<group>"; };
 		CC6C406D2ACDD69E009B8058 /* RawFetchedProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawFetchedProfile.swift; sourceTree = "<group>"; };
 		CC76E9502BD4812E008BEB61 /* Forecast+helper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Forecast+helper.swift"; sourceTree = "<group>"; };
 		CE1856F42ADC4858007E39C7 /* AddCarbPresetIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddCarbPresetIntent.swift; sourceTree = "<group>"; };
@@ -1893,6 +1901,12 @@
 		F90692D5274B9A450037068D /* HealthKitStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitStateModel.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000002 /* SafetyEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelope.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000003 /* DecisionAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionAudit.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000060 /* DeliveryDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryDiagnostics.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000061 /* DeliveryDiagnosticsExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryDiagnosticsExporter.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000062 /* DeliveryDiagnosticsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryDiagnosticsDataFlow.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000063 /* DeliveryDiagnosticsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryDiagnosticsProvider.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000064 /* DeliveryDiagnosticsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryDiagnosticsStateModel.swift; sourceTree = "<group>"; };
+		FAB1E5000000000000000065 /* DeliveryDiagnosticsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryDiagnosticsRootView.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000004 /* DosingAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DosingAlgorithm.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000005 /* MLDataExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLDataExporter.swift; sourceTree = "<group>"; };
 		FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyEnvelopeTests.swift; sourceTree = "<group>"; };
@@ -2340,6 +2354,7 @@
 				DDF690FE2DA2C9EE008BF16C /* AppDiagnostics */,
 				FAB1E5000000000000000021 /* MLEngineData */,
 				FAB1E5000000000000000041 /* DeliveryCapEditor */,
+				FAB1E5000000000000000067 /* DeliveryDiagnostics */,
 				DD7E1E30000000000000000B /* Telemetry */,
 				DD1745422C55C5C400211FAC /* AutosensSettings */,
 				A42F1FEDFFD0DDE00AAD54D3 /* BasalProfileEditor */,
@@ -2805,6 +2820,7 @@
 				388E5A5825B6F0070019842D /* OpenAPS */,
 				38A0362725ECF05300FCBB52 /* Storage */,
 				FAB1E5000000000000000001 /* MLEngine */,
+				FAB1E5000000000000000066 /* Diagnostics */,
 			);
 			path = APS;
 			sourceTree = "<group>";
@@ -3279,6 +3295,7 @@
 				D091F67751525D4CB3B67883 /* TwilioMessagingTests.swift */,
 				CA02000000000000000010C1 /* DeliveryLimitsSyncTests.swift */,
 				D11E0000000000000000A002 /* InsulinConcentrationTests.swift */,
+				D11E0000000000000000A010 /* DeliveryDiagnosticsTests.swift */,
 				3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */,
 				FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */,
 				FAB1E5000000000000000047 /* DeliveryCapsTests.swift */,
@@ -4639,6 +4656,34 @@
 			path = View;
 			sourceTree = "<group>";
 		};
+		FAB1E5000000000000000066 /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000060 /* DeliveryDiagnostics.swift */,
+				FAB1E5000000000000000061 /* DeliveryDiagnosticsExporter.swift */,
+			);
+			path = Diagnostics;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000067 /* DeliveryDiagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000062 /* DeliveryDiagnosticsDataFlow.swift */,
+				FAB1E5000000000000000063 /* DeliveryDiagnosticsProvider.swift */,
+				FAB1E5000000000000000064 /* DeliveryDiagnosticsStateModel.swift */,
+				FAB1E5000000000000000068 /* View */,
+			);
+			path = DeliveryDiagnostics;
+			sourceTree = "<group>";
+		};
+		FAB1E5000000000000000068 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				FAB1E5000000000000000065 /* DeliveryDiagnosticsRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
 		FAB1E5000000000000000001 /* MLEngine */ = {
 			isa = PBXGroup;
 			children = (
@@ -5143,6 +5188,12 @@
 				FA6E57A72E0A00000000B014 /* MLModelReviewSection.swift in Sources */,
 				FAB1E5000000000000000012 /* SafetyEnvelope.swift in Sources */,
 				FAB1E5000000000000000013 /* DecisionAudit.swift in Sources */,
+				FAB1E5000000000000000070 /* DeliveryDiagnostics.swift in Sources */,
+				FAB1E5000000000000000071 /* DeliveryDiagnosticsExporter.swift in Sources */,
+				FAB1E5000000000000000072 /* DeliveryDiagnosticsDataFlow.swift in Sources */,
+				FAB1E5000000000000000073 /* DeliveryDiagnosticsProvider.swift in Sources */,
+				FAB1E5000000000000000074 /* DeliveryDiagnosticsStateModel.swift in Sources */,
+				FAB1E5000000000000000075 /* DeliveryDiagnosticsRootView.swift in Sources */,
 				FAB1E5000000000000000014 /* DosingAlgorithm.swift in Sources */,
 				FAB1E5000000000000000015 /* MLDataExporter.swift in Sources */,
 				FAB1E5000000000000000017 /* CGMSilenceWatchdog.swift in Sources */,
@@ -5830,6 +5881,7 @@
 				BBE9CD41EFF3DFF711182D23 /* TwilioMessagingTests.swift in Sources */,
 				CA02000000000000000010C2 /* DeliveryLimitsSyncTests.swift in Sources */,
 				D11E0000000000000000B002 /* InsulinConcentrationTests.swift in Sources */,
+				D11E0000000000000000B010 /* DeliveryDiagnosticsTests.swift in Sources */,
 				BD8FC0622D6619E600B95AED /* OverrideStorageTests.swift in Sources */,
 				BD8FC0592D66189700B95AED /* TestAssembly.swift in Sources */,
 				DDC6CA6D2DD90A2A0060EE25 /* LocalizationTests.swift in Sources */,

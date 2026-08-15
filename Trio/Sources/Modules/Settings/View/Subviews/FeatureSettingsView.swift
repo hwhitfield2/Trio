@@ -55,6 +55,15 @@ struct FeatureSettingsView: BaseView {
             .listRowBackground(Color.chart)
 
             Section(
+                header: Text("Troubleshooting").glassCaption(),
+                content: {
+                    SettingsIconRow(symbol: "stopwatch.fill", tint: .insulin, label: Text("Delivery Diagnostics"))
+                        .navigationLink(to: .deliveryDiagnostics, from: self)
+                }
+            )
+            .listRowBackground(Color.chart)
+
+            Section(
                 header: Text("Anonymized Data Sharing").glassCaption(),
                 content: {
                     SettingsIconRow(symbol: "waveform.path.ecg", tint: .loopGreen, label: Text("App Diagnostics"))

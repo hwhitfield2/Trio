@@ -85,6 +85,7 @@ final class BaseAPSManager: APSManager, Injectable {
     @Injected() private var settingsManager: SettingsManager!
     @Injected() private var tddStorage: TDDStorage!
     @Injected() private var broadcaster: Broadcaster!
+    @Injected() private var deliveryDiagnostics: DeliveryDiagnosticsRecorder!
     @Persisted(key: "lastLoopStartDate") private var lastLoopStartDate: Date = .distantPast
     @Persisted(key: "lastLoopDate") var lastLoopDate: Date = .distantPast {
         didSet {
@@ -607,6 +608,11 @@ final class BaseAPSManager: APSManager, Injectable {
 
         if let error = verifyStatus() {
             processError(error)
+            deliveryDiagnostics.recordNotSent(
+                kind: isSMB ? .smb : .manualBolus,
+                requestedUnits: Decimal(amount),
+                reason: "pump status check failed: \(error.localizedDescription)"
+            )
             // Capture broadcaster and queue before async context
             let broadcaster = self.broadcaster
             Task { @MainActor in
@@ -628,7 +634,12 @@ final class BaseAPSManager: APSManager, Injectable {
         debug(.apsManager, "Enact bolus \(roundedAmount), manual \(!isSMB)")
 
         do {
-            try await pump.enactBolus(units: roundedAmount, automatic: isSMB)
+            try await deliveryDiagnostics.timing(
+                kind: isSMB ? .smb : .manualBolus,
+                requestedUnits: Decimal(roundedAmount)
+            ) {
+                try await pump.enactBolus(units: roundedAmount, automatic: isSMB)
+            }
             debug(.apsManager, "Bolus succeeded")
             bolusProgress.send(0)
             callback?(true, String(localized: "Bolus enacted successfully.", comment: "Success message for enacting a bolus"))
@@ -832,15 +843,18 @@ final class BaseAPSManager: APSManager, Injectable {
         // Check if pump is suspended and abort if it is
         if pump.status.pumpStatus.suspended {
             info(.apsManager, "Skipping enactDetermination because pump is suspended")
+            await recordSkippedEnactment(determinationID: determinationID, reason: "pump suspended")
             return // return without throwing an error
         }
 
         // Unable to do temp basal during manual temp basal 😁
         if isManualTempBasal {
+            await recordSkippedEnactment(determinationID: determinationID, reason: "manual temp basal running")
             throw APSError.manualBasalTemp(message: "Loop not possible during the manual basal temp")
         }
 
-        var (rateDecimal, durationInSeconds, smbToDeliver) = try await setValues(determinationID: determinationID)
+        var enactment = try await setValues(determinationID: determinationID)
+        var clamps: [String] = []
 
         // Scheduled delivery caps (docs/ML_DOSING_REPLACEMENT_PLAN.md §2.4): the loop
         // always runs and records its determination — only delivery is clamped here.
@@ -853,26 +867,79 @@ final class BaseAPSManager: APSManager, Injectable {
             let effectiveRate = currentTemp.duration > 0 ? currentTemp.rate : scheduledRate
             let resolved = DeliveryCaps.resolveEnactment(
                 cap: cap,
-                determinationRate: rateDecimal?.decimalValue,
-                determinationDurationSeconds: durationInSeconds,
-                smb: smbToDeliver?.decimalValue,
+                determinationRate: enactment.rate?.decimalValue,
+                determinationDurationSeconds: enactment.durationInSeconds,
+                smb: enactment.smbToDeliver?.decimalValue,
                 effectiveUncappedRate: effectiveRate
             )
             if !resolved.notes.isEmpty {
                 debug(.apsManager, "Scheduled delivery cap active: \(resolved.notes.joined(separator: "; "))")
             }
-            rateDecimal = resolved.rate.map { NSDecimalNumber(decimal: $0) }
-            durationInSeconds = resolved.durationSeconds
-            smbToDeliver = resolved.smb.map { NSDecimalNumber(decimal: $0) }
+            clamps = resolved.notes
+            let requestedSMB = enactment.smbToDeliver?.decimalValue ?? 0
+            enactment.rate = resolved.rate.map { NSDecimalNumber(decimal: $0) }
+            enactment.durationInSeconds = resolved.durationSeconds
+            enactment.smbToDeliver = resolved.smb.map { NSDecimalNumber(decimal: $0) }
+
+            // A cap that zeroes an SMB sends no command and writes no pump event,
+            // so without this the suppressed dose leaves no trace anywhere.
+            if requestedSMB > 0, (enactment.smbToDeliver?.decimalValue ?? 0) <= 0 {
+                deliveryDiagnostics.recordNotSent(
+                    kind: .smb,
+                    requestedUnits: requestedSMB,
+                    reason: "suppressed by scheduled delivery cap",
+                    determinationDeliverAt: enactment.deliverAt,
+                    clamps: clamps
+                )
+            }
         }
 
-        if let rate = rateDecimal, let duration = durationInSeconds {
-            try await performBasal(pump: pump, rate: rate, duration: duration)
+        if let rate = enactment.rate, let duration = enactment.durationInSeconds {
+            try await performBasal(
+                pump: pump,
+                rate: rate,
+                duration: duration,
+                deliverAt: enactment.deliverAt,
+                clamps: clamps
+            )
         }
 
         // only perform a bolus if smbToDeliver is > 0
-        if let smb = smbToDeliver, smb.compare(NSDecimalNumber(value: 0)) == .orderedDescending {
-            try await performBolus(pump: pump, smbToDeliver: smb)
+        if let smb = enactment.smbToDeliver, smb.compare(NSDecimalNumber(value: 0)) == .orderedDescending {
+            try await performBolus(
+                pump: pump,
+                smbToDeliver: smb,
+                deliverAt: enactment.deliverAt,
+                clamps: clamps
+            )
+        }
+    }
+
+    /// Notes a cycle whose dose was never sent.
+    ///
+    /// Nothing else in Trio writes anything on these paths — no pump event, no
+    /// enacted determination — so in every other stored history a suspended pump
+    /// is indistinguishable from a delivering one. Best-effort: a determination
+    /// we cannot re-read is not worth failing the cycle over.
+    private func recordSkippedEnactment(determinationID: NSManagedObjectID, reason: String) async {
+        guard let enactment = try? await setValues(determinationID: determinationID) else { return }
+
+        if let rate = enactment.rate, let duration = enactment.durationInSeconds {
+            deliveryDiagnostics.recordNotSent(
+                kind: .tempBasal,
+                requestedRate: rate.decimalValue,
+                requestedDurationMinutes: Decimal(duration / 60),
+                reason: reason,
+                determinationDeliverAt: enactment.deliverAt
+            )
+        }
+        if let smb = enactment.smbToDeliver, smb.decimalValue > 0 {
+            deliveryDiagnostics.recordNotSent(
+                kind: .smb,
+                requestedUnits: smb.decimalValue,
+                reason: reason,
+                determinationDeliverAt: enactment.deliverAt
+            )
         }
     }
 
@@ -882,30 +949,64 @@ final class BaseAPSManager: APSManager, Injectable {
         return DeliveryCaps.scheduledRate(from: entries.map { (minutes: $0.minutes, rate: $0.rate) }, at: date)
     }
 
-    private func setValues(determinationID: NSManagedObjectID) async throws
-        -> (NSDecimalNumber?, TimeInterval?, NSDecimalNumber?)
-    {
+    /// What the enactment path needs off a determination, plus the `deliverAt`
+    /// that joins each issued command back to the cycle that asked for it.
+    private struct EnactmentValues {
+        var rate: NSDecimalNumber?
+        var durationInSeconds: TimeInterval?
+        var smbToDeliver: NSDecimalNumber?
+        var deliverAt: Date?
+    }
+
+    private func setValues(determinationID: NSManagedObjectID) async throws -> EnactmentValues {
         return try await privateContext.perform {
             do {
                 let determination = try self.privateContext.existingObject(with: determinationID) as? OrefDetermination
 
-                let rate = determination?.rate
-                let duration = determination?.duration.flatMap { TimeInterval(truncating: $0) * 60 }
-                let smbToDeliver = determination?.smbToDeliver ?? 0
-
-                return (rate, duration, smbToDeliver)
+                return EnactmentValues(
+                    rate: determination?.rate,
+                    durationInSeconds: determination?.duration.flatMap { TimeInterval(truncating: $0) * 60 },
+                    smbToDeliver: determination?.smbToDeliver ?? 0,
+                    deliverAt: determination?.deliverAt
+                )
             } catch {
                 throw error
             }
         }
     }
 
-    private func performBasal(pump: PumpManager, rate: NSDecimalNumber, duration: TimeInterval) async throws {
-        try await pump.enactTempBasal(unitsPerHour: Double(truncating: rate), for: duration)
+    private func performBasal(
+        pump: PumpManager,
+        rate: NSDecimalNumber,
+        duration: TimeInterval,
+        deliverAt: Date?,
+        clamps: [String]
+    ) async throws {
+        try await deliveryDiagnostics.timing(
+            kind: .tempBasal,
+            requestedRate: rate.decimalValue,
+            requestedDurationMinutes: Decimal(duration / 60),
+            determinationDeliverAt: deliverAt,
+            clamps: clamps
+        ) {
+            try await pump.enactTempBasal(unitsPerHour: Double(truncating: rate), for: duration)
+        }
     }
 
-    private func performBolus(pump: PumpManager, smbToDeliver: NSDecimalNumber) async throws {
-        try await pump.enactBolus(units: Double(truncating: smbToDeliver), automatic: true)
+    private func performBolus(
+        pump: PumpManager,
+        smbToDeliver: NSDecimalNumber,
+        deliverAt: Date?,
+        clamps: [String]
+    ) async throws {
+        try await deliveryDiagnostics.timing(
+            kind: .smb,
+            requestedUnits: smbToDeliver.decimalValue,
+            determinationDeliverAt: deliverAt,
+            clamps: clamps
+        ) {
+            try await pump.enactBolus(units: Double(truncating: smbToDeliver), automatic: true)
+        }
         bolusProgress.send(0)
     }
 
@@ -927,6 +1028,11 @@ final class BaseAPSManager: APSManager, Injectable {
                 }
 
                 determinationUpdated.timestamp = Date()
+                // Kept distinct from `timestamp`, which other call sites treat as
+                // the determination's own time. This one only ever means "the
+                // cycle finished enacting", which is what the delivery-diagnostics
+                // export measures the enactment lag against.
+                determinationUpdated.timestampEnacted = Date()
                 determinationUpdated.enacted = wasEnacted
                 determinationUpdated.isUploadedToNS = false
 

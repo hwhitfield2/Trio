@@ -342,6 +342,20 @@ enum SettingItems {
             path: ["Features", "App Diagnostics"]
         ),
         SettingItem(
+            title: "Delivery Diagnostics",
+            view: .deliveryDiagnostics,
+            searchContents: [
+                "Insulin Delivery",
+                "Delivery Diagnostics",
+                "Not enough insulin",
+                "Slow insulin",
+                "SMB not delivered",
+                "Command latency",
+                "Export"
+            ],
+            path: ["Features", "Delivery Diagnostics"]
+        ),
+        SettingItem(
             title: "ML Data & Audit",
             view: .mlEngineData,
             searchContents: ["Training Data Export", "Decision Audit Records"],

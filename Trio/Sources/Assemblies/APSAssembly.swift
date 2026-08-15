@@ -11,5 +11,7 @@ final class APSAssembly: Assembly {
         container.register(PluginManager.self) { r in BasePluginManager(resolver: r) }
         container.register(CalibrationService.self) { r in BaseCalibrationService(resolver: r) }
         container.register(MLDataExporter.self) { r in BaseMLDataExporter(resolver: r) }
+        container.register(DeliveryDiagnosticsRecorder.self) { _ in BaseDeliveryDiagnosticsRecorder() }
+        container.register(DeliveryDiagnosticsExporter.self) { r in BaseDeliveryDiagnosticsExporter(resolver: r) }
     }
 }
