@@ -4,24 +4,27 @@ import Foundation
 import HealthKit
 import LoopKit
 
-/// Pump driver for the Tandem t:slim X2.
+/// Pump driver for the Tandem **t:slim X2** and **Mobi**.
 ///
 /// Capability summary (dictated by the reverse-engineered protocol):
-/// - Pairing + live status monitoring on firmware 7.1+ using the 16-character
-///   pairing code. Firmware 7.7+ switched to a 6-digit JPAKE pairing flow
-///   that this driver does not implement yet.
-/// - Remote bolus on firmware 7.6+ (API 2.5), gated behind an explicit user
-///   opt-in ("remote bolus"), delivered through the pump's own
-///   permission/initiate/status message flow.
-/// - NO remote basal modulation: the t:slim X2 protocol does not accept
-///   temp-rate, suspend, or resume commands (they exist for the Tandem Mobi
-///   only). Control-IQ runs on the pump itself. Trio therefore cannot close
-///   the loop with this pump; it acts as monitor, treatment log, and remote
-///   bolus interface.
+/// - Pairing + live status monitoring on both models. The t:slim X2 on software
+///   7.1-7.6 uses the 16-character challenge/response code; software 7.7+ and
+///   every Mobi use the 6-digit EC-JPAKE handshake.
+/// - Remote bolus on t:slim X2 software 7.6+ (API 2.5) and on the Mobi, gated
+///   behind an explicit user opt-in ("remote bolus"), delivered through the
+///   pump's own permission/initiate/status message flow.
+/// - Remote basal control — temp rate, suspend, resume — on the **Mobi only**.
+///   Those opcodes are not implemented in t:slim X2 firmware, where Control-IQ
+///   owns basal delivery. So:
+///   - on a **Mobi**, Trio can close the loop natively (see
+///     TandemNativeBasal.swift), with the pump's own Control-IQ turned off;
+///   - on a **t:slim X2**, Trio is a monitor, treatment log and remote bolus
+///     interface, unless the experimental microbolus-basal mode is enabled
+///     (see TandemMicrobolusBasal.swift).
 class TandemPumpManager: DeviceManager {
     static let pluginIdentifier = "Tandem"
     let managerIdentifier = "Tandem"
-    let localizedTitle = "Tandem t:slim X2"
+    var localizedTitle: String { state.pumpModel.localizedTitle }
 
     // Internal (not private): the microbolus-basal engine lives in a separate
     // file (TandemMicrobolusBasal.swift) and needs to log through this instance.
@@ -52,8 +55,11 @@ class TandemPumpManager: DeviceManager {
         session = TandemPumpSession(bluetooth: bluetooth)
         session.delegate = self
         bluetooth.peripheralIdentifier = state.peripheralIdentifier
-        session.insulinDeliveryActionsEnabled = state.remoteBolusEnabled
-        if !state.pairingCode.isEmpty {
+        session.insulinDeliveryActionsEnabled = state.insulinDeliveryActionsAllowed
+        // Only the legacy flow can restore a signing key without talking to the
+        // pump — a JPAKE pump's key is salted with a nonce it issues on each
+        // connection, so it is established during authentication instead.
+        if state.pairingCodeType == .legacy16, !state.pairingCode.isEmpty {
             session.setAuthenticationKey(Data(state.pairingCode.utf8))
         }
     }
@@ -78,7 +84,7 @@ class TandemPumpManager: DeviceManager {
 
     // MARK: - Capabilities
 
-    /// The t:slim X2 BLE bolus cargo is in milliunits (0.001 U). Empirically
+    /// The Tandem BLE bolus cargo is in milliunits (0.001 U). Empirically
     /// confirmed on firmware 7.6.0.1 via the settings minimum-dose test: the
     /// pump ACCEPTS a 0.05 U remote bolus and REJECTS smaller amounts
     /// (status 1 at initiate), matching pumpx2's 0.05 U floor. Volumes
@@ -91,7 +97,7 @@ class TandemPumpManager: DeviceManager {
     static let onboardingSupportedBolusVolumes: [Double] =
         (50 ... 25000).map { Double($0) / 1000 }
 
-    /// t:slim X2: basal 0-15 U/hr. 0.001 U/hr granularity so the
+    /// Both models: basal 0-15 U/hr. 0.001 U/hr granularity so the
     /// microbolus-basal engine can honor fine-grained oref rates; the pump's
     /// own profile is never written by Trio.
     static let onboardingSupportedBasalRates: [Double] =
@@ -101,7 +107,7 @@ class TandemPumpManager: DeviceManager {
         onboardingSupportedBolusVolumes
     }
 
-    /// t:slim X2 profiles allow 16 segments.
+    /// Tandem profiles allow 16 segments.
     static var onboardingMaximumBasalScheduleEntryCount: Int { 16 }
 
     var supportedBolusVolumes: [Double] { Self.onboardingSupportedBolusVolumes }
@@ -141,9 +147,9 @@ class TandemPumpManager: DeviceManager {
 
     private func device(_ state: TandemPumpState) -> HKDevice {
         HKDevice(
-            name: "Tandem t:slim X2",
+            name: state.pumpModel.localizedTitle,
             manufacturer: "Tandem Diabetes Care",
-            model: state.pumpModelNumber.isEmpty ? "t:slim X2" : state.pumpModelNumber,
+            model: state.pumpModelNumber.isEmpty ? state.pumpModel.shortTitle : state.pumpModelNumber,
             hardwareVersion: nil,
             firmwareVersion: state.firmwareVersion.isEmpty ? nil : state.firmwareVersion,
             softwareVersion: nil,
@@ -156,7 +162,7 @@ class TandemPumpManager: DeviceManager {
 extension TandemPumpManager {
     var pumpRecordsBasalProfileStartEvents: Bool { false }
 
-    var pumpReservoirCapacity: Double { 300 }
+    var pumpReservoirCapacity: Double { state.pumpModel.reservoirCapacity }
 
     var lastSync: Date? { state.lastSync }
 
@@ -198,7 +204,9 @@ extension TandemPumpManager {
 
     /// Connect, authenticate if needed, and refresh identity/time state.
     /// Must be called on commandQueue.
-    private func ensureConnectedAndAuthenticated() -> TandemSessionError? {
+    // Internal (not private): the native-basal engine in TandemNativeBasal.swift
+    // needs the same connect-and-authenticate preamble.
+    func ensureConnectedAndAuthenticated() -> TandemSessionError? {
         dispatchPrecondition(condition: .onQueue(commandQueue))
 
         guard !state.pairingCode.isEmpty else {
@@ -220,7 +228,7 @@ extension TandemPumpManager {
             }
 
             // Fresh connection: authenticate and re-establish identity/time.
-            if case let .failure(error) = session.authenticate(pairingCode: state.pairingCode) {
+            if let error = authenticateSession() {
                 return error
             }
             if case let .failure(error) = refreshIdentity() {
@@ -229,6 +237,37 @@ extension TandemPumpManager {
         }
 
         return nil
+    }
+
+    /// Run whichever pairing handshake this pump uses.
+    ///
+    /// JPAKE pumps re-key on every connection: the signing key is derived from
+    /// the stored shared secret plus a nonce the pump issues now, so this is not
+    /// a no-op even for an already-paired pump. Only the long-lived derived
+    /// secret is persisted, and only when it changes.
+    private func authenticateSession() -> TandemSessionError? {
+        switch state.pairingCodeType {
+        case .legacy16:
+            if case let .failure(error) = session.authenticate(pairingCode: state.pairingCode) {
+                return error
+            }
+            return nil
+        case .jpake6:
+            let result = session.authenticateJpake(
+                pairingCode: state.pairingCode,
+                derivedSecret: state.jpakeDerivedSecret
+            )
+            switch result {
+            case let .success(keys):
+                if keys.derivedSecret != state.jpakeDerivedSecret {
+                    state.jpakeDerivedSecret = keys.derivedSecret
+                    notifyStateDidChange()
+                }
+                return nil
+            case let .failure(error):
+                return error
+            }
+        }
     }
 
     private func refreshIdentity() -> Result<Void, TandemSessionError> {
@@ -247,6 +286,25 @@ extension TandemPumpManager {
             state.firmwareVersion = String(response.armSwVer)
         case let .failure(error):
             return .failure(error)
+        }
+
+        // The advertised Bluetooth name is the primary way to tell the models
+        // apart, but a peripheral restored by CoreBluetooth may not carry one.
+        // The API version is an unambiguous fallback: the Mobi starts at 3.5,
+        // the t:slim X2 stops at 3.4.
+        if let model = TandemPumpModel.from(bluetoothName: bluetooth.peripheralName)
+            ?? TandemPumpModel.from(apiVersionMajor: state.apiVersionMajor, minor: state.apiVersionMinor),
+            model != state.pumpModel
+        {
+            log.info("Identified pump as \(model.localizedTitle)")
+            state.pumpModel = model
+            // A pump that turns out not to support remote basal must not keep a
+            // basal opt-in that would let Trio send commands it cannot honor.
+            if !model.supportsRemoteBasalControl, state.remoteBasalEnabled {
+                state.remoteBasalEnabled = false
+                state.activeTempBasal = nil
+                session.insulinDeliveryActionsEnabled = state.insulinDeliveryActionsAllowed
+            }
         }
 
         if case let .failure(error) = session.refreshTimeSinceReset() {
@@ -338,6 +396,13 @@ extension TandemPumpManager {
 
         if state.supportsRemoteBolus {
             reconcileBolusStatus()
+        }
+
+        // Drop a temp basal the pump has already finished, so the reported
+        // basal delivery state does not claim a temp rate that expired.
+        if let temp = state.activeTempBasal, !temp.isActive() {
+            log.info("Temp basal \(temp.unitsPerHour) U/hr ended")
+            state.activeTempBasal = nil
         }
 
         if !encounteredError {
@@ -484,12 +549,12 @@ extension TandemPumpManager {
             return
         }
         if activationType == .automatic || activationType == .none {
-            // Automatic boluses (oref SMBs) are only allowed in the
-            // microbolus-basal closed-loop mode, where Trio is the sole dosing
-            // authority and the pump's own automation (Control-IQ) is off.
-            // Outside that mode we refuse automatic dosing outright, since a
+            // Automatic boluses (oref SMBs) are only allowed where Trio is the
+            // sole dosing authority and the pump's own automation is off: a Mobi
+            // under native basal control, or a t:slim X2 in microbolus-basal
+            // mode. Anywhere else we refuse automatic dosing outright, since a
             // second autonomous authority alongside on-pump Control-IQ is unsafe.
-            guard state.microbolusBasalEnabled else {
+            guard automaticDosingAllowed else {
                 completion(.configuration(TandemUnsupportedError.automaticBolusNotAllowed))
                 return
             }
@@ -515,16 +580,16 @@ extension TandemPumpManager {
                 return
             }
 
-            // An AUTOMATIC bolus (oref SMB) must obey the same stacking guard as
-            // basal microboluses: only deliver it when the pump is not also
-            // delivering its own basal/Control-IQ, and not while microbolus
-            // delivery is suspended. Manual boluses are exempt (a user-initiated
-            // correction on top of pump basal is expected). This guard is local
-            // so the safety property does not depend on caller ordering.
+            // An AUTOMATIC bolus (oref SMB) must obey a stacking guard: only
+            // deliver it while the pump's own automation is verifiably off and
+            // delivery is not suspended. Manual boluses are exempt (a
+            // user-initiated correction on top of pump basal is expected). This
+            // guard is local so the safety property does not depend on caller
+            // ordering.
             if activationType == .automatic || activationType == .none {
-                guard self.microbolusBasalPreconditionsMet(), !self.state.microbolusSuspended else {
-                    self.log.error("Refusing automatic SMB: microbolus-basal preconditions not met or suspended")
-                    completion(.configuration(TandemUnsupportedError.microbolusBasalPreconditionFailed))
+                if let error = self.automaticDosingPreconditionFailure() {
+                    self.log.error("Refusing automatic SMB: \(error.localizedDescription)")
+                    completion(.configuration(error))
                     return
                 }
             }
@@ -549,11 +614,39 @@ extension TandemPumpManager {
         }
     }
 
+    /// True when Trio is the pump's only autonomous dosing authority, which is
+    /// what makes an oref SMB safe to deliver.
+    var automaticDosingAllowed: Bool {
+        if state.supportsNativeBasalControl { return state.remoteBasalEnabled }
+        return state.microbolusBasalEnabled
+    }
+
+    /// Nil when an automatic dose may proceed right now; otherwise the reason it
+    /// may not. Must be called on commandQueue, since it reads sync state.
+    private func automaticDosingPreconditionFailure() -> TandemUnsupportedError? {
+        if state.supportsNativeBasalControl {
+            guard state.remoteBasalEnabled else { return .remoteBasalDisabled }
+            // Fail closed on stale status: Control-IQ could have been switched
+            // on since the last poll, which would make Trio a second dosing
+            // authority.
+            guard state.lastSync != .distantPast,
+                  Date.now.timeIntervalSince(state.lastSync) < Self.tempBasalContextMaxStaleness
+            else { return .basalContextStale }
+            guard !state.controlIQEnabled else { return .controlIQActive }
+            guard !state.suspended else { return .microbolusBasalPreconditionFailed }
+            return nil
+        }
+        guard microbolusBasalPreconditionsMet(), !state.microbolusSuspended else {
+            return .microbolusBasalPreconditionFailed
+        }
+        return nil
+    }
+
     /// True when a send failure provably occurred before the pump could have
     /// started delivering — i.e. the request never reached the pump or the pump
     /// explicitly rejected it. Any other failure (timeout, mid-exchange
     /// disconnect, unparseable reply) is treated as uncertain delivery.
-    private static func isDefiniteNonDelivery(_ error: TandemSessionError) -> Bool {
+    static func isDefiniteNonDelivery(_ error: TandemSessionError) -> Bool {
         switch error {
         case .insulinDeliveryActionsDisabled,
              .notAuthenticated,
@@ -727,15 +820,29 @@ extension TandemPumpManager {
 
     // MARK: - Basal
 
-    /// The t:slim X2 has no remote temp-basal command. When the microbolus-basal
-    /// mode is off, this is unsupported. When on, Trio drives all basal as a
-    /// stream of small boluses (see TandemMicrobolusBasal); a temp-basal request
-    /// is realized as an accumulated microbolus.
+    /// Basal control has two very different implementations behind it.
+    ///
+    /// On a **Mobi** the pump accepts a real temp rate, so the request goes
+    /// straight to the pump once the user has opted in to remote basal control.
+    /// On a **t:slim X2** there is no such command; the only way to move basal
+    /// is the experimental microbolus-basal mode, and with that off the request
+    /// is refused with an explanation.
     func enactTempBasal(
         unitsPerHour: Double,
         for duration: TimeInterval,
         completion: @escaping (PumpManagerError?) -> Void
     ) {
+        if state.supportsNativeBasalControl, state.remoteBasalEnabled {
+            commandQueue.async {
+                self.enactNativeTempBasal(unitsPerHour: unitsPerHour, duration: duration, completion: completion)
+            }
+            return
+        }
+        if state.supportsNativeBasalControl {
+            log.error("Temp basal requested but remote basal control is not enabled for this Mobi")
+            completion(.configuration(TandemUnsupportedError.remoteBasalDisabled))
+            return
+        }
         guard state.microbolusBasalEnabled else {
             log.error("Temp basal requested but microbolus-basal mode is off; the t:slim X2 has no remote basal control")
             completion(.configuration(TandemUnsupportedError.basalControlUnsupported))
@@ -747,6 +854,16 @@ extension TandemPumpManager {
     }
 
     func suspendDelivery(completion: @escaping ((any Error)?) -> Void) {
+        if state.supportsNativeBasalControl, state.remoteBasalEnabled {
+            commandQueue.async {
+                self.suspendNativeDelivery(completion: completion)
+            }
+            return
+        }
+        if state.supportsNativeBasalControl {
+            completion(TandemUnsupportedError.remoteBasalDisabled)
+            return
+        }
         guard state.microbolusBasalEnabled else {
             completion(TandemUnsupportedError.basalControlUnsupported)
             return
@@ -757,6 +874,16 @@ extension TandemPumpManager {
     }
 
     func resumeDelivery(completion: @escaping ((any Error)?) -> Void) {
+        if state.supportsNativeBasalControl, state.remoteBasalEnabled {
+            commandQueue.async {
+                self.resumeNativeDelivery(completion: completion)
+            }
+            return
+        }
+        if state.supportsNativeBasalControl {
+            completion(TandemUnsupportedError.remoteBasalDisabled)
+            return
+        }
         guard state.microbolusBasalEnabled else {
             completion(TandemUnsupportedError.basalControlUnsupported)
             return
@@ -770,11 +897,13 @@ extension TandemPumpManager {
         items: [RepeatingScheduleValue<Double>],
         completion: @escaping (Result<BasalRateSchedule, any Error>) -> Void
     ) {
-        // Trio's basal profile is never written to the t:slim X2 — the pump has no
-        // remote basal command. In microbolus-basal mode Trio delivers this schedule
-        // itself, and in monitor mode oref only uses it for calculations, so accept
-        // the schedule locally; failing here would make every basal profile save in
-        // Trio's editor impossible while this pump is paired.
+        // Trio's basal profile is never written to the pump: neither model exposes
+        // a "write basal profile" command this driver implements. On a Mobi the
+        // temp rates Trio sends are percentages of the pump's OWN profile, and in
+        // microbolus-basal mode Trio delivers this schedule itself; in monitor mode
+        // oref only uses it for calculations. So accept the schedule locally —
+        // failing here would make every basal profile save in Trio's editor
+        // impossible while this pump is paired.
         guard let schedule = BasalRateSchedule(dailyItems: items, timeZone: .current) else {
             completion(.failure(TandemUnsupportedError.basalControlUnsupported))
             return
@@ -834,22 +963,68 @@ extension TandemPumpManager {
     }
 
     /// Remove this pump from Trio.
+    ///
+    /// A Mobi running a Trio-commanded temp rate would keep running it after the
+    /// pump is removed, with nothing left to cancel it, so stop it first. This
+    /// is best effort: if the pump is out of range there is nothing more we can
+    /// do than warn in the log, and the rate expires on its own.
     func deletePump() {
-        session.insulinDeliveryActionsEnabled = false
-        bluetooth.disconnect()
-        pumpDelegate.notify { delegate in
-            delegate?.pumpManagerWillDeactivate(self)
+        // Tear-down, run once the temp rate (if any) has been dealt with.
+        let deactivate = { [weak self] in
+            guard let self = self else { return }
+            self.session.insulinDeliveryActionsEnabled = false
+            self.bluetooth.disconnect()
+            self.pumpDelegate.notify { delegate in
+                delegate?.pumpManagerWillDeactivate(self)
+            }
+        }
+
+        // Only worth trying while we are already connected: waking a pump we are
+        // about to abandon would stall removal for the whole connect timeout,
+        // and this runs on the caller's (main) thread, so it must not block.
+        guard state.supportsNativeBasalControl,
+              let temp = state.activeTempBasal, temp.isActive(),
+              bluetooth.isConnected
+        else {
+            deactivate()
+            return
+        }
+
+        commandQueue.async {
+            self.stopNativeTempBasal { error in
+                if let error = error {
+                    self.log
+                        .error("Could not stop the temp basal before removing the pump: \(error.localizedDescription)")
+                }
+                deactivate()
+            }
         }
     }
 
     /// Persist a successful pairing and mark onboarding complete.
-    func completePairing(peripheralIdentifier: UUID, pairingCode: String, insulinType: InsulinType) {
+    ///
+    /// `jpakeDerivedSecret` is the shared secret established by the JPAKE
+    /// handshake, and is nil for a legacy t:slim X2 pairing whose code is itself
+    /// the signing key.
+    func completePairing(
+        peripheralIdentifier: UUID,
+        pairingCode: String,
+        pairingCodeType: TandemPairingCodeType,
+        pumpModel: TandemPumpModel,
+        jpakeDerivedSecret: Data?,
+        insulinType: InsulinType
+    ) {
         state.peripheralIdentifier = peripheralIdentifier
         state.pairingCode = pairingCode
+        state.pairingCodeType = pairingCodeType
+        state.pumpModel = pumpModel
+        state.jpakeDerivedSecret = jpakeDerivedSecret
         state.insulinType = insulinType
         state.isOnboarded = true
         bluetooth.peripheralIdentifier = peripheralIdentifier
-        session.setAuthenticationKey(Data(pairingCode.utf8))
+        if pairingCodeType == .legacy16 {
+            session.setAuthenticationKey(Data(pairingCode.utf8))
+        }
         notifyStateDidChange()
 
         commandQueue.async {
@@ -870,7 +1045,26 @@ extension TandemPumpManager {
         if !enabled {
             teardownMicrobolusBasal()
         }
-        session.insulinDeliveryActionsEnabled = enabled
+        session.insulinDeliveryActionsEnabled = state.insulinDeliveryActionsAllowed
+        notifyStateDidChange()
+    }
+
+    /// User opt-in/out for native remote basal control (Mobi only). This is what
+    /// lets Trio run a closed loop with the pump's own delivery engine.
+    ///
+    /// Turning it off leaves the pump on whatever temp rate is currently
+    /// running, so the caller should stop that first; `deletePump` and the
+    /// settings screen both do.
+    func setRemoteBasalEnabled(_ enabled: Bool) {
+        guard state.supportsNativeBasalControl || !enabled else {
+            log.error("Refusing to enable remote basal control: \(state.pumpModel.localizedTitle) does not support it")
+            return
+        }
+        state.remoteBasalEnabled = enabled
+        if !enabled {
+            state.activeTempBasal = nil
+        }
+        session.insulinDeliveryActionsEnabled = state.insulinDeliveryActionsAllowed
         notifyStateDidChange()
     }
 
@@ -881,10 +1075,10 @@ extension TandemPumpManager {
             state.microbolusBasalEnabled = true
             state.microbolusSuspended = false
             state.remoteBolusEnabled = true
-            session.insulinDeliveryActionsEnabled = true
         } else {
             teardownMicrobolusBasal()
         }
+        session.insulinDeliveryActionsEnabled = state.insulinDeliveryActionsAllowed
         notifyStateDidChange()
     }
 
@@ -965,6 +1159,7 @@ enum TandemUnsupportedError: LocalizedError {
     case basalControlUnsupported
     case remoteBolusDisabled
     case remoteBolusUnsupportedFirmware
+    case remoteBasalDisabled
     case automaticBolusNotAllowed
     case bolusInProgress
     case bolusTooSmall
@@ -972,11 +1167,31 @@ enum TandemUnsupportedError: LocalizedError {
     case bolusRejected(UInt8)
     case bolusCancelFailed(UInt8)
     case microbolusBasalPreconditionFailed
+    case basalContextStale
+    case controlIQActive
+    case zeroProfileBasal
+    case tempBasalRejected(UInt8)
+    case suspendRejected(UInt8)
+    case resumeRejected(UInt8)
 
     var errorDescription: String? {
         switch self {
         case .basalControlUnsupported:
             return "The t:slim X2 does not accept remote basal commands. Control-IQ manages automated delivery on the pump itself, so Trio cannot run a closed loop with this pump."
+        case .remoteBasalDisabled:
+            return "Remote basal control is disabled. Enable it in the pump settings to let Trio set temp basals on this pump."
+        case .basalContextStale:
+            return "Trio could not read the pump's current basal profile, so it will not guess at a temp basal rate. Check the pump connection."
+        case .controlIQActive:
+            return "Control-IQ is running on the pump. Turn Control-IQ off so Trio is the only system adjusting basal delivery."
+        case .zeroProfileBasal:
+            return "The pump's active basal profile is 0 U/hr. Tandem temp rates are a percentage of the profile rate, so the pump needs a non-zero basal profile for Trio to adjust it."
+        case let .tempBasalRejected(status):
+            return "The pump rejected the temp basal (status \(status))."
+        case let .suspendRejected(status):
+            return "The pump refused to suspend delivery (status \(status))."
+        case let .resumeRejected(status):
+            return "The pump refused to resume delivery (status \(status))."
         case .microbolusBasalPreconditionFailed:
             return "Microbolus-basal is on but the pump is still delivering its own basal or Control-IQ. Set the pump's basal profile to 0 U/hr and turn Control-IQ off, or Trio would stack insulin on top of the pump."
         case .remoteBolusDisabled:
@@ -984,7 +1199,7 @@ enum TandemUnsupportedError: LocalizedError {
         case .remoteBolusUnsupportedFirmware:
             return "This pump's firmware does not support remote bolus. t:slim X2 software 7.6 or newer is required."
         case .automaticBolusNotAllowed:
-            return "Automatic dosing is not available with the t:slim X2; only manually confirmed boluses can be delivered."
+            return "Automatic dosing (SMB) needs Trio to be the pump's only automated dosing system. Enable remote basal control on a Mobi, or microbolus-basal mode on a t:slim X2, with the pump's own Control-IQ turned off."
         case .bolusInProgress:
             return "A bolus is already in progress."
         case .bolusTooSmall:

@@ -560,7 +560,7 @@ enum PumpOptionForOnboardingUnits: String, Equatable, CaseIterable, Identifiable
         case .medtrum:
             return "Medtrum Nano"
         case .tandem:
-            return "Tandem t:slim X2"
+            return "Tandem (Mobi / t:slim X2)"
         }
     }
 }

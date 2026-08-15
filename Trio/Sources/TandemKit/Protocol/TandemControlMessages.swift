@@ -182,8 +182,14 @@ struct TandemCancelBolusResponse: TandemResponse {
     }
 }
 
-// MARK: - Basal control (Mobi only — kept for future Mobi support)
+// MARK: - Basal control (Mobi only)
 
+/// Start a temp rate. **Mobi only** — the t:slim X2 firmware does not implement
+/// this opcode, and Control-IQ owns basal there.
+///
+/// The rate is expressed as a whole percentage of the pump's own active profile
+/// basal rate, not as an absolute U/hr value, so the caller has to convert using
+/// a freshly read `CurrentBasalStatus`.
 struct TandemSetTempRateRequest: TandemRequest {
     typealias Response = TandemSetTempRateResponse
     static let opcode: UInt8 = 0xA4
@@ -191,13 +197,16 @@ struct TandemSetTempRateRequest: TandemRequest {
     static let signed = true
     static let modifiesInsulinDelivery = true
 
-    let duration: TimeInterval
-    /// Percentage of profile basal (100 = no change).
+    /// 15 minutes to 72 hours; the pump rejects anything outside that range.
+    let minutes: UInt32
+    /// 0-250 percent of profile basal (100 = no change).
     let percent: UInt16
 
     var cargo: Data {
         var data = Data()
-        data.appendTandemUInt32(UInt32(duration * 1000))
+        // The wire field is milliseconds, even though the pump only accepts
+        // whole minutes.
+        data.appendTandemUInt32(minutes * 60000)
         data.appendTandemUInt16(percent)
         return data
     }

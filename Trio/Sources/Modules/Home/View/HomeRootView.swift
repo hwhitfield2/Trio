@@ -1338,7 +1338,7 @@ extension Home {
                 Button("All Omnipod Types") { state.addPump(.omni) }
                 Button("Dana(RS/-i)") { state.addPump(.dana) }
                 Button("Medtrum Nano") { state.addPump(.medtrum) }
-                Button("Tandem t:slim X2") { state.addPump(.tandem) }
+                Button("Tandem (Mobi / t:slim X2)") { state.addPump(.tandem) }
                 Button("Pump Simulator") { state.addPump(.simulator) }
             } message: { Text("Select Pump Model") }
             .sheet(isPresented: $state.shouldDisplayPumpSetupSheet) {

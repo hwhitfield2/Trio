@@ -13,19 +13,49 @@ struct TandemActiveBolus: Codable {
     }
 }
 
+/// A temp basal the driver commanded on a Mobi and is tracking to expiry.
+struct TandemActiveTempBasal: Codable {
+    /// Identifier the pump returned, used to stop the rate early.
+    var tempRateId: UInt16
+    /// Rate the pump will actually deliver: the commanded percentage applied to
+    /// the pump's own profile basal rate. This is what Trio must record for
+    /// IOB, not the rate oref asked for.
+    var unitsPerHour: Double
+    /// Percentage of profile basal that was commanded.
+    var percent: Int
+    var startDate: Date
+    var duration: TimeInterval
+
+    var endDate: Date { startDate.addingTimeInterval(duration) }
+
+    func isActive(at date: Date = Date()) -> Bool {
+        date >= startDate && date < endDate
+    }
+}
+
 /// Persisted state of the Tandem pump driver.
 ///
 /// The pairing code doubles as the message-signing key on legacy-firmware
 /// pumps, so it is stored here the same way sibling drivers persist their
-/// session secrets.
+/// session secrets. JPAKE pumps instead persist the derived shared secret and
+/// re-key on every connection.
 final class TandemPumpState: RawRepresentable {
     typealias RawValue = PumpManager.RawStateValue
 
     var isOnboarded: Bool
     /// CoreBluetooth identifier of the paired pump.
     var peripheralIdentifier: UUID?
-    /// Normalized 16-character pairing code; also the signing key.
+    /// Which Tandem pump this is. Only the Mobi accepts remote basal commands.
+    var pumpModel: TandemPumpModel
+    /// Which pairing handshake the pump uses.
+    var pairingCodeType: TandemPairingCodeType
+    /// Normalized pairing code: 16 characters on legacy t:slim X2 software
+    /// (where it is also the signing key), or 6 digits for JPAKE pumps.
     var pairingCode: String
+    /// JPAKE shared secret established at pairing. Combined with a per-connection
+    /// nonce from the pump it produces the message-signing key, so it must
+    /// survive app restarts or the user would have to re-pair every launch.
+    var jpakeDerivedSecret: Data?
     var pumpSerial: String
     var pumpModelNumber: String
     var firmwareVersion: String
@@ -47,9 +77,24 @@ final class TandemPumpState: RawRepresentable {
     var controlIQEnabled: Bool
     var insulinType: InsulinType?
 
+    /// The temp basal Trio commanded on a Mobi, tracked until it expires.
+    var activeTempBasal: TandemActiveTempBasal?
+
     /// User opt-in for remote insulin delivery actions (bolusing). Off by
     /// default; requires firmware with API >= 2.5 (t:slim X2 7.6+).
     var remoteBolusEnabled: Bool
+
+    /// User opt-in for remote basal control: temp rate, suspend and resume.
+    /// **Mobi only** — the t:slim X2 firmware does not implement those opcodes.
+    /// This is what lets Trio actually close the loop, so it also requires the
+    /// pump's own Control-IQ to be off (verified at each command).
+    var remoteBasalEnabled: Bool
+
+    /// True when any insulin-affecting command may be sent. Drives the session's
+    /// `insulinDeliveryActionsEnabled` gate.
+    var insulinDeliveryActionsAllowed: Bool {
+        remoteBolusEnabled || remoteBasalEnabled
+    }
 
     /// User opt-in for the microbolus-basal closed-loop mode: Trio delivers all
     /// basal/temp-basal as a stream of small boluses. REQUIRES the pump's own
@@ -113,11 +158,28 @@ final class TandemPumpState: RawRepresentable {
         apiVersionMajor > 2 || (apiVersionMajor == 2 && apiVersionMinor >= 5)
     }
 
+    /// True when Trio can drive basal with the pump's own temp-rate command.
+    /// Mobi only; on the t:slim X2 the opcodes are not implemented in firmware.
+    var supportsNativeBasalControl: Bool {
+        pumpModel.supportsRemoteBasalControl
+    }
+
     var basalDeliveryState: PumpManagerStatus.BasalDeliveryState {
         // Either the pump's own suspend or a Trio-commanded microbolus suspend
         // stops delivery (with the pump basal zeroed, the latter is a true stop).
         if suspended || microbolusSuspended {
             return .suspended(lastSync)
+        }
+        if let temp = activeTempBasal, temp.isActive() {
+            return .tempBasal(DoseEntry(
+                type: .tempBasal,
+                startDate: temp.startDate,
+                endDate: temp.endDate,
+                value: temp.unitsPerHour,
+                unit: .unitsPerHour,
+                insulinType: insulinType,
+                automatic: true
+            ))
         }
         return .active(lastSync == .distantPast ? .distantPast : lastSync)
     }
@@ -140,7 +202,10 @@ final class TandemPumpState: RawRepresentable {
     init() {
         isOnboarded = false
         peripheralIdentifier = nil
+        pumpModel = .default
+        pairingCodeType = .legacy16
         pairingCode = ""
+        jpakeDerivedSecret = nil
         pumpSerial = ""
         pumpModelNumber = ""
         firmwareVersion = ""
@@ -156,7 +221,9 @@ final class TandemPumpState: RawRepresentable {
         suspended = false
         controlIQEnabled = false
         insulinType = nil
+        activeTempBasal = nil
         remoteBolusEnabled = false
+        remoteBasalEnabled = false
         microbolusBasalEnabled = false
         microbolusSuspended = false
         audioFeedbackEnabled = true
@@ -175,6 +242,19 @@ final class TandemPumpState: RawRepresentable {
             peripheralIdentifier = UUID(uuidString: identifier)
         }
         pairingCode = rawValue["pairingCode"] as? String ?? ""
+        jpakeDerivedSecret = rawValue["jpakeDerivedSecret"] as? Data
+        if let rawModel = rawValue["pumpModel"] as? String, let model = TandemPumpModel(rawValue: rawModel) {
+            pumpModel = model
+        }
+        if let rawCodeType = rawValue["pairingCodeType"] as? String,
+           let codeType = TandemPairingCodeType(rawValue: rawCodeType)
+        {
+            pairingCodeType = codeType
+        } else {
+            // Pre-Mobi state has no stored code type; infer it from the code we
+            // already have so an existing t:slim X2 pairing keeps working.
+            pairingCodeType = TandemPairingCodeType.from(pairingCode: pairingCode) ?? .legacy16
+        }
         pumpSerial = rawValue["pumpSerial"] as? String ?? ""
         pumpModelNumber = rawValue["pumpModelNumber"] as? String ?? ""
         firmwareVersion = rawValue["firmwareVersion"] as? String ?? ""
@@ -190,6 +270,7 @@ final class TandemPumpState: RawRepresentable {
         suspended = rawValue["suspended"] as? Bool ?? false
         controlIQEnabled = rawValue["controlIQEnabled"] as? Bool ?? false
         remoteBolusEnabled = rawValue["remoteBolusEnabled"] as? Bool ?? false
+        remoteBasalEnabled = rawValue["remoteBasalEnabled"] as? Bool ?? false
         microbolusBasalEnabled = rawValue["microbolusBasalEnabled"] as? Bool ?? false
         microbolusSuspended = rawValue["microbolusSuspended"] as? Bool ?? false
         audioFeedbackEnabled = rawValue["audioFeedbackEnabled"] as? Bool ?? true
@@ -204,6 +285,9 @@ final class TandemPumpState: RawRepresentable {
         if let rawActiveBolus = rawValue["activeBolus"] as? Data {
             activeBolus = try? JSONDecoder().decode(TandemActiveBolus.self, from: rawActiveBolus)
         }
+        if let rawTempBasal = rawValue["activeTempBasal"] as? Data {
+            activeTempBasal = try? JSONDecoder().decode(TandemActiveTempBasal.self, from: rawTempBasal)
+        }
     }
 
     var rawValue: RawValue {
@@ -211,6 +295,9 @@ final class TandemPumpState: RawRepresentable {
         value["isOnboarded"] = isOnboarded
         value["peripheralIdentifier"] = peripheralIdentifier?.uuidString
         value["pairingCode"] = pairingCode
+        value["jpakeDerivedSecret"] = jpakeDerivedSecret
+        value["pumpModel"] = pumpModel.rawValue
+        value["pairingCodeType"] = pairingCodeType.rawValue
         value["pumpSerial"] = pumpSerial
         value["pumpModelNumber"] = pumpModelNumber
         value["firmwareVersion"] = firmwareVersion
@@ -226,6 +313,7 @@ final class TandemPumpState: RawRepresentable {
         value["suspended"] = suspended
         value["controlIQEnabled"] = controlIQEnabled
         value["remoteBolusEnabled"] = remoteBolusEnabled
+        value["remoteBasalEnabled"] = remoteBasalEnabled
         value["microbolusBasalEnabled"] = microbolusBasalEnabled
         value["microbolusSuspended"] = microbolusSuspended
         value["audioFeedbackEnabled"] = audioFeedbackEnabled
@@ -236,17 +324,22 @@ final class TandemPumpState: RawRepresentable {
         if let activeBolus = activeBolus {
             value["activeBolus"] = try? JSONEncoder().encode(activeBolus)
         }
+        if let activeTempBasal = activeTempBasal {
+            value["activeTempBasal"] = try? JSONEncoder().encode(activeTempBasal)
+        }
         return value
     }
 
     var debugDescription: String {
         """
         TandemPumpState(
-          onboarded: \(isOnboarded), serial: \(pumpSerial), model: \(pumpModelNumber),
+          onboarded: \(isOnboarded), pump: \(pumpModel.localizedTitle), serial: \(pumpSerial),
+          modelNumber: \(pumpModelNumber), pairing: \(pairingCodeType.rawValue),
           firmware: \(firmwareVersion), api: \(apiVersionMajor).\(apiVersionMinor),
           lastSync: \(lastSync), reservoir: \(reservoir)u\(reservoirIsEstimate ? " (estimate)" : ""),
           battery: \(batteryPercent.map(String.init) ?? "-")%, basal: \(currentBasalRate)/\(profileBasalRate) U/hr,
-          suspended: \(suspended), controlIQ: \(controlIQEnabled), remoteBolusEnabled: \(remoteBolusEnabled)
+          suspended: \(suspended), controlIQ: \(controlIQEnabled), remoteBolusEnabled: \(remoteBolusEnabled),
+          tempBasal: \(activeTempBasal.map { "\($0.unitsPerHour) U/hr until \($0.endDate)" } ?? "none")
         )
         """
     }

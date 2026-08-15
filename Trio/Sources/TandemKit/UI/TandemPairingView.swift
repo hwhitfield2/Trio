@@ -31,6 +31,23 @@ final class TandemPairingViewModel: ObservableObject {
             allowedInsulinTypes
     }
 
+    /// Model of the pump the user picked, as far as its advertised name says.
+    var selectedModel: TandemPumpModel? {
+        selectedPump?.model
+    }
+
+    /// A Mobi only ever shows a 6-digit code, so its entry field can be
+    /// numeric-only and its instructions specific.
+    var expectsSixDigitCode: Bool {
+        selectedModel == .mobi
+    }
+
+    var codeFieldPrompt: String {
+        expectsSixDigitCode
+            ? String(localized: "6-digit code from the pump")
+            : String(localized: "Pairing code from the pump")
+    }
+
     func startScan() {
         step = .scanning
         discoveredPumps = []
@@ -53,10 +70,17 @@ final class TandemPairingViewModel: ObservableObject {
     func pair() {
         guard let pump = selectedPump else { return }
         let normalized = TandemPumpSession.normalizePairingCode(pairingCode)
-        guard normalized.count == 16 else {
+
+        guard let codeType = TandemPairingCodeType.from(pairingCode: normalized) else {
             errorMessage = String(
-                localized: "The pairing code should have 16 letters and numbers. If your pump shows a 6-digit code, its software version is not supported yet."
+                localized: "Enter either the 6-digit code (Tandem Mobi, or t:slim X2 software 7.7 and newer) or the 16-character code (t:slim X2 software 7.1 to 7.6)."
             )
+            return
+        }
+        // A Mobi has no legacy handshake at all, so a 16-character code here is
+        // a mistake worth catching before we tie up the pump's pairing screen.
+        if pump.model == .mobi, codeType != .jpake6 {
+            errorMessage = String(localized: "The Tandem Mobi pairs with a 6-digit code.")
             return
         }
 
@@ -77,18 +101,45 @@ final class TandemPairingViewModel: ObservableObject {
                 return
             }
 
-            switch self.pumpManager.session.authenticate(pairingCode: normalized) {
-            case .success:
-                self.pumpManager.completePairing(
-                    peripheralIdentifier: pump.id,
-                    pairingCode: normalized,
-                    insulinType: self.insulinType
-                )
-                DispatchQueue.main.async {
-                    self.step = .done
+            // Prefer the model the pump advertised; if it did not advertise a
+            // recognizable name, start from the conservative default. The
+            // identity refresh that follows pairing corrects it from the pump's
+            // API version.
+            let model = pump.model ?? .default
+            var derivedSecret: Data?
+
+            switch codeType {
+            case .legacy16:
+                if case let .failure(error) = self.pumpManager.session.authenticate(pairingCode: normalized) {
+                    self.fail(error.localizedDescription)
+                    return
                 }
-            case let .failure(error):
-                self.fail(error.localizedDescription)
+            case .jpake6:
+                // No stored secret: this runs the full elliptic-curve handshake,
+                // which takes a few seconds.
+                let result = self.pumpManager.session.authenticateJpake(
+                    pairingCode: normalized,
+                    derivedSecret: nil
+                )
+                switch result {
+                case let .success(keys):
+                    derivedSecret = keys.derivedSecret
+                case let .failure(error):
+                    self.fail(error.localizedDescription)
+                    return
+                }
+            }
+
+            self.pumpManager.completePairing(
+                peripheralIdentifier: pump.id,
+                pairingCode: normalized,
+                pairingCodeType: codeType,
+                pumpModel: model,
+                jpakeDerivedSecret: derivedSecret,
+                insulinType: self.insulinType
+            )
+            DispatchQueue.main.async {
+                self.step = .done
             }
         }
     }
@@ -127,7 +178,7 @@ struct TandemPairingView: View {
                 doneSection
             }
         }
-        .navigationTitle(Text("Tandem t:slim X2"))
+        .navigationTitle(Text("Tandem Pump"))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(String(localized: "Cancel")) { viewModel.cancel() }
@@ -139,15 +190,15 @@ struct TandemPairingView: View {
         Group {
             Section {
                 Text(
-                    "Trio connects to the t:slim X2 as a monitor and remote bolus interface. The pump keeps managing basal delivery itself (including Control-IQ). Closed loop is only possible via the experimental microbolus-basal mode, which can be enabled in the pump settings after pairing."
+                    "Trio supports the Tandem Mobi and the t:slim X2. On a Mobi, Trio can close the loop by setting temp basal rates on the pump. On a t:slim X2 the pump keeps managing basal itself (including Control-IQ), so Trio acts as a monitor and remote bolus interface unless the experimental microbolus-basal mode is enabled after pairing."
                 )
                 .font(.footnote)
             }
             Section(header: Text("Before you start")) {
-                Text("1. On the pump, open Options → Device Settings → Bluetooth Settings and enable Mobile Connection.")
-                Text("2. Choose \"Pair Device\" so the pump shows its pairing code.")
+                Text("1. On the pump, enable the mobile app connection in its Bluetooth settings.")
+                Text("2. Start pairing on the pump so it is ready to accept a new device.")
                 Text(
-                    "3. Pumps with software 7.1–7.6 show a 16-character code, which Trio supports. A 6-digit code means unsupported newer software."
+                    "3. Have the pairing code ready: the Tandem Mobi uses a 6-digit code, and the t:slim X2 uses a 16-character code on software 7.1–7.6 or a 6-digit code on 7.7 and newer."
                 )
             }
             .font(.footnote)
@@ -175,7 +226,14 @@ struct TandemPairingView: View {
                     viewModel.select(pump: pump)
                 } label: {
                     HStack {
-                        Text(pump.name)
+                        VStack(alignment: .leading) {
+                            Text(pump.name)
+                            if let model = pump.model {
+                                Text(model.localizedTitle)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         Spacer()
                         Text("\(pump.rssi) dB").foregroundColor(.secondary)
                     }
@@ -187,9 +245,10 @@ struct TandemPairingView: View {
     private var codeSection: some View {
         Group {
             Section(header: Text("Pairing code")) {
-                TextField(String(localized: "16-character code from the pump"), text: $viewModel.pairingCode)
+                TextField(viewModel.codeFieldPrompt, text: $viewModel.pairingCode)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.characters)
+                    .keyboardType(viewModel.expectsSixDigitCode ? .numberPad : .default)
                 if let error = viewModel.errorMessage {
                     Text(error).foregroundColor(.red).font(.footnote)
                 }
@@ -205,7 +264,16 @@ struct TandemPairingView: View {
                 if viewModel.step == .pairing {
                     HStack {
                         ProgressView()
-                        Text("Pairing…").padding(.leading)
+                        VStack(alignment: .leading) {
+                            Text("Pairing…")
+                            // The 6-digit flow runs an elliptic-curve key
+                            // exchange, which is noticeably slower than the
+                            // legacy challenge/response.
+                            Text("This can take a few seconds. Keep the pump close by.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.leading)
                     }
                 } else {
                     Button {

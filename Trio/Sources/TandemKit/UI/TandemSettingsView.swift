@@ -5,6 +5,8 @@ final class TandemSettingsViewModel: ObservableObject {
     @Published var refreshing = false
     @Published var remoteBolusEnabled: Bool
     @Published var showRemoteBolusWarning = false
+    @Published var remoteBasalEnabled: Bool
+    @Published var showRemoteBasalWarning = false
     @Published var microbolusBasalEnabled: Bool
     @Published var showMicrobolusWarning = false
     @Published var showDeleteConfirmation = false
@@ -23,12 +25,51 @@ final class TandemSettingsViewModel: ObservableObject {
     init(pumpManager: TandemPumpManager) {
         self.pumpManager = pumpManager
         remoteBolusEnabled = pumpManager.state.remoteBolusEnabled
+        remoteBasalEnabled = pumpManager.state.remoteBasalEnabled
         microbolusBasalEnabled = pumpManager.state.microbolusBasalEnabled
         audioFeedbackEnabled = pumpManager.state.audioFeedbackEnabled
         audioFeedbackForAutomaticDoses = pumpManager.state.audioFeedbackForAutomaticDoses
     }
 
     var state: TandemPumpState { pumpManager.state }
+
+    var model: TandemPumpModel { state.pumpModel }
+
+    /// True on a pump whose firmware implements the temp-rate/suspend/resume
+    /// opcodes, i.e. a Mobi.
+    var supportsNativeBasal: Bool { state.supportsNativeBasalControl }
+
+    /// Whether a native temp basal could be sent right now, and if not, why.
+    var nativeBasalReadinessDetail: String {
+        if state.lastSync == .distantPast {
+            return String(localized: "Waiting for a status sync from the pump…")
+        }
+        var problems: [String] = []
+        if state.controlIQEnabled {
+            problems.append(String(localized: "Control-IQ is on (must be off)"))
+        }
+        if state.profileBasalRate < TandemPumpManager.minimumProfileBasalForTempRate {
+            problems.append(String(localized: "the pump's basal profile is 0 U/hr (must be non-zero)"))
+        }
+        if problems.isEmpty {
+            let maxRate = state.profileBasalRate * Double(TandemTempRateLimits.maxPercent) / 100
+            let maxRateText = String(format: "%.2f", maxRate)
+            let profileText = String(format: "%.2f", state.profileBasalRate)
+            return String(
+                localized: "Ready. Trio can set 0 to \(maxRateText) U/hr right now, which is 0 to 250 percent of the pump's \(profileText) U/hr profile rate."
+            )
+        }
+        return problems.joined(separator: "; ")
+    }
+
+    var activeTempBasalText: String? {
+        guard let temp = state.activeTempBasal, temp.isActive() else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        let rateText = String(format: "%.2f", temp.unitsPerHour)
+        let percentText = "\(temp.percent)%"
+        let endsText = formatter.localizedString(for: temp.endDate, relativeTo: Date.now)
+        return String(localized: "\(rateText) U/hr (\(percentText)), ends \(endsText)")
+    }
 
     /// The pump's own basal must be zeroed and Control-IQ off for microbolus-basal.
     var microbolusPreconditionsMet: Bool {
@@ -89,6 +130,24 @@ final class TandemSettingsViewModel: ObservableObject {
 
     func cancelRemoteBolusEnable() {
         remoteBolusEnabled = false
+    }
+
+    func requestRemoteBasalChange(_ enabled: Bool) {
+        if enabled {
+            showRemoteBasalWarning = true
+        } else {
+            remoteBasalEnabled = false
+            pumpManager.setRemoteBasalEnabled(false)
+        }
+    }
+
+    func confirmRemoteBasalEnable() {
+        remoteBasalEnabled = true
+        pumpManager.setRemoteBasalEnabled(true)
+    }
+
+    func cancelRemoteBasalEnable() {
+        remoteBasalEnabled = false
     }
 
     func requestMicrobolusChange(_ enabled: Bool) {
@@ -200,12 +259,16 @@ struct TandemSettingsView: View {
             if viewModel.remoteBolusEnabled {
                 testDoseSection
             }
-            microbolusBasalSection
+            if viewModel.supportsNativeBasal {
+                remoteBasalSection
+            } else {
+                microbolusBasalSection
+            }
             soundsSection
             aboutSection
             deleteSection
         }
-        .navigationTitle(Text("Tandem t:slim X2"))
+        .navigationTitle(Text(viewModel.model.localizedTitle))
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(String(localized: "Done")) { viewModel.didFinish?() }
@@ -217,6 +280,14 @@ struct TandemSettingsView: View {
         } message: {
             Text(
                 "Trio will be able to deliver boluses on this pump when you confirm them. Boluses delivered here are in addition to anything Control-IQ doses on the pump. Requires pump software 7.6 with the mobile bolus feature. Only enable this if you understand the risks."
+            )
+        }
+        .alert(String(localized: "Let Trio control basal delivery?"), isPresented: $viewModel.showRemoteBasalWarning) {
+            Button(String(localized: "Cancel"), role: .cancel) { viewModel.cancelRemoteBasalEnable() }
+            Button(String(localized: "I understand, enable"), role: .destructive) { viewModel.confirmRemoteBasalEnable() }
+        } message: {
+            Text(
+                "Trio will set temp basal rates on the pump and can suspend and resume delivery, which is what lets it close the loop. You MUST turn the pump's own Control-IQ OFF first — two systems adjusting basal at once is unsafe. The pump also needs a non-zero basal profile, because Tandem temp rates are a percentage (0-250%) of the profile rate. Only enable this if you understand the risks."
             )
         }
         .alert(String(localized: "Enable microbolus-basal looping?"), isPresented: $viewModel.showMicrobolusWarning) {
@@ -247,7 +318,7 @@ struct TandemSettingsView: View {
         Section(
             header: Text("Sounds"),
             footer: Text(
-                "The t:slim X2 cannot beep on command like an Omnipod, so Trio plays the confirmation sound on this phone instead: one tone when insulin delivery is accepted, another on cancel, suspend, or resume. Automatic doses (SMBs and basal microboluses) are silent unless enabled — with microbolus-basal looping on, they sound every loop cycle."
+                "Tandem pumps cannot beep on command like an Omnipod, so Trio plays the confirmation sound on this phone instead: one tone when insulin delivery is accepted, another on cancel, suspend, or resume. Automatic doses (SMBs and basal microboluses) are silent unless enabled — with microbolus-basal looping on, they sound every loop cycle."
             )
         ) {
             Toggle(
@@ -295,16 +366,29 @@ struct TandemSettingsView: View {
         }
     }
 
+    private var deliveryFooterText: String {
+        if viewModel.supportsNativeBasal {
+            return viewModel.remoteBasalEnabled
+                ? String(
+                    localized: "Trio is controlling basal delivery with the pump's own temp rate command. Rates are sent as a percentage of the pump's active basal profile, so the profile must stay non-zero and Control-IQ must stay off."
+                )
+                : String(
+                    localized: "Basal delivery is managed entirely by the pump\(viewModel.state.controlIQEnabled ? " (Control-IQ is on)" : ""). Turn on remote basal control below to let Trio close the loop with this Mobi."
+                )
+        }
+        return viewModel.microbolusBasalEnabled
+            ? String(
+                localized: "Microbolus-basal looping is on: Trio delivers all basal as automatic microboluses, driven by the basal rates in Trio's therapy settings. The pump's own basal profile must stay at 0 U/hr with Control-IQ off."
+            )
+            : String(
+                localized: "Basal delivery is managed entirely by the pump\(viewModel.state.controlIQEnabled ? " (Control-IQ is on)" : ""). Trio records what the pump reports but cannot adjust basal on the t:slim X2, so closed loop is unavailable unless microbolus-basal looping is enabled below."
+            )
+    }
+
     private var deliverySection: some View {
         Section(
             header: Text("Delivery"),
-            footer: Text(
-                viewModel.microbolusBasalEnabled
-                    ?
-                    "Microbolus-basal looping is on: Trio delivers all basal as automatic microboluses, driven by the basal rates in Trio's therapy settings. The pump's own basal profile must stay at 0 U/hr with Control-IQ off."
-                    :
-                    "Basal delivery is managed entirely by the pump\(viewModel.state.controlIQEnabled ? " (Control-IQ is on)" : ""). Trio records what the pump reports but cannot adjust basal on the t:slim X2, so closed loop is unavailable unless microbolus-basal looping is enabled below."
-            )
+            footer: Text(deliveryFooterText)
         ) {
             row(
                 String(localized: "Current basal"),
@@ -322,8 +406,41 @@ struct TandemSettingsView: View {
                     ? String(localized: "On")
                     : String(localized: "Off")
             )
+            if let tempBasal = viewModel.activeTempBasalText {
+                row(String(localized: "Temp basal"), tempBasal)
+            }
             if viewModel.state.suspended {
                 row(String(localized: "Delivery"), String(localized: "Suspended"))
+            }
+        }
+    }
+
+    private var remoteBasalSection: some View {
+        Section(
+            header: Text("Closed loop"),
+            footer: Text(
+                "Lets Trio set temp basal rates and suspend or resume delivery on the Mobi — the pump commands Trio needs to close the loop. Requires the pump's Control-IQ to be off and a non-zero basal profile, since Tandem temp rates are a percentage (0-250%) of the profile rate."
+            )
+        ) {
+            Toggle(
+                String(localized: "Let Trio control basal"),
+                isOn: Binding(
+                    get: { viewModel.remoteBasalEnabled },
+                    set: { viewModel.requestRemoteBasalChange($0) }
+                )
+            )
+
+            if viewModel.remoteBasalEnabled {
+                let ready = !viewModel.state.controlIQEnabled
+                    && viewModel.state.profileBasalRate >= TandemPumpManager.minimumProfileBasalForTempRate
+                    && viewModel.state.lastSync != .distantPast
+                HStack(alignment: .top) {
+                    Image(systemName: ready ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundColor(ready ? .green : .orange)
+                    Text(viewModel.nativeBasalReadinessDetail)
+                        .font(.footnote)
+                        .foregroundColor(ready ? .secondary : .orange)
+                }
             }
         }
     }
@@ -421,6 +538,13 @@ struct TandemSettingsView: View {
 
     private var aboutSection: some View {
         Section(header: Text("Pump")) {
+            row(String(localized: "Model"), viewModel.model.localizedTitle)
+            row(
+                String(localized: "Pairing"),
+                viewModel.state.pairingCodeType == .jpake6
+                    ? String(localized: "6-digit code")
+                    : String(localized: "16-character code")
+            )
             row(String(localized: "Serial number"), viewModel.state.pumpSerial.isEmpty ? "-" : viewModel.state.pumpSerial)
             row(String(localized: "Firmware"), viewModel.state.firmwareVersion.isEmpty ? "-" : viewModel.state.firmwareVersion)
             row(String(localized: "API version"), viewModel.apiVersionText)

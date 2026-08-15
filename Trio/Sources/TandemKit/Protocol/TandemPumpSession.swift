@@ -12,6 +12,9 @@ enum TandemSessionError: LocalizedError {
     case transport(Error)
     case invalidResponse(Error)
     case pairingFailed(String)
+    /// The pump's JPAKE key-confirmation digest did not match ours: the pairing
+    /// code, or a stored pairing secret, is wrong.
+    case keyConfirmationFailed
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +30,8 @@ enum TandemSessionError: LocalizedError {
         case let .transport(error): return error.localizedDescription
         case let .invalidResponse(error): return "Invalid pump response: \(error.localizedDescription)"
         case let .pairingFailed(reason): return "Pairing failed: \(reason)"
+        case .keyConfirmationFailed:
+            return "The pump did not accept the pairing code. Check the code and try again."
         }
     }
 }
@@ -202,11 +207,15 @@ final class TandemPumpSession {
 
     /// Perform the CentralChallenge/PumpChallenge handshake. On success the
     /// pairing code becomes the signing key for this session.
+    ///
+    /// This is the t:slim X2 flow for software 7.1-7.6. Pumps on 7.7+ and every
+    /// Tandem Mobi use the 6-digit JPAKE flow instead — see
+    /// `authenticateJpake(pairingCode:derivedSecret:appInstanceId:)`.
     func authenticate(pairingCode: String, appInstanceId: UInt16 = 1) -> Result<Void, TandemSessionError> {
         let normalized = Self.normalizePairingCode(pairingCode)
         guard normalized.count == 16 else {
             return .failure(.pairingFailed(
-                "The pairing code should be 16 letters and numbers. Newer pump software using a 6-digit code is not supported yet."
+                "The pairing code should be 16 letters and numbers."
             ))
         }
 

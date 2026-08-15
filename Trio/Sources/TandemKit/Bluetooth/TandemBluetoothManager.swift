@@ -5,6 +5,11 @@ struct TandemScanResult: Identifiable {
     let id: UUID
     let name: String
     let rssi: Int
+
+    /// Which Tandem model the advertised name identifies, if it identifies one.
+    var model: TandemPumpModel? {
+        TandemPumpModel.from(bluetoothName: name)
+    }
 }
 
 enum TandemConnectionError: LocalizedError {
@@ -52,6 +57,12 @@ final class TandemBluetoothManager: NSObject {
     /// Peripheral identifier of the paired pump; scanning connects to any
     /// Tandem pump when nil.
     var peripheralIdentifier: UUID?
+
+    /// Advertised name of the connected pump, used to tell a Mobi from a
+    /// t:slim X2. Nil until a peripheral is known.
+    var peripheralName: String? {
+        peripheral?.name
+    }
 
     private var scanCompletion: ((TandemScanResult) -> Void)?
     private var connectCompletion: ((TandemConnectionError?) -> Void)?
