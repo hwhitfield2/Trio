@@ -29,8 +29,26 @@ extension AlgorithmAdvancedSettings {
 
         /// What "Automatic" currently resolves to, so the picker can say so
         /// rather than leaving the user to guess.
+        ///
+        /// `provider` is nil until `configureView()` sets the resolver on
+        /// `.onAppear`, and SwiftUI evaluates `body` before that — so this is
+        /// read once with no provider behind it. Falling back to `.automatic`
+        /// costs one frame of a less specific footer; force-unwrapping crashes
+        /// the screen.
         var pumpReportedInsulinType: InsulinTypeSelection {
-            InsulinTypeSelection(pumpInsulinType: provider.pumpInsulinType)
+            guard let provider else { return .automatic }
+            return InsulinTypeSelection(pumpInsulinType: provider.pumpInsulinType)
+        }
+
+        /// How to name what the pump reports. Kept separate from
+        /// `pumpReportedInsulinType` so "the pump has told us nothing" reads as
+        /// itself, rather than echoing the word "Automatic" back at the user.
+        var pumpReportedInsulinTypeDescription: String {
+            let reported = pumpReportedInsulinType
+            guard reported != .automatic else {
+                return String(localized: "not reported", comment: "The pump has not reported an insulin type")
+            }
+            return reported.displayName
         }
 
         var pumpSettings: PumpSettings {

@@ -99,7 +99,7 @@ extension AlgorithmAdvancedSettings {
                     footer: Text(
                         state.insulinTypeSelection == .automatic
                             ? String(
-                                localized: "Automatic follows the insulin your pump reports, currently \(state.pumpReportedInsulinType.displayName). Choosing an insulin here pins the model instead, so a pump status update cannot change it."
+                                localized: "Automatic follows the insulin your pump reports, currently \(state.pumpReportedInsulinTypeDescription). Choosing an insulin here pins the model instead, so a pump status update cannot change it."
                             )
                             : String(
                                 localized: "Trio models this insulin regardless of what the pump reports. This does not change the insulin type set on the pump itself."
