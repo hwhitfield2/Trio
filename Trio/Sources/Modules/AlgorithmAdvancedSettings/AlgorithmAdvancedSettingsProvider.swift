@@ -9,6 +9,12 @@ extension AlgorithmAdvancedSettings {
         private let processQueue = DispatchQueue(label: "AlgorithmAdvancedSettingsProvider.processQueue")
         @Injected() private var broadcaster: Broadcaster!
 
+        /// What the pump currently reports it is filled with, for the
+        /// "Automatic" insulin-type option to resolve against.
+        var pumpInsulinType: InsulinType? {
+            deviceManager?.pumpManager?.status.insulinType
+        }
+
         func settings() -> PumpSettings {
             storage.retrieve(OpenAPS.Settings.settings, as: PumpSettings.self)
                 ?? PumpSettings(from: OpenAPS.defaults(for: OpenAPS.Settings.settings))

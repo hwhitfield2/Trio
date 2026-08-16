@@ -55,6 +55,7 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var hideInsulinBadge: Bool = false
     var allowDilution: Bool = false
     var insulinConcentration: Decimal = 1
+    var insulinTypeSelection: InsulinTypeSelection = .automatic
     var showCobIobChart: Bool = true
     var rulerMarks: Bool = true
     var bolusDisplayThreshold: BolusDisplayThreshold = .allUnits
@@ -378,6 +379,13 @@ extension TrioSettings: Decodable {
 
         if let insulinConcentration = try? container.decode(Decimal.self, forKey: .insulinConcentration) {
             settings.insulinConcentration = insulinConcentration
+        }
+
+        if let insulinTypeSelection = try? container.decode(
+            InsulinTypeSelection.self,
+            forKey: .insulinTypeSelection
+        ) {
+            settings.insulinTypeSelection = insulinTypeSelection
         }
 
         if let rulerMarks = try? container.decode(Bool.self, forKey: .rulerMarks) {

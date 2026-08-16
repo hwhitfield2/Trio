@@ -203,6 +203,7 @@ enum SettingItems {
                 "Max Daily Safety Multiplier",
                 "Current Basal Safety Multiplier",
                 "Use Custom Peak Time",
+                "Insulin Type", "Fiasp", "Lyumjev", "Humalog", "NovoLog", "Apidra",
                 "Duration of Insulin Action", "DIA",
                 "Insulin Peak Time",
                 "Skip Neutral Temps",

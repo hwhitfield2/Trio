@@ -1,4 +1,5 @@
 import Combine
+import LoopKit
 import Observation
 import SwiftUI
 
@@ -24,6 +25,13 @@ extension AlgorithmAdvancedSettings {
         @Published var insulinActionCurve: Decimal = 10
         @Published var smbDeliveryRatio: Decimal = 0.5
         @Published var smbInterval: Decimal = 3
+        @Published var insulinTypeSelection: InsulinTypeSelection = .automatic
+
+        /// What "Automatic" currently resolves to, so the picker can say so
+        /// rather than leaving the user to guess.
+        var pumpReportedInsulinType: InsulinTypeSelection {
+            InsulinTypeSelection(pumpInsulinType: provider.pumpInsulinType)
+        }
 
         var pumpSettings: PumpSettings {
             provider.settings()
@@ -47,6 +55,15 @@ extension AlgorithmAdvancedSettings {
                 noisyCGMTargetMultiplier = $0 }
             subscribePreferencesSetting(\.smbDeliveryRatio, on: $smbDeliveryRatio) { smbDeliveryRatio = $0 }
             subscribePreferencesSetting(\.smbInterval, on: $smbInterval) { smbInterval = $0 }
+
+            // The stored setting is the insulin *type*; the curve oref actually
+            // doses against is derived from it, so re-resolve on every change.
+            subscribeSetting(\.insulinTypeSelection, on: $insulinTypeSelection, initial: {
+                insulinTypeSelection = $0
+            }, didSet: { [weak self] _ in
+                guard let self else { return }
+                settingsManager.updateInsulinCurve(provider.pumpInsulinType)
+            })
 
             insulinActionCurve = pumpSettings.insulinActionCurve
         }

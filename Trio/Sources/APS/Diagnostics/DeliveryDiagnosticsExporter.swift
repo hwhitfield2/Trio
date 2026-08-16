@@ -337,6 +337,7 @@ final class BaseDeliveryDiagnosticsExporter: DeliveryDiagnosticsExporter, Inject
         add("smbDeliveryRatio", dec(preferences.smbDeliveryRatio))
         add("bolusIncrement (U)", dec(preferences.bolusIncrement))
 
+        add("insulinType", settings.insulinTypeSelection.rawValue)
         add("insulinCurve", preferences.curve.rawValue)
         add("useCustomPeakTime", "\(preferences.useCustomPeakTime)")
         add("insulinPeakTime (min)", dec(preferences.insulinPeakTime))

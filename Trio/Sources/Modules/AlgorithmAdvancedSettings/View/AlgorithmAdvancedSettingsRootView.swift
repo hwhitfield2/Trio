@@ -94,6 +94,30 @@ extension AlgorithmAdvancedSettings {
                     }
                 )
 
+                Section(
+                    header: Text("Insulin Type"),
+                    footer: Text(
+                        state.insulinTypeSelection == .automatic
+                            ? String(
+                                localized: "Automatic follows the insulin your pump reports, currently \(state.pumpReportedInsulinType.displayName). Choosing an insulin here pins the model instead, so a pump status update cannot change it."
+                            )
+                            : String(
+                                localized: "Trio models this insulin regardless of what the pump reports. This does not change the insulin type set on the pump itself."
+                            )
+                    ),
+                    content: {
+                        Picker(
+                            selection: $state.insulinTypeSelection,
+                            label: Text("Insulin Type")
+                        ) {
+                            ForEach(InsulinTypeSelection.allCases) { selection in
+                                Text(selection.displayName).tag(selection)
+                            }
+                        }
+                    }
+                )
+                .listRowBackground(Color.chart)
+
                 SettingInputSection(
                     decimalValue: $state.insulinActionCurve,
                     booleanValue: $booleanPlaceholder,

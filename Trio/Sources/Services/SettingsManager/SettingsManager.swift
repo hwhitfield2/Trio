@@ -75,20 +75,31 @@ final class BaseSettingsManager: SettingsManager, Injectable {
             ?? PumpSettings(insulinActionCurve: 10, maxBolus: 10, maxBasal: 2)
     }
 
+    /// Resolves the oref insulin model from the user's insulin-type setting,
+    /// falling back to what the pump reports.
+    ///
+    /// Called both when the user picks an insulin type and whenever the pump
+    /// reports a status change. An explicit choice wins in both cases: without
+    /// that, a pump status update would silently reset the model the user just
+    /// chose, and the change would be invisible — nothing surfaces the curve.
     func updateInsulinCurve(_ insulinType: InsulinType?) {
         var prefs = preferences
 
-        switch insulinType {
-        case .apidra,
-             .humalog,
-             .novolog:
-            prefs.curve = .rapidActing
+        if let pinned = settings.insulinTypeSelection.curve {
+            prefs.curve = pinned
+        } else {
+            switch insulinType {
+            case .apidra,
+                 .humalog,
+                 .novolog:
+                prefs.curve = .rapidActing
 
-        case .fiasp,
-             .lyumjev:
-            prefs.curve = .ultraRapid
-        default:
-            prefs.curve = .rapidActing
+            case .fiasp,
+                 .lyumjev:
+                prefs.curve = .ultraRapid
+            default:
+                prefs.curve = .rapidActing
+            }
         }
 
         preferences = prefs
