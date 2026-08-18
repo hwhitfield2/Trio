@@ -24,6 +24,26 @@ struct FollowerActivityAttributes: ActivityAttributes {
             var date: Date { Date(timeIntervalSince1970: t) }
         }
 
+        /// A bolus, as the app or the host publishes it.
+        struct Bolus: Codable, Hashable {
+            /// Units.
+            let a: Double
+            /// Seconds since epoch, like `Point`.
+            let t: Double
+            /// Present only for a bolus the loop gave itself.
+            let s: Bool?
+
+            var date: Date { Date(timeIntervalSince1970: t) }
+        }
+
+        /// A carb entry, in grams.
+        struct CarbEntry: Codable, Hashable {
+            let g: Double
+            let t: Double
+
+            var date: Date { Date(timeIntervalSince1970: t) }
+        }
+
         let bg: String
         let direction: String
         let change: String
@@ -41,6 +61,11 @@ struct FollowerActivityAttributes: ActivityAttributes {
         /// drew before anyway.
         let color: FollowerGlucoseColorRanges?
         let chart: [Point]
+        /// What was given and eaten inside the window `chart` covers. Absent
+        /// rather than empty when there is nothing — and absent altogether
+        /// from a host or app build that predates them.
+        let boluses: [Bolus]?
+        let carbs: [CarbEntry]?
 
         // Everything below is only drawn by the detailed layouts, and only when
         // there is something to draw. Optional so that a host or an app build

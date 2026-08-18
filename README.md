@@ -28,9 +28,12 @@ no way to tell what any given dot was. Releasing puts the chart back. The same
 readout is published as the chart's accessibility value, since painted text is
 invisible to a screen reader.
 
-Treatments are in the app only: the home screen widgets and the Live Activity
-show glucose, and a pushed Live Activity has a 4 KB budget that the chart
-already fills.
+The same markers are on the **home screen widgets** and the **Live Activity**,
+on both platforms. The Lock Screen carries only the treatments inside the two
+hours its chart covers, and at most eight of each: a marker for something that
+happened before the chart starts has no reading to sit against, and ActivityKit
+allows the whole update 4 KB. Nothing is sent at all when there is nothing to
+send, rather than empty arrays.
 
 The same data is available on the **home screen**, on both platforms: an iOS
 widget (small, medium, and the three lock screen sizes) and an Android app
