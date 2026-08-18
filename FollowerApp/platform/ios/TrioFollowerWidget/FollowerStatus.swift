@@ -97,18 +97,30 @@ struct FollowerStatus: Codable {
     /// The numeric glucose value, for colouring. `nil` when there is no reading.
     var glucoseValue: Double? { Double(bg) }
 
-    /// The colour the host would paint this value, unless the user asked for a
+    /// The range this device draws against: the host's, with whatever the
+    /// follower chose to see instead.
+    func range(_ preferences: FollowerDisplayPreferences) -> FollowerGlucoseRange {
+        preferences.resolvedRange(low: low, high: high, color: colorRanges)
+    }
+
+    /// The colour that range gives this value, unless the user asked for a
     /// single colour instead.
     func color(
         for value: Double?,
-        scheme: FollowerDisplayPreferences.GlucoseColorScheme = .dynamicColor
+        preferences: FollowerDisplayPreferences = .default
     ) -> Color {
-        guard scheme == .dynamicColor, let value else { return .primary }
-        return FollowerGlucoseColor.color(for: value, low: low, high: high, ranges: colorRanges)
+        guard preferences.glucoseColor == .dynamicColor, let value else { return .primary }
+        let range = range(preferences)
+        return FollowerGlucoseColor.color(
+            for: value,
+            low: range.low,
+            high: range.high,
+            ranges: range.color
+        )
     }
 
-    func glucoseColor(_ scheme: FollowerDisplayPreferences.GlucoseColorScheme) -> Color {
-        color(for: glucoseValue, scheme: scheme)
+    func glucoseColor(_ preferences: FollowerDisplayPreferences) -> Color {
+        color(for: glucoseValue, preferences: preferences)
     }
 
     /// The span the chart actually covers, so a plot never stretches a couple of
@@ -238,13 +250,16 @@ struct FollowerContext {
         isStale = status.isStale(asOf: now)
     }
 
+    /// The range everything in this render is drawn against.
+    var range: FollowerGlucoseRange { status.range(preferences) }
+
     var glucoseColor: Color {
-        isStale ? .secondary : status.glucoseColor(preferences.glucoseColor)
+        isStale ? .secondary : status.glucoseColor(preferences)
     }
 
     /// Chart point colouring, which follows the same choice.
     func color(for value: Double?) -> Color {
-        status.color(for: value, scheme: preferences.glucoseColor)
+        status.color(for: value, preferences: preferences)
     }
 
     var updatedText: String {

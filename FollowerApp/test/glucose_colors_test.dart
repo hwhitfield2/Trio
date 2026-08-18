@@ -112,6 +112,19 @@ void main() {
       expect(GlucoseRanges.fromJson({'low': double.nan, 'high': 180}), isNull);
     });
 
+    test('numbers no display range could be made of are not one', () {
+      // Trio will not let anyone set a display low above 150 or a high above
+      // 400, so numbers outside that are not a display range, whatever they
+      // are. Painting a whole chart low because of one would be worse than
+      // ignoring it.
+      expect(GlucoseRanges.fromJson({'low': 300, 'high': 400}), isNull);
+      expect(GlucoseRanges.fromJson({'low': 70, 'high': 500}), isNull);
+      expect(GlucoseRanges.fromJson({'low': 20, 'high': 180}), isNull);
+      // ...and the ordinary ones still are.
+      expect(GlucoseRanges.fromJson({'low': 70, 'high': 180}), isNotNull);
+      expect(GlucoseRanges.fromJson({'low': 150, 'high': 400}), isNotNull);
+    });
+
     test('a target outside its own range falls back to the middle of it', () {
       expect(GlucoseRanges.fromJson({'low': 70, 'high': 180})!.target, 125);
       expect(GlucoseRanges.fromJson({'low': 70, 'high': 180, 'target': 300})!.target, 125);
@@ -156,6 +169,12 @@ void main() {
     test('a host that sends nothing usable falls back to the app defaults', () {
       expect(parse({})!.glucoseRanges, GlucoseRanges.defaults);
       expect(parse({'low': 200, 'high': 70})!.glucoseRanges, GlucoseRanges.defaults);
+    });
+
+    test('an alert threshold that is not a range does not become one', () {
+      // A follower alerted at 300 on a host that reports no ranges: every
+      // reading would otherwise be drawn as low, which is what this is.
+      expect(parse({'low': 300, 'high': 350})!.glucoseRanges, GlucoseRanges.defaults);
     });
   });
 }

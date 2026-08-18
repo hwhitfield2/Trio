@@ -39,6 +39,30 @@ class GlucoseRanges {
   static const dynamicSweepLow = 55.0;
   static const dynamicSweepHigh = 220.0;
 
+  /// The window a host-reported display range can plausibly sit in, in mg/dL:
+  /// the same one Trio's own settings allow its low and high to be set in.
+  ///
+  /// Checked because the numbers are not always a display range. A host that
+  /// predates the range being reported sends only the thresholds this follower
+  /// is *alerted* on, and those are allowed anywhere between 40 and 400 — a
+  /// low alert set at 300 is a legitimate alert setting and a nonsensical
+  /// range, and colouring a whole chart red because of one is exactly the
+  /// wrong answer.
+  static const lowFloor = 40.0;
+  static const lowCeiling = 150.0;
+  static const highFloor = 100.0;
+  static const highCeiling = 400.0;
+
+  /// Whether a pair of numbers could be a display range at all.
+  static bool isPlausible(double low, double high) =>
+      low.isFinite &&
+      high.isFinite &&
+      low < high &&
+      low >= lowFloor &&
+      low <= lowCeiling &&
+      high >= highFloor &&
+      high <= highCeiling;
+
   /// What the host calls this scheme, and what the native widgets and the Lock
   /// Screen read back.
   String get schemeName => isDynamic ? 'dynamicColor' : 'staticColor';
@@ -59,15 +83,15 @@ class GlucoseRanges {
   /// Reads the `ranges` object out of a status snapshot.
   ///
   /// Null for anything that is not a usable pair of bounds — an older host
-  /// sending nothing, or a host whose low is not below its high. Callers fall
-  /// back rather than colour by numbers that cannot be true.
+  /// sending nothing, or numbers no display range could be made of. Callers
+  /// fall back rather than colour by numbers that cannot be true.
   static GlucoseRanges? fromJson(Object? json) {
     if (json is! Map) return null;
 
     final low = (json['low'] as num?)?.toDouble();
     final high = (json['high'] as num?)?.toDouble();
     if (low == null || high == null) return null;
-    if (!low.isFinite || !high.isFinite || low <= 0 || low >= high) return null;
+    if (!isPlausible(low, high)) return null;
 
     final target = (json['target'] as num?)?.toDouble();
     return GlucoseRanges(

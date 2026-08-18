@@ -381,6 +381,23 @@ Live Activity & widgets**:
 - **Glucose colour** — coloured by range, or a single colour. "By range" means
   the host's range and the host's scheme, which arrive with the status; this
   choice only decides whether they are used at all.
+- **Colour scheme** — host, static or dynamic. The host reports which one it
+  uses; pick one here to disagree with it. The screen names what the host
+  currently reports, next to the choice.
+- **Glucose range** — the low and high everything on this device is coloured
+  against: the in-app chart, the widgets and the Lock Screen, and the time in
+  range bar. It follows the host by default, and the switch shows the host's
+  own numbers so there is something to compare against. Overriding it changes
+  nothing on the host and nothing about when you are alerted — a parent
+  watching from work can want to see trouble sooner than the host calls it
+  trouble.
+
+  Only the numbers the host could have meant as a display range are followed:
+  Trio itself will not let a low be set above 150 mg/dL or a high above 400, so
+  anything outside that is treated as not a range at all and the app's own
+  70–180 stands in. A host that predates reporting its range sends only the
+  thresholds this follower is *alerted* on, and a low alert set at 300 is a
+  reasonable alert and a nonsensical range.
 - **Detailed layout** — the four values under the chart, in order: glucose
   (two sizes), IOB, COB, eventual glucose, last updated, or blank. The medium
   home screen widget follows the same list.

@@ -16,10 +16,11 @@ struct FollowerChartView: View {
     let status: FollowerStatus
     var window: TimeInterval?
     var showThresholdLines = true
+    var preferences: FollowerDisplayPreferences = .default
 
-    /// Which colouring the user asked for. Defaulted so a caller that does not
-    /// care — a placeholder, a preview — need not pass one.
-    var colorSchemeChoice: FollowerDisplayPreferences.GlucoseColorScheme = .dynamicColor
+    /// This device's own choices: which colouring, and which range to draw the
+    /// guide lines at. Defaulted so a caller that does not care — a
+    /// placeholder, a preview — need not pass any.
 
     var body: some View {
         let anchor = max(status.readingDate ?? Date(), status.chart.map(\.date).max() ?? Date())
@@ -27,16 +28,17 @@ struct FollowerChartView: View {
         let start = anchor.addingTimeInterval(-span)
         let points = status.chart.filter { $0.date >= start }
         let values = points.map(\.v)
-        let minValue = min(values.min() ?? status.low, status.low)
-        let maxValue = max(values.max() ?? status.high, status.high)
+        let range = status.range(preferences)
+        let minValue = min(values.min() ?? range.low, range.low)
+        let maxValue = max(values.max() ?? range.high, range.high)
 
         Chart {
             if showThresholdLines {
-                RuleMark(y: .value("High", status.high))
+                RuleMark(y: .value("High", range.high))
                     .foregroundStyle(.orange)
                     .lineStyle(.init(lineWidth: 1, dash: [5]))
 
-                RuleMark(y: .value("Low", status.low))
+                RuleMark(y: .value("Low", range.low))
                     .foregroundStyle(.red)
                     .lineStyle(.init(lineWidth: 1, dash: [5]))
             }
@@ -47,7 +49,7 @@ struct FollowerChartView: View {
                     y: .value("Glucose", point.v)
                 )
                 .symbolSize(16)
-                .foregroundStyle(status.color(for: point.v, scheme: colorSchemeChoice))
+                .foregroundStyle(status.color(for: point.v, preferences: preferences))
             }
         }
         .chartYScale(domain: minValue ... maxValue)
@@ -159,7 +161,7 @@ struct FollowerGlucoseMediumView: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            FollowerChartView(status: context.status, colorSchemeChoice: context.preferences.glucoseColor)
+            FollowerChartView(status: context.status, preferences: context.preferences)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .topLeading) { activePills }
 
