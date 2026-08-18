@@ -1,0 +1,56 @@
+name: trio_follower
+description: >-
+  Follower app for Trio. Pairs with a Trio host device by QR code, sends
+  end-to-end encrypted remote commands (bolus, meal, temp target, override)
+  over APNS, and receives encrypted status pushed directly from the host
+  device — no Nightscout or other third-party data source.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # AES-256-GCM command encryption (matches Trio's SecureMessenger)
+  cryptography: ^2.7.0
+  # SHA-256 for key derivation and verification codes
+  crypto: ^3.0.3
+  # ES256 JWT signing for APNS provider authentication
+  dart_jsonwebtoken: ^2.14.0
+  # Direct HTTP/2 connection to Apple's APNS endpoints
+  http2: ^2.3.0
+  # Receiving status pushes from the host (raw APNS on iOS, FCM on Android)
+  push: ^2.2.0
+  # Own bundle id, sent to the host so it can address APNS status pushes
+  package_info_plus: ^8.0.2
+  # QR code scanning during pairing. 7.x decodes with Apple's Vision framework
+  # on iOS instead of Google MLKit; MLKit ships no arm64 simulator slice and
+  # forced EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 on the whole app, which
+  # made the iOS follower unrunnable on Apple Silicon simulators.
+  mobile_scanner: ^7.4.0
+  # Pairing bundle (secrets) storage in Keychain / Android Keystore
+  flutter_secure_storage: ^9.2.2
+  # Face ID / Touch ID / biometric confirmation before sending commands
+  local_auth: ^2.3.0
+  provider: ^6.1.2
+  intl: ^0.19.0
+  shared_preferences: ^2.3.2
+  # Shared storage + redraw trigger for the iOS and Android home screen widgets
+  # (app group UserDefaults on iOS, SharedPreferences on Android)
+  home_widget: ^0.7.0
+  # Local plugin: the iOS Live Activity bridge. Local rather than hand-registered
+  # so Flutter's generated registrant wires it up on whichever iOS template the
+  # SDK ships, and against the engine the background push handler runs on.
+  trio_live_activity:
+    path: platform/flutter_plugins/trio_live_activity
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

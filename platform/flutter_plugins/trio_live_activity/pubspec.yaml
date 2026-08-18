@@ -1,0 +1,21 @@
+name: trio_live_activity
+description: >-
+  Starts, updates and ends the Trio Follower Live Activity. A local plugin
+  rather than a hand-registered channel, so Flutter's generated registrant wires
+  it up on whichever iOS template the SDK ships.
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: TrioLiveActivityPlugin
