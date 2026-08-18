@@ -5,6 +5,12 @@ name: 5. Build Trio Follower
 #     TestFlight (bundle id: org.nightscout.<TEAMID>.triofollower)
 #   - Android: release APK attached as a workflow artifact for sideloading
 #
+# Export compliance is declared by "Prepare platform shells", which writes
+# ITSAppUsesNonExemptEncryption into the generated Info.plist — the same answer
+# Trio's own Info.plist carries. Without it every upload reaches TestFlight as
+# "Missing Compliance" and waits there for someone to answer the question by
+# hand in App Store Connect before it can be installed.
+#
 # Uses the same repository secrets as "4. Build Trio". One-time setup, in
 # order (see FollowerApp/README.md):
 #   1. "2. Add Identifiers" — creates the follower bundle id with push

@@ -155,7 +155,11 @@ The repository's GitHub Actions build the follower for you:
   Actions tab (or push to `main` touching `FollowerApp/`). It ships the iOS
   app to **TestFlight** using the same fastlane/match secrets as "4. Build
   Trio", and attaches an installable **Android APK** as a workflow artifact.
-  One-time prerequisites:
+  Export compliance is declared during the build — `prepare_platforms.sh`
+  writes `ITSAppUsesNonExemptEncryption` into the generated `Info.plist`, the
+  same answer Trio's own carries — so a build reaches TestFlight installable
+  rather than waiting at "Missing Compliance" for someone to answer the
+  question by hand. One-time prerequisites:
   1. Run **"2. Add Identifiers"** once — it also creates the follower bundle id
      (`org.nightscout.<TEAMID>.triofollower`) with push notifications, creates
      the widget bundle id (`…triofollower.widget`), and reports whether the App
