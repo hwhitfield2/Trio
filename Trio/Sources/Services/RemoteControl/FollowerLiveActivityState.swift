@@ -26,6 +26,23 @@ struct FollowerLiveActivityState: Encodable, Equatable {
         let t: Double
     }
 
+    /// How this host colours glucose, so the follower's Lock Screen paints a
+    /// reading the colour Trio's own chart would.
+    ///
+    /// The display low and high travel alongside, so only what the dynamic
+    /// scheme needs is here. Display units throughout, like every other number
+    /// in this state. Mirrors `FollowerGlucoseColorRanges` in the follower app.
+    struct GlucoseColorRanges: Encodable, Equatable {
+        /// `GlucoseColorScheme`'s raw value: "staticColor" or "dynamicColor".
+        let scheme: String
+        /// The glucose target in force, which the dynamic sweep shades green at.
+        let target: Double
+        /// The window that sweep runs across — the same hard-coded pair
+        /// `GlucoseChartView` shades between, converted to display units.
+        let sweepLow: Double
+        let sweepHigh: Double
+    }
+
     let bg: String
     let direction: String
     let change: String
@@ -34,6 +51,9 @@ struct FollowerLiveActivityState: Encodable, Equatable {
     let readingDate: Double
     let low: Double
     let high: Double
+    /// Absent when the snapshot carries no ranges, which is the same signal the
+    /// follower already handles: colour by the low and high alone.
+    let color: GlucoseColorRanges?
     let chart: [Point]
 
     // Drawn only by the follower's detailed layouts. Optional on both sides, so
@@ -45,6 +65,13 @@ struct FollowerLiveActivityState: Encodable, Equatable {
     let tempTargetName: String?
     /// Seconds since epoch of the host's last loop cycle.
     let lastLoop: Double?
+
+    /// The window the dynamic colour scheme sweeps across, in mg/dL. Hard-coded
+    /// in `GlucoseChartView` too, and deliberately wider than the display range:
+    /// shading from red at the low itself would crowd every in-range reading
+    /// into the greens.
+    static let colorSweepLow: Double = 55
+    static let colorSweepHigh: Double = 220
 
     /// Roughly two hours at a five-minute cadence, matching the follower's own
     /// chart budget. ActivityKit's payload limit is 4 KB and the chart
@@ -103,8 +130,18 @@ struct FollowerLiveActivityState: Encodable, Equatable {
             iob: snapshot.iob.map { oneDecimal($0) } ?? "--",
             cob: snapshot.cob.map { String(Int($0.rounded())) } ?? "--",
             readingDate: latest.date,
-            low: convert(snapshot.low),
-            high: convert(snapshot.high),
+            // The host's display range when it has one — the follower's alert
+            // thresholds say when to wake someone, not how to draw a chart.
+            low: convert(snapshot.ranges?.low ?? snapshot.low),
+            high: convert(snapshot.ranges?.high ?? snapshot.high),
+            color: snapshot.ranges.map {
+                GlucoseColorRanges(
+                    scheme: $0.scheme,
+                    target: convert($0.target),
+                    sweepLow: convert(colorSweepLow),
+                    sweepHigh: convert(colorSweepHigh)
+                )
+            },
             chart: snapshot.readings.prefix(maxChartPoints).map {
                 Point(v: convert(Double($0.sgv)), t: $0.date)
             },

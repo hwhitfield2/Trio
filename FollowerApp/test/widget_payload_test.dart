@@ -1,8 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trio_follower/models/glucose_ranges.dart';
 import 'package:trio_follower/models/status_snapshot.dart';
 import 'package:trio_follower/services/widget_bridge.dart';
 
-StatusSnapshot snapshotWith(List<int> sgvs, {double? low, double? high, String units = 'mg/dL'}) {
+StatusSnapshot snapshotWith(
+  List<int> sgvs, {
+  double? low,
+  double? high,
+  GlucoseRanges? ranges,
+  String units = 'mg/dL',
+}) {
   final now = DateTime.now();
   return StatusSnapshot(
     timestamp: now,
@@ -18,6 +25,7 @@ StatusSnapshot snapshotWith(List<int> sgvs, {double? low, double? high, String u
     ],
     lowThreshold: low,
     highThreshold: high,
+    ranges: ranges,
   );
 }
 
@@ -39,6 +47,21 @@ void main() {
 
       final withDefaults = WidgetBridge.statsFor(snapshotWith([100, 100, 100, 100]));
       expect(withDefaults!['in_range'], 100);
+    });
+
+    test('the host display range wins over the follower alert thresholds', () {
+      // The bar under the chart has to agree with the dots above it, and the
+      // dots are the host's ranges.
+      final stats = WidgetBridge.statsFor(
+        snapshotWith(
+          [100, 100, 100, 100],
+          low: 60,
+          high: 250,
+          ranges: const GlucoseRanges(low: 110, high: 200, target: 150),
+        ),
+      );
+      expect(stats!['low'], 100);
+      expect(stats['in_range'], 0);
     });
 
     test('threshold values are inclusive at both ends', () {
@@ -67,6 +90,33 @@ void main() {
       final payload = WidgetBridge.payloadFor(snapshotWith([120]));
       expect(payload['low'], 70.0);
       expect(payload['high'], 180.0);
+    });
+
+    test('tells the native side how the host colours, in display units', () {
+      final payload = WidgetBridge.payloadFor(
+        snapshotWith(
+          [120],
+          ranges: const GlucoseRanges(low: 72, high: 180, target: 108, isDynamic: true),
+          units: 'mmol/L',
+        ),
+      );
+
+      // The widgets compare these against the chart points they are handed, so
+      // a sweep left in mg/dL would paint every reading violet.
+      expect(payload['low'], closeTo(4.0, 0.001));
+      expect(payload['high'], closeTo(10.0, 0.001));
+      final color = payload['color'] as Map;
+      expect(color['scheme'], 'dynamicColor');
+      expect(color['target'], closeTo(6.0, 0.001));
+      expect(color['sweepLow'], closeTo(3.1, 0.001));
+      expect(color['sweepHigh'], closeTo(12.2, 0.001));
+    });
+
+    test('a host on the static scheme says so, rather than saying nothing', () {
+      final payload = WidgetBridge.payloadFor(
+        snapshotWith([120], ranges: const GlucoseRanges(low: 70, high: 180, target: 100)),
+      );
+      expect((payload['color'] as Map)['scheme'], 'staticColor');
     });
 
     test('chart points stay newest first with epoch milliseconds', () {

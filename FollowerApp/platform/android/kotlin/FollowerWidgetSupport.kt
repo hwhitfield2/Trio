@@ -13,7 +13,7 @@ import java.util.Date
 
 /**
  * Everything the three follower widgets share: reading the payload the Flutter
- * side published, colouring by the host's thresholds, and drawing the chart.
+ * side published, colouring by the host's own ranges, and drawing the chart.
  *
  * Values arrive pre-formatted from `lib/services/widget_bridge.dart`, so nothing
  * here repeats the app's unit conversion or rounding.
@@ -64,13 +64,82 @@ object FollowerWidgetSupport {
         return System.currentTimeMillis() - date > STALE_AFTER_MS
     }
 
-    fun glucoseColor(value: Double?, low: Double, high: Double, stale: Boolean): Int {
+    /**
+     * How the host colours glucose, as it reports it in the payload.
+     *
+     * The display low and high arrive alongside it, so only what the dynamic
+     * scheme needs is here. Every value is in the host's display units, like
+     * the readings themselves, so nothing here converts anything. Keep in sync
+     * with `GlucoseRanges.toPayload` in `lib/models/glucose_ranges.dart`.
+     */
+    data class ColorRanges(
+        val isDynamic: Boolean,
+        val target: Double,
+        val sweepLow: Double,
+        val sweepHigh: Double
+    ) {
+        companion object {
+            /** Null for a payload written by an app build that predates this. */
+            fun from(status: JSONObject): ColorRanges? {
+                val json = status.optJSONObject("color") ?: return null
+                return ColorRanges(
+                    isDynamic = json.optString("scheme") == "dynamicColor",
+                    target = json.optDouble("target", Double.NaN),
+                    sweepLow = json.optDouble("sweepLow", Double.NaN),
+                    sweepHigh = json.optDouble("sweepHigh", Double.NaN)
+                ).takeIf { it.isUsable }
+            }
+        }
+
+        /** A sweep that is not a range cannot be interpolated across. */
+        val isUsable: Boolean
+            get() = !target.isNaN() && !sweepLow.isNaN() && !sweepHigh.isNaN() && sweepHigh > sweepLow
+    }
+
+    fun glucoseColor(
+        value: Double?,
+        low: Double,
+        high: Double,
+        stale: Boolean,
+        ranges: ColorRanges? = null
+    ): Int {
         if (stale || value == null) return COLOR_SECONDARY
+        if (ranges != null && ranges.isDynamic) return hueBasedColor(value, ranges)
         return when {
-            value <= low -> COLOR_LOW
             value >= high -> COLOR_HIGH
+            value <= low -> COLOR_LOW
             else -> COLOR_IN_RANGE
         }
+    }
+
+    /**
+     * A port of Trio's `calculateHueBasedGlucoseColor`: red at the bottom of the
+     * sweep, green at the host's target, violet at the top.
+     */
+    private fun hueBasedColor(value: Double, ranges: ColorRanges): Int {
+        val redHue = 0.0
+        val greenHue = 120.0
+        val purpleHue = 270.0
+
+        val low = ranges.sweepLow
+        val high = ranges.sweepHigh
+        // The target normally sits well inside the sweep. One that does not
+        // would interpolate backwards, or across zero. The margin is a share of
+        // the sweep rather than a fixed number, because these are display units
+        // and one mmol/L is eighteen mg/dL.
+        val margin = (high - low) * 0.01
+        val pivot = ranges.target.coerceIn(low + margin, high - margin)
+
+        val hue = when {
+            value <= low -> redHue
+            value >= high -> purpleHue
+            value <= pivot -> redHue + (value - low) / (pivot - low) * (greenHue - redHue)
+            else -> greenHue + (value - pivot) / (high - pivot) * (purpleHue - greenHue)
+        }
+
+        // Saturation and brightness are the host's: Android's HSV is the same
+        // model as SwiftUI's Color(hue:saturation:brightness:).
+        return Color.HSVToColor(floatArrayOf(hue.toFloat(), 0.6f, 0.9f))
     }
 
     /** A string field, falling back when the key is absent, null or empty. */
@@ -108,7 +177,12 @@ object FollowerWidgetSupport {
      * readings to fit its push budget, and stretching two hours of points across a
      * six-hour axis would bunch them all into one corner.
      */
-    fun drawChart(status: JSONObject, low: Double, high: Double): Bitmap? {
+    fun drawChart(
+        status: JSONObject,
+        low: Double,
+        high: Double,
+        ranges: ColorRanges? = ColorRanges.from(status)
+    ): Bitmap? {
         val points = status.optJSONArray("chart") ?: return null
         if (points.length() == 0) return null
 
@@ -154,7 +228,7 @@ object FollowerWidgetSupport {
         paint.pathEffect = null
 
         for (index in values.indices) {
-            paint.color = glucoseColor(values[index], low, high, false)
+            paint.color = glucoseColor(values[index], low, high, false, ranges)
             canvas.drawCircle(x(times[index]), y(values[index]), 4f, paint)
         }
 

@@ -31,9 +31,15 @@ struct FollowerActivityAttributes: ActivityAttributes {
         let cob: String
         /// Seconds since epoch of the reading in `bg`.
         let readingDate: Double
-        /// Low and high thresholds in display units, for colouring.
+        /// The host's display low and high, in display units: the guide lines,
+        /// and the range a reading is coloured against.
         let low: Double
         let high: Double
+        /// Which scheme the host colours with, and what the dynamic one needs.
+        /// Optional like everything below: a host or app build that predates it
+        /// sends nothing, and the static three colours are what the Lock Screen
+        /// drew before anyway.
+        let color: FollowerGlucoseColorRanges?
         let chart: [Point]
 
         // Everything below is only drawn by the detailed layouts, and only when
@@ -75,4 +81,30 @@ struct FollowerActivityAttributes: ActivityAttributes {
     /// Fixed for the life of the activity. The host's name lets someone paired
     /// with more than one host tell the activities apart.
     let hostName: String
+}
+
+/// How the host colours glucose, as it reports it to this device.
+///
+/// The display low and high travel with the payload already, so only what the
+/// dynamic scheme needs is here. Every value is in the host's display units —
+/// the same ones the readings themselves arrive in — so nothing that reads it
+/// has to know whether that is mg/dL or mmol/L.
+///
+/// Keep in sync with `GlucoseRanges.toPayload` in
+/// `lib/models/glucose_ranges.dart`, and with `FollowerLiveActivityState` on
+/// the host, which builds the same object for a pushed update.
+struct FollowerGlucoseColorRanges: Codable, Hashable {
+    /// `GlucoseColorScheme`'s raw value on the host: "staticColor" or
+    /// "dynamicColor".
+    let scheme: String
+    /// The glucose target in force on the host, which the dynamic sweep shades
+    /// to green at.
+    let target: Double
+    /// The window the sweep runs across: red at `sweepLow`, violet at
+    /// `sweepHigh`. Wider than the display range on purpose — see the host's
+    /// `GlucoseChartView`.
+    let sweepLow: Double
+    let sweepHigh: Double
+
+    var isDynamic: Bool { scheme == "dynamicColor" }
 }

@@ -9,16 +9,6 @@ const glucoseLowColor = Colors.red;
 const glucoseInRangeColor = Colors.green;
 const glucoseHighColor = Colors.orange;
 
-/// The window the dynamic scheme sweeps its hue across, in mg/dL.
-///
-/// Hard-coded on the host too, and deliberately wider than the host's low and
-/// high: shading from red at the low itself would leave every in-range reading
-/// crowded into the greens. Keep in step with `GlucoseChartView` in Trio — the
-/// point of all of this is that the same reading is the same colour on both
-/// screens.
-const _dynamicLow = 55.0;
-const _dynamicHigh = 220.0;
-
 /// The colour the host would paint [sgv] (mg/dL), given the ranges it reports.
 Color glucoseColorFor(double sgv, GlucoseRanges ranges) {
   if (ranges.isDynamic) {
@@ -37,19 +27,25 @@ Color _hueBasedColor(double sgv, {required double target}) {
   const greenHue = 120.0;
   const purpleHue = 270.0;
 
+  const sweepLow = GlucoseRanges.dynamicSweepLow;
+  const sweepHigh = GlucoseRanges.dynamicSweepHigh;
+
   // The host's target normally sits well inside the window; a host reporting
   // one that does not would otherwise interpolate across zero, or backwards.
-  final pivot = target.clamp(_dynamicLow + 1, _dynamicHigh - 1).toDouble();
+  // The margin is a share of the sweep, so the native widgets — which work in
+  // display units, where one mmol/L is eighteen mg/dL — can clamp identically.
+  const margin = (sweepHigh - sweepLow) * 0.01;
+  final pivot = target.clamp(sweepLow + margin, sweepHigh - margin).toDouble();
 
   final double hue;
-  if (sgv <= _dynamicLow) {
+  if (sgv <= sweepLow) {
     hue = redHue;
-  } else if (sgv >= _dynamicHigh) {
+  } else if (sgv >= sweepHigh) {
     hue = purpleHue;
   } else if (sgv <= pivot) {
-    hue = redHue + (sgv - _dynamicLow) / (pivot - _dynamicLow) * (greenHue - redHue);
+    hue = redHue + (sgv - sweepLow) / (pivot - sweepLow) * (greenHue - redHue);
   } else {
-    hue = greenHue + (sgv - pivot) / (_dynamicHigh - pivot) * (purpleHue - greenHue);
+    hue = greenHue + (sgv - pivot) / (sweepHigh - pivot) * (purpleHue - greenHue);
   }
 
   // Saturation and brightness are the host's, not a guess: SwiftUI's

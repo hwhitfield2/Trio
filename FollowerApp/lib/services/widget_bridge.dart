@@ -36,10 +36,6 @@ class WidgetBridge {
     ['TrioFollowerLoopWidget', 'org.nightscout.trio_follower.LoopWidgetProvider'],
   ];
 
-  /// Fallback glucose thresholds in mg/dL, used until the host reports the ones
-  /// it actually alerts on. Match the in-app chart's colouring.
-  static const lowThreshold = 70.0;
-  static const highThreshold = 180.0;
 
   /// Writes the snapshot to shared storage and asks both platforms to redraw.
   ///
@@ -97,6 +93,7 @@ class WidgetBridge {
     final mmol = snapshot.units == 'mmol/L';
     final latest = snapshot.latest;
     final delta = snapshot.delta;
+    final ranges = snapshot.glucoseRanges;
 
     return <String, dynamic>{
       'units': snapshot.units,
@@ -113,11 +110,14 @@ class WidgetBridge {
           snapshot.eventualBg == null ? null : _formatGlucose(snapshot.eventualBg!.round(), mmol),
       'tempTargetName': snapshot.tempTarget?.name,
       'overrideName': snapshot.override?.name,
-      // Thresholds in display units, so the native side can colour without
-      // repeating the unit conversion. The host sends the values it alerts on;
-      // fall back to the in-app chart's defaults until it does.
-      'low': _convert(snapshot.lowThreshold ?? lowThreshold, mmol),
-      'high': _convert(snapshot.highThreshold ?? highThreshold, mmol),
+      // The host's display range in display units, so the native side can draw
+      // its guide lines and colour without repeating the unit conversion.
+      'low': _convert(ranges.low, mmol),
+      'high': _convert(ranges.high, mmol),
+      // What the three colours cannot say on their own: which scheme the host
+      // is using, and — for the dynamic one — where along the sweep a reading
+      // falls. Same units as everything else here.
+      'color': ranges.toPayload((mgdl) => _convert(mgdl, mmol)),
       'stats': statsFor(snapshot),
       'chart': [
         for (final reading in snapshot.readings)
@@ -129,12 +129,16 @@ class WidgetBridge {
   /// Share of the plotted readings below, inside and above the host's range.
   /// Percentages are whole numbers that always sum to 100, so the widgets can
   /// draw them as one stacked bar without rounding gaps.
+  ///
+  /// The host's display range decides this, the same one its dots are coloured
+  /// by — a bar that disagreed with the chart above it would be worse than no
+  /// bar at all.
   @visibleForTesting
   static Map<String, int>? statsFor(StatusSnapshot snapshot) {
     if (snapshot.readings.isEmpty) return null;
 
-    final low = snapshot.lowThreshold ?? lowThreshold;
-    final high = snapshot.highThreshold ?? highThreshold;
+    final low = snapshot.glucoseRanges.low;
+    final high = snapshot.glucoseRanges.high;
     final total = snapshot.readings.length;
     var below = 0;
     var above = 0;

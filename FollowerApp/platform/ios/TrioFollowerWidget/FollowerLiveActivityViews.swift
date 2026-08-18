@@ -7,11 +7,11 @@ import WidgetKit
 
 @available(iOS 16.2, *)
 extension FollowerActivityAttributes.ContentState {
+    /// The colour the host would paint this value, unless the user asked for a
+    /// single colour instead.
     func color(for value: Double?, scheme: FollowerDisplayPreferences.GlucoseColorScheme) -> Color {
         guard scheme == .dynamicColor, let value else { return .primary }
-        if value <= low { return .red }
-        if value >= high { return .orange }
-        return .green
+        return FollowerGlucoseColor.color(for: value, low: low, high: high, ranges: self.color)
     }
 
     func glucoseColor(_ scheme: FollowerDisplayPreferences.GlucoseColorScheme) -> Color {

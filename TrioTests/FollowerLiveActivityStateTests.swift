@@ -11,6 +11,7 @@ import Testing
         cob: Double? = 18.4,
         low: Double = 70,
         high: Double = 180,
+        ranges: FollowerStatusSnapshot.GlucoseRanges? = nil,
         eventualBG: Double? = 110,
         tempTarget: FollowerStatusSnapshot.ActiveTempTarget? = nil,
         override: FollowerStatusSnapshot.ActiveOverride? = nil,
@@ -36,7 +37,8 @@ import Testing
             maxBolus: 10,
             maxCarbs: 250,
             low: low,
-            high: high
+            high: high,
+            ranges: ranges
         )
     }
 
@@ -46,7 +48,14 @@ import Testing
         // follower app. ActivityKit drops a payload it cannot decode, and the
         // drop is silent, so this test is the only thing standing between a
         // rename and a Lock Screen that quietly stops updating.
-        let state = try #require(FollowerLiveActivityState.from(snapshot: snapshot()))
+        let state = try #require(FollowerLiveActivityState.from(snapshot: snapshot(
+            ranges: FollowerStatusSnapshot.GlucoseRanges(
+                low: 70,
+                high: 180,
+                target: 100,
+                scheme: "staticColor"
+            )
+        )))
         let json = try state.asJSONObject()
 
         #expect(Set(json.keys) == [
@@ -59,6 +68,10 @@ import Testing
             "low",
             "high",
             "chart",
+            // Only present because this snapshot has ranges; a host that has
+            // none simply leaves the key out, and the follower colours by the
+            // low and high alone.
+            "color",
             // Only present because this snapshot has them; see below.
             "eventual",
             "lastLoop"
@@ -66,6 +79,54 @@ import Testing
 
         let chart = try #require(json["chart"] as? [[String: Any]])
         #expect(Set(chart[0].keys) == ["v", "t"])
+
+        let color = try #require(json["color"] as? [String: Any])
+        #expect(Set(color.keys) == ["scheme", "target", "sweepLow", "sweepHigh"])
+    }
+
+    @Test("The Lock Screen is coloured by the host's ranges, in display units")
+    func colourRanges() throws {
+        let ranges = FollowerStatusSnapshot.GlucoseRanges(
+            low: 80,
+            high: 160,
+            target: 110,
+            scheme: "dynamicColor"
+        )
+
+        // The alert thresholds say when to wake this follower; they are not how
+        // the host draws a chart, and the Lock Screen follows the chart.
+        let state = try #require(FollowerLiveActivityState.from(snapshot: snapshot(
+            low: 75,
+            high: 200,
+            ranges: ranges
+        )))
+
+        #expect(state.low == 80)
+        #expect(state.high == 160)
+        #expect(state.color?.scheme == "dynamicColor")
+        #expect(state.color?.target == 110)
+        #expect(state.color?.sweepLow == FollowerLiveActivityState.colorSweepLow)
+        #expect(state.color?.sweepHigh == FollowerLiveActivityState.colorSweepHigh)
+
+        // The follower compares these against chart points in its own display
+        // units, so a sweep left in mg/dL would paint every reading violet.
+        let mmol = try #require(FollowerLiveActivityState.from(snapshot: snapshot(
+            units: "mmol/L",
+            ranges: ranges
+        )))
+
+        #expect(mmol.color?.target == 6.1)
+        #expect(mmol.color?.sweepLow == 3.1)
+        #expect(mmol.color?.sweepHigh == 12.2)
+    }
+
+    @Test("A host with no ranges still colours by what it does send")
+    func noColourRanges() throws {
+        let state = try #require(FollowerLiveActivityState.from(snapshot: snapshot(low: 75, high: 200)))
+
+        #expect(state.low == 75)
+        #expect(state.high == 200)
+        #expect(state.color == nil)
     }
 
     @Test("Values the detailed layouts do not have are left out of the payload")

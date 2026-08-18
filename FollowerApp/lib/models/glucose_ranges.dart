@@ -30,6 +30,32 @@ class GlucoseRanges {
   /// target to purple, rather than three fixed colours.
   final bool isDynamic;
 
+  /// The window that sweep runs across, in mg/dL: red at [dynamicSweepLow],
+  /// violet at [dynamicSweepHigh], green at [target] somewhere between.
+  ///
+  /// Hard-coded on the host too, and deliberately wider than the display range:
+  /// shading from red at the low itself would crowd every in-range reading into
+  /// the greens. Keep in step with `GlucoseChartView` in Trio.
+  static const dynamicSweepLow = 55.0;
+  static const dynamicSweepHigh = 220.0;
+
+  /// What the host calls this scheme, and what the native widgets and the Lock
+  /// Screen read back.
+  String get schemeName => isDynamic ? 'dynamicColor' : 'staticColor';
+
+  /// The colouring fields the platform widgets and the Live Activity need,
+  /// in whatever units [convert] produces.
+  ///
+  /// Those surfaces already receive the display low and high alongside this,
+  /// so only what the dynamic sweep needs travels here. [convert] is the
+  /// caller's own unit conversion, so a payload cannot end up half converted.
+  Map<String, dynamic> toPayload(double Function(double mgdl) convert) => <String, dynamic>{
+        'scheme': schemeName,
+        'target': convert(target),
+        'sweepLow': convert(dynamicSweepLow),
+        'sweepHigh': convert(dynamicSweepHigh),
+      };
+
   /// Reads the `ranges` object out of a status snapshot.
   ///
   /// Null for anything that is not a usable pair of bounds — an older host
