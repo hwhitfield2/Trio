@@ -254,7 +254,12 @@ class _StatusCard extends StatelessWidget {
                 readings: snapshot.readings,
                 units: state.units,
                 ranges: state.glucoseRanges,
+                treatments: snapshot.treatments,
               ),
+              if (snapshot.treatments.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _TreatmentsRow(treatments: snapshot.treatments),
+              ],
               const SizedBox(height: 8),
               _FreshnessRow(snapshot: snapshot),
             ],
@@ -268,6 +273,52 @@ class _StatusCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The last few boluses and carb entries, newest first.
+///
+/// The chart's markers say when something happened; this says what, without
+/// anyone having to hold a finger on a triangle to find out. Only a handful:
+/// this is a card on a home screen, not a history.
+class _TreatmentsRow extends StatelessWidget {
+  const _TreatmentsRow({required this.treatments});
+
+  static const _shown = 4;
+
+  final List<TreatmentEvent> treatments;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final newestFirst = treatments.reversed.take(_shown).toList();
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        for (final treatment in newestFirst)
+          Semantics(
+            label: '${treatment.spokenLabel} at ${DateFormat.jm().format(treatment.date)}',
+            excludeSemantics: true,
+            child: Chip(
+              visualDensity: VisualDensity.compact,
+              avatar: Icon(
+                treatment is BolusEvent ? Icons.water_drop : Icons.restaurant,
+                size: 16,
+                color: treatment is BolusEvent ? const Color(0xFF1E96FC) : Colors.orange,
+              ),
+              label: Text(
+                '${treatment.label} · ${DateFormat.jm().format(treatment.date)}'
+                // A bolus the loop gave itself is not one anybody chose, and a
+                // follower reading "3.5 U" deserves to know which it was.
+                '${treatment is BolusEvent && treatment.isAutomatic ? ' · auto' : ''}',
+                style: theme.textTheme.labelSmall,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

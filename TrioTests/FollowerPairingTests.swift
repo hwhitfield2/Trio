@@ -81,7 +81,12 @@ import Testing
                 high: 160,
                 target: 110,
                 scheme: "dynamicColor"
-            )
+            ),
+            boluses: [
+                FollowerStatusSnapshot.Bolus(a: 1.25, t: 1_723_399_600, s: true),
+                FollowerStatusSnapshot.Bolus(a: 3, t: 1_723_399_000, s: nil)
+            ],
+            carbs: [FollowerStatusSnapshot.CarbEntry(g: 30, t: 1_723_399_100)]
         )
 
         let data = try JSONEncoder().encode(snapshot)
@@ -112,6 +117,122 @@ import Testing
         #expect(ranges["high"] as? Double == 160)
         #expect(ranges["target"] as? Double == 110)
         #expect(ranges["scheme"] as? String == "dynamicColor")
+
+        // Short keys, because every treatment in a snapshot costs a glucose
+        // reading out of the same push budget.
+        let boluses = try #require(json["boluses"] as? [[String: Any]])
+        #expect(boluses.first?["a"] as? Double == 1.25)
+        #expect(boluses.first?["t"] as? Double == 1_723_399_600)
+        #expect(boluses.first?["s"] as? Bool == true)
+        // A bolus somebody asked for says nothing rather than saying false.
+        #expect(boluses[1]["s"] == nil)
+
+        let carbs = try #require(json["carbs"] as? [[String: Any]])
+        #expect(carbs.first?["g"] as? Double == 30)
+        #expect(carbs.first?["t"] as? Double == 1_723_399_100)
+    }
+
+    // MARK: - Push budget
+
+    /// Newest first, five minutes apart, like the host sends them.
+    private func readings(_ count: Int, from now: TimeInterval) -> [FollowerStatusSnapshot.Reading] {
+        (0 ..< count).map {
+            FollowerStatusSnapshot.Reading(sgv: 120, date: now - Double($0) * 300, direction: "Flat")
+        }
+    }
+
+    private func budgetSnapshot(
+        readings: [FollowerStatusSnapshot.Reading],
+        boluses: [FollowerStatusSnapshot.Bolus] = [],
+        carbs: [FollowerStatusSnapshot.CarbEntry] = []
+    ) -> FollowerStatusSnapshot {
+        FollowerStatusSnapshot(
+            type: "status",
+            timestamp: 1_723_400_000,
+            units: "mg/dL",
+            readings: readings,
+            iob: 1.25,
+            cob: 15,
+            lastLoop: 1_723_399_900,
+            eventualBG: 120,
+            tempTarget: nil,
+            override: nil,
+            maxBolus: 6.5,
+            maxCarbs: 120,
+            low: 70,
+            high: 180,
+            boluses: boluses,
+            carbs: carbs
+        )
+    }
+
+    private func decoded(_ data: Data) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    @Test("A snapshot is trimmed until the push it becomes fits APNS")
+    func payloadFitsThePushLimit() throws {
+        let now: TimeInterval = 1_723_400_000
+        let snapshot = budgetSnapshot(
+            readings: readings(48, from: now),
+            boluses: (0 ..< 12).map {
+                FollowerStatusSnapshot.Bolus(a: 1.25, t: now - Double($0) * 900, s: nil)
+            },
+            carbs: (0 ..< 8).map {
+                FollowerStatusSnapshot.CarbEntry(g: 30, t: now - Double($0) * 1200)
+            }
+        )
+
+        let data = try snapshot.encodedWithinPushLimit(using: JSONEncoder())
+        #expect(
+            FollowerStatusSnapshot.projectedPayloadSize(plaintextBytes: data.count)
+                <= FollowerStatusSnapshot.apnsPayloadLimit
+        )
+    }
+
+    @Test("Treatments the chart could not draw are the first thing dropped")
+    func treatmentsOffTheChartAreDropped() throws {
+        let now: TimeInterval = 1_723_400_000
+        // One bolus an hour before the oldest of two readings: nothing on the
+        // follower's chart for it to sit against.
+        let snapshot = budgetSnapshot(
+            readings: readings(2, from: now),
+            boluses: [FollowerStatusSnapshot.Bolus(a: 1, t: now - 3600, s: nil)],
+            carbs: [FollowerStatusSnapshot.CarbEntry(g: 30, t: now - 60)]
+        )
+
+        let json = try decoded(snapshot.encodedWithinPushLimit(using: JSONEncoder()))
+        #expect((json["boluses"] as? [[String: Any]])?.isEmpty == true)
+        #expect((json["carbs"] as? [[String: Any]])?.count == 1)
+        // ...and this one fits without giving up either reading.
+        #expect((json["readings"] as? [[String: Any]])?.count == 2)
+    }
+
+    @Test("Glucose gives way before treatments do, until two hours are left")
+    func readingsGiveWayFirst() throws {
+        let now: TimeInterval = 1_723_400_000
+        // Every treatment sits inside the readings' window, so nothing is
+        // dropped for being off the chart; the payload has to be cut instead.
+        let snapshot = budgetSnapshot(
+            readings: readings(48, from: now),
+            boluses: (0 ..< 20).map {
+                FollowerStatusSnapshot.Bolus(a: 1.25, t: now - Double($0) * 60, s: true)
+            },
+            carbs: (0 ..< 16).map {
+                FollowerStatusSnapshot.CarbEntry(g: 30, t: now - Double($0) * 60)
+            }
+        )
+
+        let json = try decoded(snapshot.encodedWithinPushLimit(using: JSONEncoder()))
+        let keptReadings = (json["readings"] as? [[String: Any]])?.count ?? 0
+        let keptBoluses = (json["boluses"] as? [[String: Any]])?.count ?? 0
+
+        // Readings were trimmed, but not past the floor, and the treatments
+        // near the newest readings survived: a follower has to be able to see
+        // that the climb was already answered.
+        #expect(keptReadings < 48)
+        #expect(keptReadings >= FollowerStatusSnapshot.minimumReadings)
+        #expect(keptBoluses > 0)
     }
 
     @Test("Per-follower thresholds leave the host's display ranges alone")

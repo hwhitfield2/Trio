@@ -40,6 +40,34 @@ class GlucoseChartScale {
   double xFor(GlucoseReading reading, double width) =>
       (reading.date.millisecondsSinceEpoch - start) / span * width;
 
+  /// The index of the reading a treatment sits over, or null when it happened
+  /// outside the window the chart covers.
+  ///
+  /// Anchored to a reading rather than plotted at its own height: a bolus has
+  /// no glucose value of its own, and drawing it against the reading it was
+  /// given for is what makes it readable — the same thing the host's chart
+  /// does.
+  int? anchorFor(DateTime date) {
+    if (points.isEmpty) return null;
+    final at = date.millisecondsSinceEpoch.toDouble();
+    // Half a reading's gap of slack at each end, so a treatment logged just
+    // before the oldest reading still belongs to it rather than vanishing.
+    final slack = points.length > 1 ? span / (points.length - 1) / 2 : 0;
+    if (at < start - slack || at > start + span + slack) return null;
+
+    var best = 0;
+    var bestDistance = double.infinity;
+    for (var index = 0; index < points.length; index++) {
+      final distance =
+          (points[index].date.millisecondsSinceEpoch - at).abs().toDouble();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    }
+    return best;
+  }
+
   /// The reading nearest [dx], or null when there is nothing to point at.
   ///
   /// Nearest rather than "the one under the finger": readings are five minutes
@@ -80,6 +108,7 @@ class GlucoseChart extends StatefulWidget {
     required this.readings,
     this.units = 'mg/dL',
     this.ranges = GlucoseRanges.defaults,
+    this.treatments = const [],
   });
 
   final List<GlucoseReading> readings;
@@ -93,25 +122,56 @@ class GlucoseChart extends StatefulWidget {
   /// built before a snapshot arrives still draws something sensible.
   final GlucoseRanges ranges;
 
+  /// Boluses and carbs from the same window, in any order. Each is drawn
+  /// against the reading it happened nearest to, the way the host draws its
+  /// own chart — a bolus means nothing except against the glucose it was
+  /// given for.
+  final List<TreatmentEvent> treatments;
+
   @override
   State<GlucoseChart> createState() => _GlucoseChartState();
 }
 
 class _GlucoseChartState extends State<GlucoseChart> {
   late GlucoseChartScale _scale = GlucoseChartScale(widget.readings);
+
+  /// Treatments by the index of the reading they sit over. Worked out once per
+  /// snapshot rather than per frame: scrubbing repaints constantly, and this
+  /// answer only changes when the data does.
+  late Map<int, List<TreatmentEvent>> _anchored = _anchor();
   int? _selected;
+
+  Map<int, List<TreatmentEvent>> _anchor() {
+    final anchored = <int, List<TreatmentEvent>>{};
+    for (final treatment in widget.treatments) {
+      final index = _scale.anchorFor(treatment.date);
+      if (index == null) continue;
+      anchored.putIfAbsent(index, () => <TreatmentEvent>[]).add(treatment);
+    }
+    // Insulin before carbs at the same reading, so a meal bolus and its meal
+    // always read in the same order.
+    for (final events in anchored.values) {
+      events.sort((a, b) => (a is BolusEvent ? 0 : 1).compareTo(b is BolusEvent ? 0 : 1));
+    }
+    return anchored;
+  }
 
   @override
   void didUpdateWidget(covariant GlucoseChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (identical(oldWidget.readings, widget.readings)) return;
+    final sameReadings = identical(oldWidget.readings, widget.readings);
+    final sameTreatments = identical(oldWidget.treatments, widget.treatments);
+    if (sameReadings && sameTreatments) return;
 
-    _scale = GlucoseChartScale(widget.readings);
-    // A snapshot arriving mid-scrub reshapes the window; keep pointing at
-    // something real rather than off the end of the new list.
-    if (_selected != null) {
-      _selected = _scale.isEmpty ? null : _selected!.clamp(0, _scale.points.length - 1);
+    if (!sameReadings) {
+      _scale = GlucoseChartScale(widget.readings);
+      // A snapshot arriving mid-scrub reshapes the window; keep pointing at
+      // something real rather than off the end of the new list.
+      if (_selected != null) {
+        _selected = _scale.isEmpty ? null : _selected!.clamp(0, _scale.points.length - 1);
+      }
     }
+    _anchored = _anchor();
   }
 
   void _select(double dx, double width) {
@@ -131,17 +191,22 @@ class _GlucoseChartState extends State<GlucoseChart> {
   /// One reading in words: what the readout bubble says, for anyone who cannot
   /// see it. Painted text is invisible to screen readers, so without this the
   /// chart is a blank rectangle to VoiceOver.
-  String _describe(GlucoseReading reading) =>
-      '${glucoseReadoutValue(reading, units: widget.units)} $_unitsLabel '
-      'at ${DateFormat.jm().format(reading.date)}';
+  String _describe(GlucoseReading reading, int index) {
+    final treatments = _anchored[index];
+    final spoken = treatments == null
+        ? ''
+        : treatments.map((treatment) => ', ${treatment.spokenLabel}').join();
+    return '${glucoseReadoutValue(reading, units: widget.units)} $_unitsLabel '
+        'at ${DateFormat.jm().format(reading.date)}$spoken';
+  }
 
   String get _unitsLabel => widget.units == 'mmol/L' ? 'mmol/L' : 'mg/dL';
 
   /// The selected reading, or the newest one when nothing is being scrubbed.
   String get _semanticsValue {
     if (_scale.isEmpty) return '';
-    final index = _selected;
-    return _describe(index == null ? _scale.points.last : _scale.points[index]);
+    final index = _selected ?? _scale.points.length - 1;
+    return _describe(_scale.points[index], index);
   }
 
   @override
@@ -177,6 +242,7 @@ class _GlucoseChartState extends State<GlucoseChart> {
                 painter: _GlucosePainter(
                   scale: _scale,
                   selected: _selected,
+                  anchored: _anchored,
                   ranges: widget.ranges,
                   gridColor: theme.colorScheme.outlineVariant,
                   crosshairColor: theme.colorScheme.outline,
@@ -207,6 +273,7 @@ class _GlucosePainter extends CustomPainter {
   _GlucosePainter({
     required this.scale,
     required this.selected,
+    required this.anchored,
     required this.ranges,
     required this.gridColor,
     required this.crosshairColor,
@@ -221,6 +288,9 @@ class _GlucosePainter extends CustomPainter {
 
   final GlucoseChartScale scale;
   final int? selected;
+
+  /// Treatments by the index of the reading they are drawn against.
+  final Map<int, List<TreatmentEvent>> anchored;
   final GlucoseRanges ranges;
   final Color gridColor;
   final Color crosshairColor;
@@ -238,6 +308,18 @@ class _GlucosePainter extends CustomPainter {
 
   static const _minSgv = 40.0;
   static const _maxSgv = 300.0;
+
+  /// Trio's own insulin blue, and the orange it draws carbs in. A follower
+  /// looking at both screens should not have to learn two colour schemes; the
+  /// shapes — one pointing down, one up — are what tell them apart from the
+  /// glucose dots.
+  static const _bolusColor = Color(0xFF1E96FC);
+  static const _carbColor = Colors.orange;
+
+  /// How far off the reading a marker's tip sits, and how far each further
+  /// marker at the same reading is stacked beyond it.
+  static const _markerGap = 5.0;
+  static const _markerStep = 4.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -263,10 +345,63 @@ class _GlucosePainter extends CustomPainter {
       );
     }
 
+    _paintTreatments(canvas, x, y);
+
     final index = selected;
     if (index != null && index < scale.points.length) {
-      _paintSelection(canvas, size, scale.points[index], x, y);
+      _paintSelection(canvas, size, scale.points[index], anchored[index] ?? const [], x, y);
     }
+  }
+
+  /// Boluses above the reading they were given for, carbs below it, each
+  /// pointing at it — the same arrangement the host's own chart uses, and the
+  /// only one that says which reading a treatment belongs to on a chart this
+  /// small.
+  void _paintTreatments(
+    Canvas canvas,
+    double Function(GlucoseReading) x,
+    double Function(double) y,
+  ) {
+    anchored.forEach((index, events) {
+      if (index >= scale.points.length) return;
+      final reading = scale.points[index];
+      final px = x(reading);
+      final py = y(reading.sgv.toDouble());
+
+      var above = py - _markerGap;
+      var below = py + _markerGap;
+      for (final event in events) {
+        if (event is BolusEvent) {
+          // 1 U is a small mark and 10 U a conspicuous one; beyond that the
+          // size stops meaning anything on a chart this size.
+          final size = (5 + event.units * 1.2).clamp(5.0, 12.0).toDouble();
+          _paintMarker(canvas, Offset(px, above), size, _bolusColor, pointsDown: true);
+          above -= size + _markerStep;
+        } else if (event is CarbEvent) {
+          final size = (5 + event.grams * 0.08).clamp(5.0, 12.0).toDouble();
+          _paintMarker(canvas, Offset(px, below), size, _carbColor, pointsDown: false);
+          below += size + _markerStep;
+        }
+      }
+    });
+  }
+
+  /// A triangle with its tip at [tip], pointing at the reading it belongs to.
+  void _paintMarker(
+    Canvas canvas,
+    Offset tip,
+    double size,
+    Color color, {
+    required bool pointsDown,
+  }) {
+    final half = size / 2;
+    final base = pointsDown ? tip.dy - size : tip.dy + size;
+    final path = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(tip.dx - half, base)
+      ..lineTo(tip.dx + half, base)
+      ..close();
+    canvas.drawPath(path, Paint()..color = color);
   }
 
   /// What the host would have painted this reading, from the ranges it
@@ -279,6 +414,7 @@ class _GlucosePainter extends CustomPainter {
     Canvas canvas,
     Size size,
     GlucoseReading reading,
+    List<TreatmentEvent> treatments,
     double Function(GlucoseReading) x,
     double Function(double) y,
   ) {
@@ -306,6 +442,17 @@ class _GlucosePainter extends CustomPainter {
             text: '\n${DateFormat.jm().format(reading.date)}',
             style: readoutCaptionStyle,
           ),
+          // What was given or eaten at this reading, in the marker's own
+          // colour: the triangles say something happened, and this is where
+          // the reader finds out what.
+          for (final treatment in treatments)
+            TextSpan(
+              text: '\n${treatment.label}',
+              style: readoutCaptionStyle.copyWith(
+                color: treatment is BolusEvent ? _bolusColor : _carbColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
         ],
       ),
       textAlign: TextAlign.center,
@@ -336,6 +483,7 @@ class _GlucosePainter extends CustomPainter {
   bool shouldRepaint(covariant _GlucosePainter oldDelegate) =>
       oldDelegate.scale != scale ||
       oldDelegate.selected != selected ||
+      oldDelegate.anchored != anchored ||
       oldDelegate.ranges != ranges ||
       oldDelegate.unitsLabel != unitsLabel ||
       // A theme, text size or writing direction change redraws too; none of

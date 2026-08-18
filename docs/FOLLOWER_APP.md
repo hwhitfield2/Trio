@@ -211,13 +211,24 @@ Encrypted exactly like commands, with the same per-follower key:
   "max_carbs": 120,
   "low": 70,
   "high": 180,
-  "ranges": { "low": 70, "high": 180, "target": 100, "scheme": "staticColor" }
+  "ranges": { "low": 70, "high": 180, "target": 100, "scheme": "staticColor" },
+  "boluses": [ {"a": 1.25, "t": 1723399600, "s": true}, ... ],
+  "carbs": [ {"g": 30, "t": 1723399100}, ... ]
 }
 ```
 
 `readings` is newest-first, up to 6 hours, always mg/dL. The follower ignores
 snapshots older than the one it already has (out-of-order pushes) and marks
 data stale in the UI when the newest snapshot is older than 15 minutes.
+
+`boluses` and `carbs` cover the same window as `readings`, newest first, and
+are drawn on the follower's chart against the reading each happened nearest.
+Keys are short because they compete with glucose for the same 4 KB: `a` is
+units, `g` is grams, `t` is Unix seconds, and `s` marks a bolus the loop gave
+itself (absent for one a person asked for). When a snapshot will not fit, what
+gives way is, in order: treatments outside the readings' window, then the
+oldest readings down to two hours, then the oldest treatments, then the rest of
+the readings.
 
 `low`/`high` are the glucose thresholds *this* follower is alerted on, and are
 substituted per follower. `ranges` is a different thing: how the host itself

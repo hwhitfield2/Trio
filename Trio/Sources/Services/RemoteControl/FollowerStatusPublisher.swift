@@ -42,6 +42,30 @@ struct FollowerStatusSnapshot: Encodable {
         }
     }
 
+    /// A bolus the pump delivered, for the follower's chart.
+    ///
+    /// Keys are short because a snapshot has an APNS payload to fit inside and
+    /// treatments compete with glucose readings for it — see
+    /// `encodedWithinPushLimit`.
+    struct Bolus: Encodable {
+        /// Units.
+        let a: Double
+        /// Unix seconds.
+        let t: TimeInterval
+        /// True for a bolus the loop gave itself (an SMB), and absent for one a
+        /// person asked for: a nil Optional encodes to no key at all, which is
+        /// the cheapest way to say "no".
+        let s: Bool?
+    }
+
+    /// A carb entry someone logged on the host.
+    struct CarbEntry: Encodable {
+        /// Grams.
+        let g: Double
+        /// Unix seconds.
+        let t: TimeInterval
+    }
+
     /// The glucose ranges the host colours by, so a follower's chart paints the
     /// same reading the same colour the host does. Distinct from `low`/`high`
     /// below: those are the thresholds this follower is *alerted* on, which a
@@ -87,6 +111,12 @@ struct FollowerStatusSnapshot: Encodable {
     /// ranges, and a follower talking to one falls back to its own defaults.
     var ranges: GlucoseRanges?
 
+    /// What was delivered and eaten over the same window as `readings`, newest
+    /// first. A follower watching glucose climb needs to know whether anyone
+    /// has already answered it.
+    var boluses: [Bolus] = []
+    var carbs: [CarbEntry] = []
+
     /// Whether insulin delivery is stopped right now, straight from the pump's
     /// own state. A follower only ever learns that its emergency suspension
     /// took effect from this — never from the push having been accepted.
@@ -118,10 +148,97 @@ struct FollowerStatusSnapshot: Encodable {
         case low
         case high
         case ranges
+        case boluses
+        case carbs
         case suspended
         case suspendedBy = "suspended_by"
         case suspendedAt = "suspended_at"
         case suspendAcknowledged = "suspend_acknowledged"
+    }
+}
+
+// MARK: - Push size budget
+
+extension FollowerStatusSnapshot {
+    /// APNS rejects a background notification larger than 4 KB.
+    static let apnsPayloadLimit = 4096
+    /// The `aps` dictionary, `follower_id` and the JSON scaffolding wrapped
+    /// around `encrypted_status`.
+    static let apnsEnvelopeOverhead = 128
+
+    /// Readings kept before treatments start giving way instead. Two hours of
+    /// glucose is the least that still reads as a trend.
+    static let minimumReadings = 24
+
+    /// Encodes the snapshot, dropping what it can spare until the payload it
+    /// will become fits an APNS background push.
+    ///
+    /// The snapshot is encrypted and base64-encoded before it is sent, which
+    /// inflates it by a third, so the plaintext budget is much smaller than the
+    /// 4 KB limit suggests: a full 6 hours of readings encodes to well over
+    /// 6 KB of payload. APNS answers those with 413 PayloadTooLarge, which the
+    /// follower only ever sees as a status that never arrives — so trim here
+    /// rather than let the push fail.
+    ///
+    /// What gives way, in order: treatments the chart could not draw anyway,
+    /// then the oldest readings, then treatments, then whatever is left. The
+    /// order is the point — a bolus is only meaningful against the glucose it
+    /// was given for, and glucose without the bolus is a follower watching a
+    /// number climb with no idea whether anyone has answered it.
+    func encodedWithinPushLimit(using encoder: JSONEncoder) throws -> Data {
+        var snapshot = self
+
+        // Everything is newest first, so the last element of each is the oldest.
+        func dropTreatmentsOffTheChart() {
+            guard let oldestReading = snapshot.readings.last?.date else {
+                snapshot.boluses = []
+                snapshot.carbs = []
+                return
+            }
+            snapshot.boluses.removeAll { $0.t < oldestReading }
+            snapshot.carbs.removeAll { $0.t < oldestReading }
+        }
+
+        func dropOldestTreatment() {
+            switch (snapshot.boluses.last?.t, snapshot.carbs.last?.t) {
+            case (.some(let bolus), .some(let carb)):
+                if bolus <= carb {
+                    snapshot.boluses.removeLast()
+                } else {
+                    snapshot.carbs.removeLast()
+                }
+            case (.some, .none):
+                snapshot.boluses.removeLast()
+            case (.none, .some):
+                snapshot.carbs.removeLast()
+            case (.none, .none):
+                break
+            }
+        }
+
+        dropTreatmentsOffTheChart()
+        var data = try encoder.encode(snapshot)
+
+        while Self.projectedPayloadSize(plaintextBytes: data.count) > Self.apnsPayloadLimit {
+            if snapshot.readings.count > Self.minimumReadings {
+                snapshot.readings.removeLast()
+                dropTreatmentsOffTheChart()
+            } else if !snapshot.boluses.isEmpty || !snapshot.carbs.isEmpty {
+                dropOldestTreatment()
+            } else if !snapshot.readings.isEmpty {
+                snapshot.readings.removeLast()
+            } else {
+                break
+            }
+            data = try encoder.encode(snapshot)
+        }
+        return data
+    }
+
+    static func projectedPayloadSize(plaintextBytes: Int) -> Int {
+        let encrypted = 12 + plaintextBytes + 16 // nonce || ciphertext || GCM tag
+        let base64 = (encrypted + 2) / 3 * 4
+        return base64 + apnsEnvelopeOverhead
     }
 }
 
@@ -196,7 +313,7 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
                 // per-follower rather than shared.
                 let personalised = snapshot.withThresholds(from: follower.alertSettings)
                 if follower.isPushRegistered {
-                    let snapshotData = try encodeWithinPushLimit(personalised, using: encoder)
+                    let snapshotData = try personalised.encodedWithinPushLimit(using: encoder)
                     do {
                         let encrypted = try messenger.encrypt(data: snapshotData)
                         try await FollowerPushSender.shared.sendStatus(encryptedStatus: encrypted, to: follower)
@@ -237,43 +354,6 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
         }
     }
 
-    // MARK: - Push size budget
-
-    /// APNS rejects a background notification larger than 4 KB.
-    private static let apnsPayloadLimit = 4096
-    /// The `aps` dictionary, `follower_id` and the JSON scaffolding wrapped
-    /// around `encrypted_status`.
-    private static let apnsEnvelopeOverhead = 128
-
-    /// Encodes the snapshot, dropping the oldest readings until the payload it
-    /// will become fits an APNS background push.
-    ///
-    /// The snapshot is encrypted and base64-encoded before it is sent, which
-    /// inflates it by a third, so the plaintext budget is much smaller than the
-    /// 4 KB limit suggests: a full 6 hours of readings encodes to well over
-    /// 6 KB of payload. APNS answers those with 413 PayloadTooLarge, which the
-    /// follower only ever sees as a status that never arrives — so trim here
-    /// rather than let the push fail.
-    private func encodeWithinPushLimit(
-        _ snapshot: FollowerStatusSnapshot,
-        using encoder: JSONEncoder
-    ) throws -> Data {
-        var snapshot = snapshot
-        var data = try encoder.encode(snapshot)
-        while projectedPayloadSize(plaintextBytes: data.count) > Self.apnsPayloadLimit, !snapshot.readings.isEmpty {
-            // Readings are newest first, so the last one is the oldest.
-            snapshot.readings.removeLast()
-            data = try encoder.encode(snapshot)
-        }
-        return data
-    }
-
-    private func projectedPayloadSize(plaintextBytes: Int) -> Int {
-        let encrypted = 12 + plaintextBytes + 16 // nonce || ciphertext || GCM tag
-        let base64 = (encrypted + 2) / 3 * 4
-        return base64 + Self.apnsEnvelopeOverhead
-    }
-
     // MARK: - Snapshot assembly
 
     private func buildSnapshot() async throws -> FollowerStatusSnapshot {
@@ -281,6 +361,8 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
         let determination = try await fetchDetermination()
         let tempTarget = try await fetchActiveTempTarget()
         let override = try await fetchActiveOverride()
+        let boluses = try await fetchBoluses()
+        let carbs = try await fetchCarbs()
 
         let iob = iobService.currentIOB.map { Double(truncating: $0 as NSNumber) }
         let settings = settingsManager.settings
@@ -317,6 +399,8 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             low: Double(truncating: FollowerAlertSettings.default.low.threshold as NSNumber),
             high: Double(truncating: FollowerAlertSettings.default.high.threshold as NSNumber),
             ranges: ranges,
+            boluses: boluses,
+            carbs: carbs,
             suspended: suspended,
             suspendedBy: suspension?.followerName,
             suspendedAt: suspension?.requestedAt.timeIntervalSince1970.rounded(),
@@ -333,7 +417,7 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             ascending: false,
             // ~4 hours at a 5-minute CGM cadence. Six hours (72) does not fit
             // an APNS background push once encrypted and base64-encoded; see
-            // encodeWithinPushLimit, which enforces the real budget.
+            // encodedWithinPushLimit, which enforces the real budget.
             fetchLimit: 48
         )
 
@@ -398,6 +482,75 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
     /// Stands in when the host has no readable target schedule; the same
     /// default the Home screen starts from.
     private static let fallbackTarget: Decimal = 100
+
+    /// Boluses over the same window the readings cover, newest first.
+    ///
+    /// Capped well below what six hours could hold: a follower's chart shows
+    /// what has been given, not a pump history, and every event costs readings
+    /// out of the push budget.
+    private func fetchBoluses() async throws -> [FollowerStatusSnapshot.Bolus] {
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: PumpEventStored.self,
+            onContext: context,
+            predicate: NSPredicate(
+                format: "timestamp >= %@ AND bolus != nil",
+                Date.sixHoursAgo as NSDate
+            ),
+            key: "timestamp",
+            ascending: false,
+            fetchLimit: 24,
+            // The amount lives on the relationship, so prefetch it rather than
+            // fault every row separately once the context has them.
+            relationshipKeyPathsForPrefetching: ["bolus"]
+        )
+
+        return await context.perform {
+            guard let events = results as? [PumpEventStored] else { return [] }
+            return events.compactMap { event in
+                guard let bolus = event.bolus, let amount = bolus.amount else { return nil }
+                let units = Double(truncating: amount)
+                guard units > 0 else { return nil }
+                return FollowerStatusSnapshot.Bolus(
+                    // Two decimals is finer than any pump delivers, and the
+                    // digits beyond it are float noise in the payload.
+                    a: (units * 100).rounded() / 100,
+                    t: (event.timestamp ?? Date()).timeIntervalSince1970.rounded(),
+                    s: bolus.isSMB ? true : nil
+                )
+            }
+        }
+    }
+
+    /// Carb entries over the same window, newest first.
+    ///
+    /// The fat/protein entries Trio derives from a meal are left out: they are
+    /// not something anyone ate at that moment, and explaining that on a
+    /// follower's chart would cost more than it tells.
+    private func fetchCarbs() async throws -> [FollowerStatusSnapshot.CarbEntry] {
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: CarbEntryStored.self,
+            onContext: context,
+            predicate: NSPredicate(
+                format: "date >= %@ AND carbs > 0 AND isFPU == NO",
+                Date.sixHoursAgo as NSDate
+            ),
+            key: "date",
+            ascending: false,
+            fetchLimit: 16,
+            propertiesToFetch: ["carbs", "date"]
+        )
+
+        return await context.perform {
+            guard let rows = results as? [[String: Any]] else { return [] }
+            return rows.compactMap { row in
+                guard let grams = row["carbs"] as? Double, grams > 0 else { return nil }
+                return FollowerStatusSnapshot.CarbEntry(
+                    g: grams.rounded(),
+                    t: ((row["date"] as? Date) ?? Date()).timeIntervalSince1970.rounded()
+                )
+            }
+        }
+    }
 
     private struct DeterminationSummary {
         let cob: Double?
