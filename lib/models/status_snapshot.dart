@@ -19,6 +19,8 @@ class StatusSnapshot {
     this.lowThreshold,
     this.highThreshold,
     this.ranges,
+    this.boluses = const [],
+    this.carbs = const [],
     this.suspended = false,
     this.suspendedBy,
     this.suspendedAt,
@@ -72,6 +74,15 @@ class StatusSnapshot {
     // one: the dynamic scheme only comes from a host that reports its ranges.
     return GlucoseRanges(low: low, high: high, target: (low + high) / 2);
   }
+
+  /// What the pump delivered and what was logged as eaten over the readings'
+  /// window, newest first. Empty on hosts that predate reporting them.
+  final List<BolusEvent> boluses;
+  final List<CarbEvent> carbs;
+
+  /// Both, oldest first, which is the order a chart draws them in.
+  List<TreatmentEvent> get treatments =>
+      [...boluses, ...carbs]..sort((a, b) => a.date.compareTo(b.date));
 
   /// Whether insulin delivery is stopped on the host right now, as reported by
   /// the pump itself. This — and only this — is what tells a follower that an
@@ -137,6 +148,8 @@ class StatusSnapshot {
       lowThreshold: (json['low'] as num?)?.toDouble(),
       highThreshold: (json['high'] as num?)?.toDouble(),
       ranges: GlucoseRanges.fromJson(json['ranges']),
+      boluses: BolusEvent.listFrom(json['boluses']),
+      carbs: CarbEvent.listFrom(json['carbs']),
       suspended: json['suspended'] == true,
       suspendedBy: json['suspended_by'] as String?,
       suspendedAt: json['suspended_at'] is num
@@ -145,6 +158,100 @@ class StatusSnapshot {
       suspendAcknowledged: json['suspend_acknowledged'] == true,
     );
   }
+}
+
+/// Something the host did that a follower can see on the chart.
+///
+/// Wire keys are short — `t` for the time, `a`/`g` for the amount — because a
+/// snapshot has an APNS payload to fit inside, and every treatment in it costs
+/// a glucose reading. Keep in sync with `FollowerStatusSnapshot` on the host.
+abstract class TreatmentEvent {
+  const TreatmentEvent({required this.date});
+
+  final DateTime date;
+
+  /// How it reads in a list or a readout, e.g. "1.25 U" or "30 g".
+  String get label;
+
+  /// The same thing said rather than shown, for a screen reader: "U" and "g"
+  /// are not words.
+  String get spokenLabel;
+
+  static DateTime? _dateFrom(Object? value) => value is num
+      ? DateTime.fromMillisecondsSinceEpoch((value * 1000).round())
+      : null;
+
+  static double? _amountFrom(Object? value) {
+    if (value is! num) return null;
+    final amount = value.toDouble();
+    // A treatment of nothing is not one, and a chart marker for it would be a
+    // lie about something having been given.
+    if (!amount.isFinite || amount <= 0) return null;
+    return amount;
+  }
+}
+
+/// A bolus the pump delivered.
+class BolusEvent extends TreatmentEvent {
+  const BolusEvent({required super.date, required this.units, this.isAutomatic = false});
+
+  /// Units of insulin.
+  final double units;
+
+  /// Whether the loop gave it itself (an SMB) rather than someone asking for
+  /// it. Worth saying: "3.5 U" means something different depending.
+  final bool isAutomatic;
+
+  @override
+  String get label => '${formatInsulin(units)} U';
+
+  @override
+  String get spokenLabel =>
+      '${formatInsulin(units)} unit${units == 1 ? '' : 's'} '
+      '${isAutomatic ? 'automatic bolus' : 'bolus'}';
+
+  static List<BolusEvent> listFrom(Object? json) {
+    if (json is! List) return const [];
+    return [
+      for (final entry in json)
+        if (entry is Map<String, dynamic>)
+          if (TreatmentEvent._dateFrom(entry['t']) case final date?)
+            if (TreatmentEvent._amountFrom(entry['a']) case final units?)
+              BolusEvent(date: date, units: units, isAutomatic: entry['s'] == true),
+    ];
+  }
+}
+
+/// Carbs someone logged on the host.
+class CarbEvent extends TreatmentEvent {
+  const CarbEvent({required super.date, required this.grams});
+
+  final double grams;
+
+  @override
+  String get label => '${grams.round()} g';
+
+  @override
+  String get spokenLabel => '${grams.round()} grams of carbs';
+
+  static List<CarbEvent> listFrom(Object? json) {
+    if (json is! List) return const [];
+    return [
+      for (final entry in json)
+        if (entry is Map<String, dynamic>)
+          if (TreatmentEvent._dateFrom(entry['t']) case final date?)
+            if (TreatmentEvent._amountFrom(entry['g']) case final grams?)
+              CarbEvent(date: date, grams: grams),
+    ];
+  }
+}
+
+/// Insulin the way the rest of the app writes it: two decimals only when the
+/// pump actually delivered them.
+String formatInsulin(double units) {
+  final rounded = (units * 100).round() / 100;
+  if (rounded == rounded.roundToDouble()) return rounded.toStringAsFixed(0);
+  return rounded.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '');
 }
 
 class GlucoseReading {

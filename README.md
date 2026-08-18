@@ -14,11 +14,23 @@ It also shows live glucose, IOB, COB, loop state and active targets/overrides
 — **pushed end-to-end encrypted straight from the host device**. There is no
 Nightscout and no other third-party data service anywhere in the loop.
 
+**Boluses and carb entries** from the last few hours are on the chart too:
+insulin as a blue marker above the reading it was given for, carbs as an
+orange one below it — the arrangement and the colours Trio's own chart uses.
+The last few are also listed under the chart with their amount and time, and a
+bolus the loop gave itself is marked `auto`. A follower watching glucose climb
+should not have to guess whether anyone has already answered it.
+
 **Touch and hold the glucose chart** — or drag sideways across it — to read a
-single reading's value and time; the readings are five minutes apart and the
-chart is small, so there is otherwise no way to tell what any given dot was.
-Releasing puts the chart back. The same readout is published as the chart's
-accessibility value, since painted text is invisible to a screen reader.
+single reading's value and time, and what was given or eaten at it; the
+readings are five minutes apart and the chart is small, so there is otherwise
+no way to tell what any given dot was. Releasing puts the chart back. The same
+readout is published as the chart's accessibility value, since painted text is
+invisible to a screen reader.
+
+Treatments are in the app only: the home screen widgets and the Live Activity
+show glucose, and a pushed Live Activity has a 4 KB budget that the chart
+already fills.
 
 The same data is available on the **home screen**, on both platforms: an iOS
 widget (small, medium, and the three lock screen sizes) and an Android app
