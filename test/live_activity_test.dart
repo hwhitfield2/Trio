@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trio_follower/models/glucose_ranges.dart';
 import 'package:trio_follower/models/status_snapshot.dart';
 import 'package:trio_follower/services/live_activity_bridge.dart';
 
@@ -73,7 +74,8 @@ void main() {
       expect(
         state.keys.toSet(),
         {
-          'bg', 'direction', 'change', 'iob', 'cob', 'readingDate', 'low', 'high', 'chart',
+          'bg', 'direction', 'change', 'iob', 'cob', 'readingDate', 'low', 'high', 'color',
+          'chart',
           // Drawn only by the detailed layouts, and null when the host sent
           // nothing for them.
           'eventual', 'overrideName', 'tempTargetName', 'lastLoop',
@@ -81,6 +83,47 @@ void main() {
       );
       final point = (state['chart'] as List).first as Map;
       expect(point.keys.cast<String>().toSet(), {'v', 't'});
+      final color = state['color'] as Map;
+      expect(color.keys.cast<String>().toSet(), {'scheme', 'target', 'sweepLow', 'sweepHigh'});
+    });
+
+    test('the Lock Screen colours by the host ranges, not the alert thresholds', () {
+      final now = DateTime.now();
+      final snapshot = StatusSnapshot(
+        timestamp: now,
+        units: 'mg/dL',
+        readings: [GlucoseReading(sgv: 120, date: now, direction: 'Flat')],
+        lowThreshold: 75,
+        highThreshold: 200,
+        ranges: const GlucoseRanges(low: 80, high: 160, target: 110, isDynamic: true),
+      );
+
+      final state = LiveActivityBridge.stateFor(snapshot);
+      expect(state['low'], 80);
+      expect(state['high'], 160);
+      expect(state['color'], {
+        'scheme': 'dynamicColor',
+        'target': 110.0,
+        'sweepLow': GlucoseRanges.dynamicSweepLow,
+        'sweepHigh': GlucoseRanges.dynamicSweepHigh,
+      });
+    });
+
+    test('the colouring travels in display units, like everything else here', () {
+      // The widget extension compares these against the chart points it is
+      // given, which are mmol/L on an mmol/L host; a sweep left in mg/dL would
+      // paint every reading violet.
+      final snapshot = StatusSnapshot(
+        timestamp: DateTime.now(),
+        units: 'mmol/L',
+        readings: [GlucoseReading(sgv: 120, date: DateTime.now(), direction: 'Flat')],
+        ranges: const GlucoseRanges(low: 72, high: 180, target: 108, isDynamic: true),
+      );
+
+      final color = LiveActivityBridge.stateFor(snapshot)['color'] as Map;
+      expect(color['target'], closeTo(6.0, 0.001));
+      expect(color['sweepLow'], closeTo(3.1, 0.001));
+      expect(color['sweepHigh'], closeTo(12.2, 0.001));
     });
 
     test('matches the host formatting vector, value for value', () {

@@ -44,7 +44,9 @@ class GlucoseWidgetProvider : AppWidgetProvider() {
         val high = status.optDouble("high", 180.0)
         val bg = status.optString("bg", "--")
         val stale = FollowerWidgetSupport.isStale(status)
-        val glucoseColor = FollowerWidgetSupport.glucoseColor(bg.toDoubleOrNull(), low, high, stale)
+        val colorRanges = FollowerWidgetSupport.ColorRanges.from(status)
+        val glucoseColor =
+            FollowerWidgetSupport.glucoseColor(bg.toDoubleOrNull(), low, high, stale, colorRanges)
 
         views.setTextViewText(R.id.widget_bg, bg)
         views.setTextColor(R.id.widget_bg, glucoseColor)
@@ -67,7 +69,7 @@ class GlucoseWidgetProvider : AppWidgetProvider() {
 
         views.setImageViewBitmap(
             R.id.widget_chart,
-            FollowerWidgetSupport.drawChart(status, low, high)
+            FollowerWidgetSupport.drawChart(status, low, high, colorRanges)
         )
         return views
     }

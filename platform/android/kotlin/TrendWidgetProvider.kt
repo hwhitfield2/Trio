@@ -42,7 +42,9 @@ class TrendWidgetProvider : AppWidgetProvider() {
         val high = status.optDouble("high", 180.0)
         val bg = status.optString("bg", "--")
         val stale = FollowerWidgetSupport.isStale(status)
-        val glucoseColor = FollowerWidgetSupport.glucoseColor(bg.toDoubleOrNull(), low, high, stale)
+        val colorRanges = FollowerWidgetSupport.ColorRanges.from(status)
+        val glucoseColor =
+            FollowerWidgetSupport.glucoseColor(bg.toDoubleOrNull(), low, high, stale, colorRanges)
 
         views.setTextViewText(R.id.trend_bg, bg)
         views.setTextColor(R.id.trend_bg, glucoseColor)
@@ -54,7 +56,7 @@ class TrendWidgetProvider : AppWidgetProvider() {
         )
         views.setImageViewBitmap(
             R.id.trend_chart,
-            FollowerWidgetSupport.drawChart(status, low, high)
+            FollowerWidgetSupport.drawChart(status, low, high, colorRanges)
         )
 
         val hours = FollowerWidgetSupport.chartWindowHours(status)

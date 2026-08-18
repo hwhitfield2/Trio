@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:trio_live_activity/trio_live_activity.dart';
 
 import '../models/status_snapshot.dart';
-import 'widget_bridge.dart';
 
 // Callers deal in the bridge, not the plugin, so the one type they need to name
 // comes along with it.
@@ -141,8 +140,7 @@ class LiveActivityBridge {
     final mmol = snapshot.units == 'mmol/L';
     final latest = snapshot.latest;
     final delta = snapshot.delta;
-    final low = snapshot.lowThreshold ?? WidgetBridge.lowThreshold;
-    final high = snapshot.highThreshold ?? WidgetBridge.highThreshold;
+    final ranges = snapshot.glucoseRanges;
 
     double convert(double mgdl) =>
         mmol ? double.parse((mgdl / 18.0).toStringAsFixed(1)) : mgdl;
@@ -170,8 +168,11 @@ class LiveActivityBridge {
       'lastLoop': snapshot.lastLoop == null
           ? null
           : snapshot.lastLoop!.millisecondsSinceEpoch ~/ 1000,
-      'low': convert(low),
-      'high': convert(high),
+      // The host's display range, and how it colours within it — the Lock
+      // Screen paints each point the colour the host's own chart would.
+      'low': convert(ranges.low),
+      'high': convert(ranges.high),
+      'color': ranges.toPayload(convert),
       'chart': [
         for (final reading in snapshot.readings.take(_maxChartPoints))
           {

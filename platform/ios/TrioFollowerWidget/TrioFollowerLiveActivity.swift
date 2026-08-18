@@ -15,6 +15,7 @@ extension FollowerActivityAttributes.ContentState {
             readingDate: now,
             low: 70,
             high: 180,
+            color: nil,
             chart: (0 ..< 24).map { index in
                 Point(v: Double(110 + (index % 8) * 6), t: now - Double(23 - index) * 300)
             },

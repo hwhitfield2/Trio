@@ -43,13 +43,37 @@ struct FollowerStatus: Codable {
     let eventualBg: String?
     let tempTargetName: String?
     let overrideName: String?
-    /// Low and high thresholds, already in display units. These are the host's
-    /// own alert thresholds when it has sent them, so the colouring here agrees
-    /// with what the host alerts on.
+    /// The host's display low and high, already in display units, so the guide
+    /// lines and the colouring here are the host's own and not this device's
+    /// idea of a range.
     let low: Double
     let high: Double
+    /// Which scheme the host colours with, and what the dynamic one needs.
+    /// Optional: an app build that predates it sends nothing, and the static
+    /// three colours are what this extension drew before anyway.
+    let colorRanges: FollowerGlucoseColorRanges?
     let chart: [ChartPoint]
     let stats: Stats?
+
+    enum CodingKeys: String, CodingKey {
+        case units
+        case bg
+        case direction
+        case change
+        case glucoseDate
+        case hostDate
+        case lastLoop
+        case iob
+        case cob
+        case eventualBg
+        case tempTargetName
+        case overrideName
+        case low
+        case high
+        case colorRanges = "color"
+        case chart
+        case stats
+    }
 
     /// Mirrors Trio's own widget: a reading older than six minutes is shown as
     /// no longer current.
@@ -73,15 +97,14 @@ struct FollowerStatus: Codable {
     /// The numeric glucose value, for colouring. `nil` when there is no reading.
     var glucoseValue: Double? { Double(bg) }
 
-    /// Range colouring, unless the user asked for a single colour instead.
+    /// The colour the host would paint this value, unless the user asked for a
+    /// single colour instead.
     func color(
         for value: Double?,
         scheme: FollowerDisplayPreferences.GlucoseColorScheme = .dynamicColor
     ) -> Color {
         guard scheme == .dynamicColor, let value else { return .primary }
-        if value <= low { return .red }
-        if value >= high { return .orange }
-        return .green
+        return FollowerGlucoseColor.color(for: value, low: low, high: high, ranges: colorRanges)
     }
 
     func glucoseColor(_ scheme: FollowerDisplayPreferences.GlucoseColorScheme) -> Color {
@@ -116,6 +139,7 @@ struct FollowerStatus: Codable {
             overrideName: nil,
             low: 70,
             high: 180,
+            colorRanges: nil,
             chart: (0 ..< 36).map { index in
                 ChartPoint(
                     v: Double(110 + (index % 12) * 5),

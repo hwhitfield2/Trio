@@ -200,9 +200,11 @@ or **Widgets** → **Trio Follower** on Android.
   whatever size you give it.
 
 Both show glucose and trend, the delta, IOB, COB and the time of the reading,
-coloured with the same thresholds as the in-app chart — the ones the host
-alerts on, or 70/180 mg/dL until it reports them — and strike the value
-through once the reading is more than six minutes old.
+coloured the way the host colours its own chart — its display range and its
+colour scheme, static or dynamic, or 70/180 mg/dL until it reports them — and
+strike the value through once the reading is more than six minutes old. The
+in-app chart and the Live Activity use the same ranges, so a reading is the
+same colour wherever this app draws it, and the same colour the host draws it.
 
 How it works: `lib/services/widget_bridge.dart` formats every displayed value
 and writes one JSON payload to shared storage whenever a status push arrives —
@@ -376,7 +378,9 @@ Live Activity & widgets**:
   Watch Smart Stack and the CarPlay dashboard. The activity reaches them at all
   because it declares `supplementalActivityFamilies([.small])`, which needs
   iOS 18.
-- **Glucose colour** — coloured by range, or a single colour.
+- **Glucose colour** — coloured by range, or a single colour. "By range" means
+  the host's range and the host's scheme, which arrive with the status; this
+  choice only decides whether they are used at all.
 - **Detailed layout** — the four values under the chart, in order: glucose
   (two sizes), IOB, COB, eventual glucose, last updated, or blank. The medium
   home screen widget follows the same list.
