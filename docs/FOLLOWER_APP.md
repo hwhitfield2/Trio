@@ -230,6 +230,12 @@ gives way is, in order: treatments outside the readings' window, then the
 oldest readings down to two hours, then the oldest treatments, then the rest of
 the readings.
 
+The same two arrays travel on to the follower's widgets (times in milliseconds,
+matching that payload's chart points) and to its Live Activity (times in
+seconds, trimmed to the two hours the Lock Screen chart covers and to eight of
+each). A host pushing a Live Activity update directly builds them the same way,
+so a pushed Lock Screen and a locally built one draw the same markers.
+
 `low`/`high` are the glucose thresholds *this* follower is alerted on, and are
 substituted per follower. `ranges` is a different thing: how the host itself
 displays glucose — its own display low and high, the glucose target in force

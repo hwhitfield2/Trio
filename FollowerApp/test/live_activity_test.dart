@@ -5,7 +5,12 @@ import 'package:trio_follower/models/glucose_ranges.dart';
 import 'package:trio_follower/models/status_snapshot.dart';
 import 'package:trio_follower/services/live_activity_bridge.dart';
 
-StatusSnapshot snapshotWith(int count, {String units = 'mg/dL'}) {
+StatusSnapshot snapshotWith(
+  int count, {
+  String units = 'mg/dL',
+  List<BolusEvent> boluses = const [],
+  List<CarbEvent> carbs = const [],
+}) {
   final now = DateTime.now();
   return StatusSnapshot(
     timestamp: now,
@@ -22,6 +27,8 @@ StatusSnapshot snapshotWith(int count, {String units = 'mg/dL'}) {
     cob: 18.4,
     lowThreshold: 72,
     highThreshold: 190,
+    boluses: boluses,
+    carbs: carbs,
   );
 }
 
@@ -124,6 +131,64 @@ void main() {
       expect(color['target'], closeTo(6.0, 0.001));
       expect(color['sweepLow'], closeTo(3.1, 0.001));
       expect(color['sweepHigh'], closeTo(12.2, 0.001));
+    });
+
+    test('what was given and eaten reaches the Lock Screen', () {
+      final now = DateTime.now();
+      final state = LiveActivityBridge.stateFor(snapshotWith(
+        6,
+        boluses: [BolusEvent(date: now, units: 1.25, isAutomatic: true)],
+        carbs: [CarbEvent(date: now, grams: 30)],
+      ));
+
+      final bolus = (state['boluses'] as List).single as Map;
+      expect(bolus['a'], 1.25);
+      // Seconds, like everything else in a payload with 4 KB to live in.
+      expect(bolus['t'], now.millisecondsSinceEpoch ~/ 1000);
+      expect(bolus['s'], isTrue);
+      expect(((state['carbs'] as List).single as Map)['g'], 30);
+    });
+
+    test('a treatment from before the plotted chart is left out', () {
+      final now = DateTime.now();
+      // The Lock Screen plots 24 readings — two hours. A bolus from three
+      // hours ago has no reading on this chart to sit against.
+      final state = LiveActivityBridge.stateFor(snapshotWith(
+        48,
+        boluses: [
+          BolusEvent(date: now.subtract(const Duration(hours: 3)), units: 2),
+          BolusEvent(date: now, units: 1),
+        ],
+      ));
+
+      final boluses = state['boluses'] as List;
+      expect(boluses, hasLength(1));
+      expect((boluses.single as Map)['a'], 1);
+    });
+
+    test('nothing given leaves the keys out, keeping the budget for the chart', () {
+      final state = LiveActivityBridge.stateFor(snapshotWith(6));
+      expect(state.containsKey('boluses'), isFalse);
+      expect(state.containsKey('carbs'), isFalse);
+    });
+
+    test('a busy few hours still fits ActivityKit', () {
+      final now = DateTime.now();
+      final state = LiveActivityBridge.stateFor(snapshotWith(
+        48,
+        boluses: [
+          for (var index = 0; index < 20; index++)
+            BolusEvent(date: now.subtract(Duration(minutes: index * 5)), units: 1.25),
+        ],
+        carbs: [
+          for (var index = 0; index < 20; index++)
+            CarbEvent(date: now.subtract(Duration(minutes: index * 5)), grams: 30),
+        ],
+      ));
+
+      expect((state['boluses'] as List).length, lessThanOrEqualTo(8));
+      expect((state['carbs'] as List).length, lessThanOrEqualTo(8));
+      expect(utf8.encode(jsonEncode(state)).length, lessThan(3000));
     });
 
     test('matches the host formatting vector, value for value', () {

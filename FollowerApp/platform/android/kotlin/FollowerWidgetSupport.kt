@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
+import android.graphics.Path
 import android.widget.RemoteViews
 import org.json.JSONObject
 import java.util.Date
@@ -32,6 +33,11 @@ object FollowerWidgetSupport {
     val COLOR_IN_RANGE: Int = Color.parseColor("#4CAF50")
     val COLOR_HIGH: Int = Color.parseColor("#FF9800")
     val COLOR_SECONDARY: Int = Color.parseColor("#8E8E93")
+
+    // Trio's own insulin blue; carbs share the high-glucose orange, as they do
+    // on the host's chart and in the app. The shapes are what tell a treatment
+    // apart from a reading: triangles, not dots.
+    val COLOR_INSULIN: Int = Color.parseColor("#1E96FC")
 
     fun loadStatus(context: Context): JSONObject? {
         // home_widget writes into this preferences file on Android.
@@ -231,6 +237,59 @@ object FollowerWidgetSupport {
             paint.color = glucoseColor(values[index], low, high, false, ranges)
             canvas.drawCircle(x(times[index]), y(values[index]), 4f, paint)
         }
+
+        // Insulin above the reading it was given for, carbs below it. A
+        // treatment has no glucose value of its own, so it is drawn at the
+        // height of the reading nearest it in time — the same arrangement the
+        // host's chart and the app's use.
+        val slack = if (times.size > 1) (newest - oldest) / (times.size - 1) / 2 else 0L
+
+        fun anchor(time: Long): Int? {
+            if (time < oldest - slack || time > newest + slack) return null
+            var best = 0
+            var bestDistance = Long.MAX_VALUE
+            for (index in times.indices) {
+                val distance = kotlin.math.abs(times[index] - time)
+                if (distance < bestDistance) {
+                    bestDistance = distance
+                    best = index
+                }
+            }
+            return best
+        }
+
+        fun drawMarker(centerX: Float, tipY: Float, size: Float, color: Int, pointsDown: Boolean) {
+            val half = size / 2f
+            val base = if (pointsDown) tipY - size else tipY + size
+            val path = Path()
+            path.moveTo(centerX, tipY)
+            path.lineTo(centerX - half, base)
+            path.lineTo(centerX + half, base)
+            path.close()
+            paint.color = color
+            canvas.drawPath(path, paint)
+        }
+
+        fun drawTreatments(key: String, amountKey: String, color: Int, pointsDown: Boolean) {
+            val entries = status.optJSONArray(key) ?: return
+            for (index in 0 until entries.length()) {
+                val entry = entries.optJSONObject(index) ?: continue
+                val time = entry.optLong("t", 0L)
+                val amount = entry.optDouble(amountKey, 0.0)
+                if (time <= 0L || amount <= 0.0) continue
+                val at = anchor(time) ?: continue
+                // 1 U is a small mark and 10 U a conspicuous one; a gram of
+                // carbs counts for much less, so it is scaled to match.
+                val scale = if (pointsDown) 1.2 else 0.08
+                val size = (7.0 + amount * scale).coerceIn(7.0, 14.0).toFloat()
+                val readingY = y(values[at])
+                val tip = if (pointsDown) readingY - 5f else readingY + 5f
+                drawMarker(x(time), tip, size, color, pointsDown)
+            }
+        }
+
+        drawTreatments("boluses", "a", COLOR_INSULIN, pointsDown = true)
+        drawTreatments("carbs", "g", COLOR_HIGH, pointsDown = false)
 
         return bitmap
     }

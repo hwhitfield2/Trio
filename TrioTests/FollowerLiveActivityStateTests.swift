@@ -12,6 +12,8 @@ import Testing
         low: Double = 70,
         high: Double = 180,
         ranges: FollowerStatusSnapshot.GlucoseRanges? = nil,
+        boluses: [FollowerStatusSnapshot.Bolus] = [],
+        carbs: [FollowerStatusSnapshot.CarbEntry] = [],
         eventualBG: Double? = 110,
         tempTarget: FollowerStatusSnapshot.ActiveTempTarget? = nil,
         override: FollowerStatusSnapshot.ActiveOverride? = nil,
@@ -38,7 +40,9 @@ import Testing
             maxCarbs: 250,
             low: low,
             high: high,
-            ranges: ranges
+            ranges: ranges,
+            boluses: boluses,
+            carbs: carbs
         )
     }
 
@@ -118,6 +122,55 @@ import Testing
         #expect(mmol.color?.target == 6.1)
         #expect(mmol.color?.sweepLow == 3.1)
         #expect(mmol.color?.sweepHigh == 12.2)
+    }
+
+    @Test("What was given and eaten reaches a pushed Lock Screen")
+    func treatments() throws {
+        let now: TimeInterval = 1_700_000_000
+        let plotted: [(sgv: Int, minutesAgo: Double, direction: String?)] =
+            (0 ..< 24).map { (sgv: 120, minutesAgo: Double($0) * 5, direction: "Flat") }
+        let state = try #require(FollowerLiveActivityState.from(snapshot: snapshot(
+            readings: plotted,
+            boluses: [FollowerStatusSnapshot.Bolus(a: 1.25, t: now - 300, s: true)],
+            carbs: [FollowerStatusSnapshot.CarbEntry(g: 30, t: now - 600)],
+            now: now
+        )))
+
+        #expect(state.boluses?.count == 1)
+        #expect(state.boluses?.first?.a == 1.25)
+        #expect(state.boluses?.first?.s == true)
+        #expect(state.carbs?.first?.g == 30)
+
+        // The keys are only there when there is something to say; an empty
+        // array would cost bytes the chart needs.
+        let json = try state.asJSONObject()
+        #expect(json["boluses"] != nil)
+
+        let quiet = try #require(FollowerLiveActivityState.from(snapshot: snapshot(now: now)))
+        #expect(quiet.boluses == nil)
+        #expect(try quiet.asJSONObject()["carbs"] == nil)
+    }
+
+    @Test("A treatment older than the plotted chart is left off it")
+    func treatmentsOutsideTheChart() throws {
+        let now: TimeInterval = 1_700_000_000
+        // The Lock Screen plots 24 readings — two hours — however many the
+        // snapshot carries. A bolus from three hours ago has nothing here to
+        // sit against.
+        let sixHours: [(sgv: Int, minutesAgo: Double, direction: String?)] =
+            (0 ..< 48).map { (sgv: 120, minutesAgo: Double($0) * 5, direction: "Flat") }
+        let state = try #require(FollowerLiveActivityState.from(snapshot: snapshot(
+            readings: sixHours,
+            boluses: [
+                FollowerStatusSnapshot.Bolus(a: 2, t: now - 3 * 3600, s: nil),
+                FollowerStatusSnapshot.Bolus(a: 1, t: now - 60, s: nil)
+            ],
+            now: now
+        )))
+
+        #expect(state.chart.count == 24)
+        #expect(state.boluses?.count == 1)
+        #expect(state.boluses?.first?.a == 1)
     }
 
     @Test("A host with no ranges still colours by what it does send")

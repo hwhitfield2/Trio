@@ -51,6 +51,15 @@ struct FollowerChartView: View {
                 .symbolSize(16)
                 .foregroundStyle(status.color(for: point.v, preferences: preferences))
             }
+
+            // Insulin above the reading it was given for, carbs below it: a
+            // widget showing glucose climbing should also show that someone
+            // has already answered it.
+            FollowerTreatmentChartContent(marks: FollowerTreatmentMarks.marks(
+                boluses: (status.boluses ?? []).map { (date: $0.date, units: $0.a) },
+                carbs: (status.carbs ?? []).map { (date: $0.date, grams: $0.g) },
+                points: points.map { (date: $0.date, value: $0.v) }
+            ))
         }
         .chartYScale(domain: minValue ... maxValue)
         .chartYAxis(.hidden)

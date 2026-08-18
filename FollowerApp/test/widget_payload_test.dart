@@ -8,6 +8,8 @@ StatusSnapshot snapshotWith(
   double? low,
   double? high,
   GlucoseRanges? ranges,
+  List<BolusEvent> boluses = const [],
+  List<CarbEvent> carbs = const [],
   String units = 'mg/dL',
 }) {
   final now = DateTime.now();
@@ -26,6 +28,8 @@ StatusSnapshot snapshotWith(
     lowThreshold: low,
     highThreshold: high,
     ranges: ranges,
+    boluses: boluses,
+    carbs: carbs,
   );
 }
 
@@ -117,6 +121,40 @@ void main() {
         snapshotWith([120], ranges: const GlucoseRanges(low: 70, high: 180, target: 100)),
       );
       expect((payload['color'] as Map)['scheme'], 'staticColor');
+    });
+
+    test('the widgets are told what was given and eaten', () {
+      final now = DateTime.now();
+      final payload = WidgetBridge.payloadFor(
+        snapshotWith(
+          [120],
+          boluses: [BolusEvent(date: now, units: 1.25, isAutomatic: true)],
+          carbs: [CarbEvent(date: now, grams: 30)],
+        ),
+      );
+
+      final bolus = (payload['boluses'] as List).single as Map;
+      expect(bolus['a'], 1.25);
+      // Milliseconds, like the chart points beside them.
+      expect(bolus['t'], now.millisecondsSinceEpoch);
+      expect(bolus['s'], isTrue);
+
+      final carb = (payload['carbs'] as List).single as Map;
+      expect(carb['g'], 30);
+      expect(carb['t'], now.millisecondsSinceEpoch);
+    });
+
+    test('a bolus somebody asked for says nothing about being automatic', () {
+      final payload = WidgetBridge.payloadFor(
+        snapshotWith([120], boluses: [BolusEvent(date: DateTime.now(), units: 3)]),
+      );
+      expect(((payload['boluses'] as List).single as Map).containsKey('s'), isFalse);
+    });
+
+    test('nothing given means no keys at all, rather than empty arrays', () {
+      final payload = WidgetBridge.payloadFor(snapshotWith([120]));
+      expect(payload.containsKey('boluses'), isFalse);
+      expect(payload.containsKey('carbs'), isFalse);
     });
 
     test('chart points stay newest first with epoch milliseconds', () {

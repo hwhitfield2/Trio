@@ -114,6 +114,27 @@ class WidgetBridge {
       // falls. Same units as everything else here.
       'color': ranges.toPayload((mgdl) => _convert(mgdl, mmol)),
       'stats': statsFor(snapshot, preferences: preferences),
+      // Units and grams need no conversion — only glucose has two units — so
+      // these travel as they arrived, with the times in the chart's own
+      // milliseconds. Same keys as the host's snapshot: `a` units, `g` grams,
+      // `s` for a bolus the loop gave itself.
+      // Left out entirely when there are none, rather than sent as empty
+      // arrays: the same rule the Lock Screen's tighter budget forces, and one
+      // rule beats two.
+      if (snapshot.boluses.isNotEmpty)
+        'boluses': [
+          for (final bolus in snapshot.boluses)
+            {
+              'a': bolus.units,
+              't': bolus.date.millisecondsSinceEpoch,
+              if (bolus.isAutomatic) 's': true,
+            },
+        ],
+      if (snapshot.carbs.isNotEmpty)
+        'carbs': [
+          for (final carb in snapshot.carbs)
+            {'g': carb.grams, 't': carb.date.millisecondsSinceEpoch},
+        ],
       'chart': [
         for (final reading in snapshot.readings)
           {'v': _convert(reading.sgv.toDouble(), mmol), 't': reading.date.millisecondsSinceEpoch},

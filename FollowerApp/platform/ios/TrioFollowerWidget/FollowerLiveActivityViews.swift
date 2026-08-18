@@ -149,6 +149,12 @@ struct LiveActivityChart: View {
                     .symbolSize(10)
                     .foregroundStyle(state.color(for: point.v, preferences: preferences))
             }
+
+            FollowerTreatmentChartContent(marks: FollowerTreatmentMarks.marks(
+                boluses: (state.boluses ?? []).map { (date: $0.date, units: $0.a) },
+                carbs: (state.carbs ?? []).map { (date: $0.date, grams: $0.g) },
+                points: points.map { (date: $0.date, value: $0.v) }
+            ))
         }
         .chartYScale(domain: minValue ... maxValue)
         .chartXScale(domain: start ... anchor)

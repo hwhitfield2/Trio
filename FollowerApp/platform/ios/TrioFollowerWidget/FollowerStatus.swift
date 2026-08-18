@@ -18,6 +18,27 @@ struct FollowerStatus: Codable {
         var date: Date { Date(timeIntervalSince1970: t / 1000) }
     }
 
+    /// A bolus, as the app publishes it. Short keys, and the same names the
+    /// host's own snapshot uses.
+    struct Bolus: Codable, Hashable {
+        /// Units.
+        let a: Double
+        /// Milliseconds since epoch, like `ChartPoint`.
+        let t: Double
+        /// Present only for a bolus the loop gave itself.
+        let s: Bool?
+
+        var date: Date { Date(timeIntervalSince1970: t / 1000) }
+    }
+
+    /// A carb entry, in grams.
+    struct CarbEntry: Codable, Hashable {
+        let g: Double
+        let t: Double
+
+        var date: Date { Date(timeIntervalSince1970: t / 1000) }
+    }
+
     /// Share of the plotted readings below, inside and above the host's range.
     struct Stats: Codable {
         let low: Int
@@ -53,6 +74,10 @@ struct FollowerStatus: Codable {
     /// three colours are what this extension drew before anyway.
     let colorRanges: FollowerGlucoseColorRanges?
     let chart: [ChartPoint]
+    /// What was given and eaten over the same window. Absent rather than empty
+    /// when there is nothing, so an app build that predates them decodes too.
+    let boluses: [Bolus]?
+    let carbs: [CarbEntry]?
     let stats: Stats?
 
     enum CodingKeys: String, CodingKey {
@@ -72,6 +97,8 @@ struct FollowerStatus: Codable {
         case high
         case colorRanges = "color"
         case chart
+        case boluses
+        case carbs
         case stats
     }
 
@@ -158,6 +185,8 @@ struct FollowerStatus: Codable {
                     t: now - Double(35 - index) * 300_000
                 )
             },
+            boluses: [Bolus(a: 2.5, t: now - 40 * 60_000, s: nil)],
+            carbs: [CarbEntry(g: 35, t: now - 45 * 60_000)],
             stats: Stats(low: 4, inRange: 82, high: 14)
         )
     }

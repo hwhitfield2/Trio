@@ -25,6 +25,11 @@ class LiveActivityBridge {
   /// enough that more points would not be visible, and the budget is real.
   static const _maxChartPoints = 24;
 
+  /// Treatments the Lock Screen draws, newest first. The same budget argument:
+  /// a marker for something that happened before the chart starts has nothing
+  /// to sit on, and a Lock Screen chart this size cannot show many anyway.
+  static const _maxTreatments = 8;
+
   static Future<LiveActivitySupport> support() => TrioLiveActivity.support();
 
   static Future<bool> isEnabled() async {
@@ -163,6 +168,21 @@ class LiveActivityBridge {
     String formatGlucose(int sgv) =>
         mmol ? (sgv / 18.0).toStringAsFixed(1) : sgv.toString();
 
+    // The chart is trimmed to its newest readings; anything older than the
+    // oldest of those is off the Lock Screen's chart entirely.
+    final plotted = snapshot.readings.take(_maxChartPoints);
+    final oldestPlotted = plotted.isEmpty ? null : plotted.last.date;
+    List<T> drawable<T extends TreatmentEvent>(List<T> events) {
+      if (oldestPlotted == null) return const [];
+      return events
+          .where((event) => !event.date.isBefore(oldestPlotted))
+          .take(_maxTreatments)
+          .toList();
+    }
+
+    final drawableBoluses = drawable(snapshot.boluses);
+    final drawableCarbs = drawable(snapshot.carbs);
+
     return <String, dynamic>{
       'bg': latest == null ? '--' : formatGlucose(latest.sgv),
       'direction': latest?.trendArrow ?? '',
@@ -188,6 +208,22 @@ class LiveActivityBridge {
       'low': convert(ranges.low),
       'high': convert(ranges.high),
       'color': ranges.toPayload(convert),
+      // Only the ones inside the window the chart covers: a marker with no
+      // reading under it would sit on the axis, saying nothing.
+      if (drawableBoluses.isNotEmpty)
+        'boluses': [
+          for (final bolus in drawableBoluses)
+            {
+              'a': bolus.units,
+              't': bolus.date.millisecondsSinceEpoch ~/ 1000,
+              if (bolus.isAutomatic) 's': true,
+            },
+        ],
+      if (drawableCarbs.isNotEmpty)
+        'carbs': [
+          for (final carb in drawableCarbs)
+            {'g': carb.grams, 't': carb.date.millisecondsSinceEpoch ~/ 1000},
+        ],
       'chart': [
         for (final reading in snapshot.readings.take(_maxChartPoints))
           {

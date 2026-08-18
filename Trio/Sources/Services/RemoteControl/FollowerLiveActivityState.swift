@@ -26,6 +26,26 @@ struct FollowerLiveActivityState: Encodable, Equatable {
         let t: Double
     }
 
+    /// A bolus, and a carb entry, as the follower's Lock Screen chart draws
+    /// them. Short keys and the same names the status snapshot uses: this is
+    /// the same 4 KB the chart is already competing for.
+    struct Bolus: Encodable, Equatable {
+        /// Units.
+        let a: Double
+        /// Seconds since epoch.
+        let t: Double
+        /// True for a bolus the loop gave itself; absent for one a person
+        /// asked for.
+        let s: Bool?
+    }
+
+    struct CarbEntry: Encodable, Equatable {
+        /// Grams.
+        let g: Double
+        /// Seconds since epoch.
+        let t: Double
+    }
+
     /// How this host colours glucose, so the follower's Lock Screen paints a
     /// reading the colour Trio's own chart would.
     ///
@@ -56,6 +76,12 @@ struct FollowerLiveActivityState: Encodable, Equatable {
     let color: GlucoseColorRanges?
     let chart: [Point]
 
+    /// What was given and eaten inside the window `chart` covers, newest
+    /// first. Nil rather than empty when there is nothing: an absent key is
+    /// the cheapest way to say so, and the follower decodes it as none.
+    let boluses: [Bolus]?
+    let carbs: [CarbEntry]?
+
     // Drawn only by the follower's detailed layouts. Optional on both sides, so
     // a follower app that predates them still decodes what it does know.
 
@@ -77,6 +103,11 @@ struct FollowerLiveActivityState: Encodable, Equatable {
     /// chart budget. ActivityKit's payload limit is 4 KB and the chart
     /// dominates it.
     static let maxChartPoints = 24
+
+    /// Treatments drawn on that chart, matching `LiveActivityBridge` in the
+    /// follower app. A marker for something older than the chart's first
+    /// reading would have nothing to sit on.
+    static let maxTreatments = 8
 
     /// Matches the follower's widgets and Trio itself: a reading older than six
     /// minutes is no longer current.
@@ -114,6 +145,22 @@ struct FollowerLiveActivityState: Encodable, Equatable {
             mmol ? oneDecimal(Double(sgv) / 18.0) : String(sgv)
         }
 
+        // The chart is trimmed to its newest readings; a treatment older than
+        // the oldest of those is off this chart entirely. With nothing plotted
+        // there is nothing to draw against at all, which the impossible window
+        // start says without a special case.
+        let plotted = snapshot.readings.prefix(maxChartPoints)
+        let windowStart = plotted.last?.date ?? .greatestFiniteMagnitude
+
+        let boluses = snapshot.boluses
+            .filter { $0.t >= windowStart }
+            .prefix(maxTreatments)
+            .map { Bolus(a: $0.a, t: $0.t, s: $0.s) }
+        let carbs = snapshot.carbs
+            .filter { $0.t >= windowStart }
+            .prefix(maxTreatments)
+            .map { CarbEntry(g: $0.g, t: $0.t) }
+
         var change = ""
         if snapshot.readings.count >= 2 {
             let delta = snapshot.readings[0].sgv - snapshot.readings[1].sgv
@@ -142,9 +189,9 @@ struct FollowerLiveActivityState: Encodable, Equatable {
                     sweepHigh: convert(colorSweepHigh)
                 )
             },
-            chart: snapshot.readings.prefix(maxChartPoints).map {
-                Point(v: convert(Double($0.sgv)), t: $0.date)
-            },
+            chart: plotted.map { Point(v: convert(Double($0.sgv)), t: $0.date) },
+            boluses: boluses.isEmpty ? nil : boluses,
+            carbs: carbs.isEmpty ? nil : carbs,
             eventual: snapshot.eventualBG.map { formatGlucose(Int($0.rounded())) },
             overrideName: snapshot.override?.name,
             tempTargetName: snapshot.tempTarget?.name,

@@ -19,6 +19,8 @@ extension FollowerActivityAttributes.ContentState {
             chart: (0 ..< 24).map { index in
                 Point(v: Double(110 + (index % 8) * 6), t: now - Double(23 - index) * 300)
             },
+            boluses: [Bolus(a: 1.5, t: now - 1800, s: nil)],
+            carbs: [CarbEntry(g: 25, t: now - 2100)],
             eventual: "115",
             overrideName: nil,
             tempTargetName: nil,
