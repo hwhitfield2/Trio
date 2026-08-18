@@ -253,7 +253,7 @@ class _StatusCard extends StatelessWidget {
               GlucoseChart(
                 readings: snapshot.readings,
                 units: state.units,
-                ranges: snapshot.glucoseRanges,
+                ranges: state.glucoseRanges,
               ),
               const SizedBox(height: 8),
               _FreshnessRow(snapshot: snapshot),

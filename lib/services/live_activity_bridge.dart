@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:trio_live_activity/trio_live_activity.dart';
 
+import '../models/display_preferences.dart';
 import '../models/status_snapshot.dart';
 
 // Callers deal in the bridge, not the plugin, so the one type they need to name
@@ -87,7 +88,11 @@ class LiveActivityBridge {
   /// from the system at the moment it is requested, so one that is already
   /// running can never gain one — and one that was dismissed cannot be
   /// updated back into existence.
-  static Future<void> restart(StatusSnapshot? snapshot, {required String hostName}) async {
+  static Future<void> restart(
+    StatusSnapshot? snapshot, {
+    required String hostName,
+    DisplayPreferences preferences = const DisplayPreferences(),
+  }) async {
     try {
       if (!await isEnabled()) return;
 
@@ -98,7 +103,7 @@ class LiveActivityBridge {
 
       await TrioLiveActivity.restart(
         hostName: hostName,
-        state: jsonEncode(stateFor(snapshot)),
+        state: jsonEncode(stateFor(snapshot, preferences: preferences)),
       );
     } catch (error) {
       debugPrint('Live Activity restart skipped: $error');
@@ -109,7 +114,11 @@ class LiveActivityBridge {
   ///
   /// Never throws: a Live Activity that cannot be updated must not take down a
   /// status push.
-  static Future<void> publish(StatusSnapshot? snapshot, {required String hostName}) async {
+  static Future<void> publish(
+    StatusSnapshot? snapshot, {
+    required String hostName,
+    DisplayPreferences preferences = const DisplayPreferences(),
+  }) async {
     try {
       if (!await isEnabled()) return;
 
@@ -120,7 +129,7 @@ class LiveActivityBridge {
 
       await TrioLiveActivity.update(
         hostName: hostName,
-        state: jsonEncode(stateFor(snapshot)),
+        state: jsonEncode(stateFor(snapshot, preferences: preferences)),
       );
     } catch (error) {
       debugPrint('Live Activity update skipped: $error');
@@ -136,11 +145,17 @@ class LiveActivityBridge {
   }
 
   @visibleForTesting
-  static Map<String, dynamic> stateFor(StatusSnapshot snapshot) {
+  static Map<String, dynamic> stateFor(
+    StatusSnapshot snapshot, {
+    DisplayPreferences preferences = const DisplayPreferences(),
+  }) {
     final mmol = snapshot.units == 'mmol/L';
     final latest = snapshot.latest;
     final delta = snapshot.delta;
-    final ranges = snapshot.glucoseRanges;
+    // Resolved here as well as in the widget extension, which applies the same
+    // choices to a state the *host* pushed. Resolving twice is harmless: the
+    // second pass has nothing left to change.
+    final ranges = preferences.resolveRanges(snapshot.glucoseRanges);
 
     double convert(double mgdl) =>
         mmol ? double.parse((mgdl / 18.0).toStringAsFixed(1)) : mgdl;

@@ -33,15 +33,33 @@ struct FollowerDisplayPreferences: Codable {
         case empty
     }
 
+    /// This device's own glucose range, and which colouring to use for it.
+    ///
+    /// Written by the app in the host's display units — the same ones the
+    /// readings arrive in — because nothing in this extension knows which units
+    /// a payload is in. A null end, or a scheme of "host", follows the host.
+    struct GlucoseRange: Codable {
+        let low: Double?
+        let high: Double?
+        let scheme: String?
+
+        static let followHost = GlucoseRange(low: nil, high: nil, scheme: nil)
+
+        var forcesStatic: Bool { scheme == "static" }
+        var forcesDynamic: Bool { scheme == "dynamic" }
+    }
+
     var lockScreen: WidgetStyle = .simple
     var watch: WidgetStyle = .simple
     var glucoseColor: GlucoseColorScheme = .dynamicColor
+    var glucoseRange: GlucoseRange = .followHost
     var items: [Item] = defaultItems
 
     enum CodingKeys: String, CodingKey {
         case lockScreen = "lock_screen"
         case watch
         case glucoseColor = "glucose_color"
+        case glucoseRange = "glucose_range"
         case items
     }
 
@@ -83,6 +101,7 @@ struct FollowerDisplayPreferences: Codable {
         lockScreen = (try? container.decode(WidgetStyle.self, forKey: .lockScreen)) ?? .simple
         watch = (try? container.decode(WidgetStyle.self, forKey: .watch)) ?? .simple
         glucoseColor = (try? container.decode(GlucoseColorScheme.self, forKey: .glucoseColor)) ?? .dynamicColor
+        glucoseRange = (try? container.decode(GlucoseRange.self, forKey: .glucoseRange)) ?? .followHost
 
         let names = (try? container.decode([String].self, forKey: .items)) ?? []
         let decodedItems = names.map { Item(rawValue: $0) ?? .empty }
@@ -93,11 +112,13 @@ struct FollowerDisplayPreferences: Codable {
         lockScreen: WidgetStyle = .simple,
         watch: WidgetStyle = .simple,
         glucoseColor: GlucoseColorScheme = .dynamicColor,
+        glucoseRange: GlucoseRange = .followHost,
         items: [Item] = FollowerDisplayPreferences.defaultItems
     ) {
         self.lockScreen = lockScreen
         self.watch = watch
         self.glucoseColor = glucoseColor
+        self.glucoseRange = glucoseRange
         self.items = items
     }
 }

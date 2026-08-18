@@ -64,9 +64,10 @@ class StatusSnapshot {
     final low = lowThreshold;
     final high = highThreshold;
     if (low == null || high == null) return GlucoseRanges.defaults;
-    if (!low.isFinite || !high.isFinite || low <= 0 || low >= high) {
-      return GlucoseRanges.defaults;
-    }
+    // These are alert thresholds, not a display range, and only sometimes the
+    // same thing: someone who wants to be woken at 300 has not asked for their
+    // whole chart to be drawn as low.
+    if (!GlucoseRanges.isPlausible(low, high)) return GlucoseRanges.defaults;
     // No target on this path — nothing to shade towards, and nothing asks for
     // one: the dynamic scheme only comes from a host that reports its ranges.
     return GlucoseRanges(low: low, high: high, target: (low + high) / 2);

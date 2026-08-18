@@ -55,3 +55,64 @@ enum FollowerGlucoseColor {
         return Color(hue: hue, saturation: 0.6, brightness: 0.9)
     }
 }
+
+/// The range a view actually draws with: what the payload carried, with this
+/// device's own choices applied on top.
+struct FollowerGlucoseRange {
+    let low: Double
+    let high: Double
+    /// Nil means the static three colours — either because that is what the
+    /// host uses, or because this device asked for it.
+    let color: FollowerGlucoseColorRanges?
+}
+
+extension FollowerDisplayPreferences {
+    /// Folds this device's range and scheme into what arrived.
+    ///
+    /// Applied even to content the app itself built, where it changes nothing:
+    /// the app resolved the same choices before writing it. The case that
+    /// matters is a Live Activity pushed by the *host*, which knows nothing
+    /// about how this follower likes to see things.
+    ///
+    /// Mirrors `DisplayPreferences.resolveRanges` in
+    /// `lib/models/display_preferences.dart`.
+    func resolvedRange(
+        low: Double,
+        high: Double,
+        color: FollowerGlucoseColorRanges?
+    ) -> FollowerGlucoseRange {
+        var resolvedLow = glucoseRange.low ?? low
+        var resolvedHigh = glucoseRange.high ?? high
+
+        // Overriding one end only can leave it the wrong side of the other; the
+        // host's end gives way, since the overridden one is what was asked for.
+        if resolvedLow >= resolvedHigh {
+            if glucoseRange.low != nil, glucoseRange.high != nil {
+                resolvedLow = low
+                resolvedHigh = high
+            } else if glucoseRange.low != nil {
+                resolvedHigh = resolvedLow + 1
+            } else {
+                resolvedLow = resolvedHigh - 1
+            }
+        }
+
+        let resolvedColor: FollowerGlucoseColorRanges?
+        if glucoseRange.forcesStatic {
+            resolvedColor = nil
+        } else if glucoseRange.forcesDynamic, let color {
+            resolvedColor = FollowerGlucoseColorRanges(
+                scheme: "dynamicColor",
+                target: color.target,
+                sweepLow: color.sweepLow,
+                sweepHigh: color.sweepHigh
+            )
+        } else {
+            // Asking for the dynamic sweep from a host that reports none leaves
+            // nothing to sweep between; the static colours are what is left.
+            resolvedColor = color
+        }
+
+        return FollowerGlucoseRange(low: resolvedLow, high: resolvedHigh, color: resolvedColor)
+    }
+}

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/command.dart';
 import '../models/display_preferences.dart';
+import '../models/glucose_ranges.dart';
 import '../models/pairing_bundle.dart';
 import '../models/status_snapshot.dart';
 import '../services/command_service.dart';
@@ -110,6 +111,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   double get maxCarbs => snapshot?.maxCarbs ?? bundle?.limits.maxCarbs ?? 250;
   String get units => snapshot?.units ?? bundle?.limits.units ?? 'mg/dL';
 
+  /// What glucose is coloured by everywhere this app draws it: the host's
+  /// ranges, with whatever this device chose to see instead.
+  GlucoseRanges get glucoseRanges =>
+      displayPreferences.resolveRanges(snapshot?.glucoseRanges ?? GlucoseRanges.defaults);
+
   Future<void> initialize() async {
     bundle = await _store.loadPairing();
     _rebuildServices();
@@ -120,10 +126,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     liveActivityRemoteUpdates = await LiveActivityBridge.remoteUpdatesEnabled();
     displayPreferences = await DisplayPreferencesStore.load();
     initialized = true;
-    // Publish the layout before the data: an extension that redraws in between
-    // then already has the choices it should draw with.
-    await WidgetBridge.publishPreferences(displayPreferences);
-    await WidgetBridge.publish(snapshot);
+    await WidgetBridge.publish(snapshot, preferences: displayPreferences);
     await _publishLiveActivity(snapshot);
 
     _push.onMessage(_handlePushData);
@@ -396,7 +399,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
       // Pushes are also delivered in the background, so the widgets and the
       // Live Activity stay current without the app being opened.
-      await WidgetBridge.publish(updated);
+      await WidgetBridge.publish(updated, preferences: displayPreferences);
       await _publishLiveActivity(updated);
     }
   }
@@ -449,7 +452,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     // is registered even if the host was never told the first one had gone.
     _registeredLiveActivityToken = null;
 
-    await LiveActivityBridge.restart(snapshot, hostName: _hostName);
+    await LiveActivityBridge.restart(
+      snapshot,
+      hostName: _hostName,
+      preferences: displayPreferences,
+    );
     liveActivityRunning = await LiveActivityBridge.isRunning();
     notifyListeners();
 
@@ -502,7 +509,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// dismissed.
   Future<void> _publishLiveActivity(StatusSnapshot? updated) async {
     if (_liveActivityDismissedByUser) return;
-    await LiveActivityBridge.publish(updated, hostName: _hostName);
+    await LiveActivityBridge.publish(
+      updated,
+      hostName: _hostName,
+      preferences: displayPreferences,
+    );
     final running = await LiveActivityBridge.isRunning();
     if (running == liveActivityRunning) return;
     liveActivityRunning = running;
@@ -533,7 +544,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     displayPreferences = preferences;
     notifyListeners();
     await DisplayPreferencesStore.save(preferences);
-    await WidgetBridge.publishPreferences(preferences);
+    await WidgetBridge.publish(snapshot, preferences: preferences);
     await _publishLiveActivity(snapshot);
   }
 

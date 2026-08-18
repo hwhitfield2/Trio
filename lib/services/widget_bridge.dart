@@ -37,18 +37,33 @@ class WidgetBridge {
   ];
 
 
-  /// Writes the snapshot to shared storage and asks both platforms to redraw.
+  /// Writes the snapshot and the follower's choices to shared storage, then
+  /// asks both platforms to redraw.
+  ///
+  /// The choices go with every publish rather than only when they change: the
+  /// extension reads the thresholds in the host's display units, and which
+  /// units those are is a property of the snapshot.
   ///
   /// Never throws: a widget that cannot be updated must not take down a status
   /// push or app start with it.
-  static Future<void> publish(StatusSnapshot? snapshot) async {
+  static Future<void> publish(
+    StatusSnapshot? snapshot, {
+    DisplayPreferences preferences = const DisplayPreferences(),
+  }) async {
     try {
       if (appGroupId.isNotEmpty) {
         await HomeWidget.setAppGroupId(appGroupId);
       }
+      final mmol = (snapshot?.units ?? 'mg/dL') == 'mmol/L';
+      // The layout before the data: an extension that redraws in between then
+      // already has the choices it should draw with.
+      await HomeWidget.saveWidgetData<String>(
+        preferencesKey,
+        jsonEncode(preferences.toWidgetJson((mgdl) => _convert(mgdl, mmol))),
+      );
       await HomeWidget.saveWidgetData<String>(
         payloadKey,
-        snapshot == null ? null : jsonEncode(payloadFor(snapshot)),
+        snapshot == null ? null : jsonEncode(payloadFor(snapshot, preferences: preferences)),
       );
       for (final widget in _widgets) {
         await HomeWidget.updateWidget(
@@ -65,35 +80,15 @@ class WidgetBridge {
   /// glucose from a host this device is no longer paired with.
   static Future<void> clear() => publish(null);
 
-  /// Shares the layout choices with the widget extension and redraws. The
-  /// Live Activity reads the same key, so its layout follows too — see
-  /// `LiveActivityBridge.publish`, which the caller runs alongside this.
-  static Future<void> publishPreferences(DisplayPreferences preferences) async {
-    try {
-      if (appGroupId.isNotEmpty) {
-        await HomeWidget.setAppGroupId(appGroupId);
-      }
-      await HomeWidget.saveWidgetData<String>(
-        preferencesKey,
-        jsonEncode(preferences.toJson()),
-      );
-      for (final widget in _widgets) {
-        await HomeWidget.updateWidget(
-          iOSName: widget[0],
-          qualifiedAndroidName: widget[1],
-        );
-      }
-    } catch (error) {
-      debugPrint('Widget preferences update skipped: $error');
-    }
-  }
-
   @visibleForTesting
-  static Map<String, dynamic> payloadFor(StatusSnapshot snapshot) {
+  static Map<String, dynamic> payloadFor(
+    StatusSnapshot snapshot, {
+    DisplayPreferences preferences = const DisplayPreferences(),
+  }) {
     final mmol = snapshot.units == 'mmol/L';
     final latest = snapshot.latest;
     final delta = snapshot.delta;
-    final ranges = snapshot.glucoseRanges;
+    final ranges = preferences.resolveRanges(snapshot.glucoseRanges);
 
     return <String, dynamic>{
       'units': snapshot.units,
@@ -118,7 +113,7 @@ class WidgetBridge {
       // is using, and — for the dynamic one — where along the sweep a reading
       // falls. Same units as everything else here.
       'color': ranges.toPayload((mgdl) => _convert(mgdl, mmol)),
-      'stats': statsFor(snapshot),
+      'stats': statsFor(snapshot, preferences: preferences),
       'chart': [
         for (final reading in snapshot.readings)
           {'v': _convert(reading.sgv.toDouble(), mmol), 't': reading.date.millisecondsSinceEpoch},
@@ -134,11 +129,15 @@ class WidgetBridge {
   /// by — a bar that disagreed with the chart above it would be worse than no
   /// bar at all.
   @visibleForTesting
-  static Map<String, int>? statsFor(StatusSnapshot snapshot) {
+  static Map<String, int>? statsFor(
+    StatusSnapshot snapshot, {
+    DisplayPreferences preferences = const DisplayPreferences(),
+  }) {
     if (snapshot.readings.isEmpty) return null;
 
-    final low = snapshot.glucoseRanges.low;
-    final high = snapshot.glucoseRanges.high;
+    final ranges = preferences.resolveRanges(snapshot.glucoseRanges);
+    final low = ranges.low;
+    final high = ranges.high;
     final total = snapshot.readings.length;
     var below = 0;
     var above = 0;

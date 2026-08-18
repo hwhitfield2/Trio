@@ -7,15 +7,28 @@ import WidgetKit
 
 @available(iOS 16.2, *)
 extension FollowerActivityAttributes.ContentState {
-    /// The colour the host would paint this value, unless the user asked for a
-    /// single colour instead.
-    func color(for value: Double?, scheme: FollowerDisplayPreferences.GlucoseColorScheme) -> Color {
-        guard scheme == .dynamicColor, let value else { return .primary }
-        return FollowerGlucoseColor.color(for: value, low: low, high: high, ranges: self.color)
+    /// The range this device draws against: what arrived — from the app or
+    /// straight from the host — with whatever the follower chose to see
+    /// instead.
+    func range(_ preferences: FollowerDisplayPreferences) -> FollowerGlucoseRange {
+        preferences.resolvedRange(low: low, high: high, color: color)
     }
 
-    func glucoseColor(_ scheme: FollowerDisplayPreferences.GlucoseColorScheme) -> Color {
-        color(for: glucoseValue, scheme: scheme)
+    /// The colour that range gives this value, unless the user asked for a
+    /// single colour instead.
+    func color(for value: Double?, preferences: FollowerDisplayPreferences) -> Color {
+        guard preferences.glucoseColor == .dynamicColor, let value else { return .primary }
+        let range = range(preferences)
+        return FollowerGlucoseColor.color(
+            for: value,
+            low: range.low,
+            high: range.high,
+            ranges: range.color
+        )
+    }
+
+    func glucoseColor(_ preferences: FollowerDisplayPreferences) -> Color {
+        color(for: glucoseValue, preferences: preferences)
     }
 }
 
@@ -112,28 +125,29 @@ extension View {
 @available(iOS 16.2, *)
 struct LiveActivityChart: View {
     let state: FollowerActivityAttributes.ContentState
-    var scheme: FollowerDisplayPreferences.GlucoseColorScheme = .dynamicColor
+    var preferences: FollowerDisplayPreferences = .default
 
     var body: some View {
         let anchor = state.chart.map(\.date).max() ?? state.reading
         let start = anchor.addingTimeInterval(-2 * 3600)
         let points = state.chart.filter { $0.date >= start }
         let values = points.map(\.v)
-        let minValue = min(values.min() ?? state.low, state.low)
-        let maxValue = max(values.max() ?? state.high, state.high)
+        let range = state.range(preferences)
+        let minValue = min(values.min() ?? range.low, range.low)
+        let maxValue = max(values.max() ?? range.high, range.high)
 
         Chart {
-            RuleMark(y: .value("High", state.high))
+            RuleMark(y: .value("High", range.high))
                 .foregroundStyle(.orange.opacity(0.7))
                 .lineStyle(.init(lineWidth: 1, dash: [4]))
-            RuleMark(y: .value("Low", state.low))
+            RuleMark(y: .value("Low", range.low))
                 .foregroundStyle(.red.opacity(0.7))
                 .lineStyle(.init(lineWidth: 1, dash: [4]))
 
             ForEach(points, id: \.self) { point in
                 PointMark(x: .value("Time", point.date), y: .value("Glucose", point.v))
                     .symbolSize(10)
-                    .foregroundStyle(state.color(for: point.v, scheme: scheme))
+                    .foregroundStyle(state.color(for: point.v, preferences: preferences))
             }
         }
         .chartYScale(domain: minValue ... maxValue)
@@ -152,7 +166,7 @@ struct LiveActivityChart: View {
 struct FollowerLiveActivityItemView: View {
     let item: FollowerDisplayPreferences.Item
     let state: FollowerActivityAttributes.ContentState
-    let scheme: FollowerDisplayPreferences.GlucoseColorScheme
+    let preferences: FollowerDisplayPreferences
     let stale: Bool
 
     var body: some View {
@@ -166,7 +180,7 @@ struct FollowerLiveActivityItemView: View {
                         .strikethrough(stale, pattern: .solid, color: .red.opacity(0.6))
                     Text(state.direction).font(.subheadline)
                 }
-                .foregroundStyle(stale ? .secondary : state.glucoseColor(scheme))
+                .foregroundStyle(stale ? .secondary : state.glucoseColor(preferences))
                 Text(state.change).font(.caption).foregroundStyle(.secondary)
             }
         case .currentGlucoseLarge:
@@ -176,7 +190,7 @@ struct FollowerLiveActivityItemView: View {
                     .strikethrough(stale, pattern: .solid, color: .red.opacity(0.6))
                 Text(state.direction).font(.title3).fontWeight(.bold)
             }
-            .foregroundStyle(stale ? .secondary : state.glucoseColor(scheme))
+            .foregroundStyle(stale ? .secondary : state.glucoseColor(preferences))
         case .iob:
             labelled(value: state.iob + " U", caption: "IOB")
         case .cob:
@@ -246,7 +260,6 @@ struct FollowerLiveActivityView: View {
 
     private var state: FollowerActivityAttributes.ContentState { context.state }
     private var stale: Bool { context.readingIsStale }
-    private var scheme: FollowerDisplayPreferences.GlucoseColorScheme { preferences.glucoseColor }
 
     var body: some View {
         if isWatchOS {
@@ -269,9 +282,9 @@ struct FollowerLiveActivityView: View {
                     Text(state.change).font(.subheadline).foregroundStyle(.secondary)
                     Spacer()
                 }
-                .foregroundStyle(stale ? .secondary : state.glucoseColor(scheme))
+                .foregroundStyle(stale ? .secondary : state.glucoseColor(preferences))
 
-                LiveActivityChart(state: state, scheme: scheme)
+                LiveActivityChart(state: state, preferences: preferences)
             }
         } else {
             HStack(alignment: .center) {
@@ -281,7 +294,7 @@ struct FollowerLiveActivityView: View {
                         .strikethrough(stale, pattern: .solid, color: .red.opacity(0.6))
                     Text(state.direction).font(.title3).fontWeight(.bold)
                 }
-                .foregroundStyle(stale ? .secondary : state.glucoseColor(scheme))
+                .foregroundStyle(stale ? .secondary : state.glucoseColor(preferences))
 
                 Spacer()
 
@@ -301,7 +314,7 @@ struct FollowerLiveActivityView: View {
     @ViewBuilder private var phone: some View {
         if preferences.lockScreen == .detailed {
             VStack(spacing: 6) {
-                LiveActivityChart(state: state, scheme: scheme)
+                LiveActivityChart(state: state, preferences: preferences)
                     .frame(height: 60)
                     .overlay(alignment: .topLeading) { FollowerStatusPills(state: state) }
 
@@ -311,7 +324,7 @@ struct FollowerLiveActivityView: View {
                             FollowerLiveActivityItemView(
                                 item: item,
                                 state: state,
-                                scheme: scheme,
+                                preferences: preferences,
                                 stale: stale
                             )
                             .frame(maxWidth: .infinity)
@@ -351,9 +364,9 @@ struct FollowerLiveActivityView: View {
                         FollowerReadingAge(state: state, stale: stale)
                     }
                 }
-                .foregroundStyle(stale ? .secondary : state.glucoseColor(scheme))
+                .foregroundStyle(stale ? .secondary : state.glucoseColor(preferences))
 
-                LiveActivityChart(state: state, scheme: scheme).frame(height: 46)
+                LiveActivityChart(state: state, preferences: preferences).frame(height: 46)
             }
         }
     }

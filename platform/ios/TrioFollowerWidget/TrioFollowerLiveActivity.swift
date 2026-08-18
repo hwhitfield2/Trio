@@ -38,9 +38,8 @@ struct TrioFollowerLiveActivity: Widget {
         } dynamicIsland: { context in
             let state = context.state
             let preferences = FollowerDisplayPreferences.load()
-            let scheme = preferences.glucoseColor
             let stale = context.readingIsStale
-            let glucoseColor = state.glucoseColor(scheme)
+            let glucoseColor = state.glucoseColor(preferences)
 
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -68,7 +67,7 @@ struct TrioFollowerLiveActivity: Widget {
                     FollowerStatusPills(state: state)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    LiveActivityChart(state: state, scheme: scheme)
+                    LiveActivityChart(state: state, preferences: preferences)
                         .frame(height: 44)
                         .privacySensitive()
                 }
