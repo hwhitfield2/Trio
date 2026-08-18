@@ -5,8 +5,9 @@
 # do any manual Xcode/AndroidManifest editing:
 #
 #   iOS:     camera + Face ID usage strings, remote-notification background
-#            mode, aps-environment + app group entitlements file, and the
-#            home screen widget extension target
+#            mode, the export compliance declaration TestFlight would otherwise
+#            hold every build for, aps-environment + app group entitlements
+#            file, and the home screen widget extension target
 #   Android: USE_BIOMETRIC permission, FlutterFragmentActivity (required by
 #            local_auth), the home screen widget provider, optional
 #            google-services.json from the FOLLOWER_GOOGLE_SERVICES_JSON
@@ -55,6 +56,13 @@ plist['NSSupportsLiveActivities'] = True
 # system holds those to its ordinary budget; with it, the user can also turn
 # them back down in Settings, which is where that decision belongs.
 plist['NSSupportsLiveActivitiesFrequentUpdates'] = True
+# Export compliance, answered here rather than by hand in App Store Connect:
+# without it every upload sits at "Missing Compliance" until someone answers
+# the same question again. The answer matches Trio's own Info.plist, which is
+# the app this one talks to: the encryption is AES-GCM and TLS from the
+# platform's own libraries, used to protect this app's own data, which is
+# exempt.
+plist['ITSAppUsesNonExemptEncryption'] = False
 modes = plist.setdefault('UIBackgroundModes', [])
 if 'remote-notification' not in modes:
     modes.append('remote-notification')
