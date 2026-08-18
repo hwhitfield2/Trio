@@ -1,8 +1,10 @@
 import 'package:flutter/gestures.dart' show kLongPressTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trio_follower/models/glucose_ranges.dart';
 import 'package:trio_follower/models/status_snapshot.dart';
 import 'package:trio_follower/widgets/glucose_chart.dart';
+import 'package:trio_follower/widgets/glucose_colors.dart';
 
 /// Newest first, the way the host sends them.
 List<GlucoseReading> readingsEndingAt(DateTime newest, List<int> valuesOldestFirst) {
@@ -69,6 +71,76 @@ void main() {
     test('one decimal for mmol/L, matching the rest of the app', () {
       final reading = GlucoseReading(sgv: 120, date: newest);
       expect(glucoseReadoutValue(reading, units: 'mmol/L'), '6.7');
+    });
+  });
+
+  group('dot colours', () {
+    // A Paint reports a plain Color, never the MaterialColor it was set from,
+    // and the two are not equal to each other.
+    Color painted(Color color) => Color(color.toARGB32());
+
+    Future<void> pumpChart(WidgetTester tester, List<GlucoseReading> readings, GlucoseRanges ranges) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 300,
+                child: GlucoseChart(readings: readings, ranges: ranges),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('each dot is drawn for the level of its own reading', (tester) async {
+      await pumpChart(
+        tester,
+        readingsEndingAt(newest, [60, 120, 250]),
+        const GlucoseRanges(low: 70, high: 180, target: 100),
+      );
+
+      // Oldest first, which is the order they are plotted in: low, in range,
+      // high — one colour each, not one colour for the lot.
+      expect(
+        find.byType(GlucoseChart),
+        paints
+          ..circle(color: painted(glucoseLowColor))
+          ..circle(color: painted(glucoseInRangeColor))
+          ..circle(color: painted(glucoseHighColor)),
+      );
+    });
+
+    testWidgets('the host ranges decide, not the app defaults', (tester) async {
+      // 150 is in range by the app's own 70–180, and high on a host that
+      // displays 80–140. The host is the one that gets to say.
+      await pumpChart(
+        tester,
+        readingsEndingAt(newest, [150]),
+        const GlucoseRanges(low: 80, high: 140, target: 100),
+      );
+
+      expect(find.byType(GlucoseChart), paints..circle(color: painted(glucoseHighColor)));
+    });
+
+    testWidgets('the dynamic scheme shades a reading rather than binning it', (tester) async {
+      const ranges = GlucoseRanges(low: 70, high: 180, target: 100, isDynamic: true);
+      await pumpChart(tester, readingsEndingAt(newest, [100, 160]), ranges);
+
+      // Both readings are in range, and the static scheme would paint them the
+      // same green; the host's dynamic one puts the higher of the two further
+      // along its sweep, and the chart follows it there.
+      final onTarget = painted(glucoseColorFor(100, ranges));
+      final drifting = painted(glucoseColorFor(160, ranges));
+      expect(onTarget, isNot(drifting));
+
+      expect(
+        find.byType(GlucoseChart),
+        paints
+          ..circle(color: onTarget)
+          ..circle(color: drifting),
+      );
     });
   });
 

@@ -6,8 +6,9 @@ import 'package:flutter/services.dart';
 // wants.
 import 'package:intl/intl.dart' hide TextDirection;
 
+import '../models/glucose_ranges.dart';
 import '../models/status_snapshot.dart';
-import '../services/widget_bridge.dart';
+import 'glucose_colors.dart';
 
 /// Maps readings onto the chart's horizontal axis, and back again.
 ///
@@ -78,8 +79,7 @@ class GlucoseChart extends StatefulWidget {
     super.key,
     required this.readings,
     this.units = 'mg/dL',
-    this.lowThreshold,
-    this.highThreshold,
+    this.ranges = GlucoseRanges.defaults,
   });
 
   final List<GlucoseReading> readings;
@@ -88,11 +88,10 @@ class GlucoseChart extends StatefulWidget {
   /// always mg/dL; only the readout is converted.
   final String units;
 
-  /// The host's own thresholds in mg/dL, which decide the guide lines and the
-  /// colouring. Null until the host reports them, and then the app's defaults
-  /// stand in — the same ones the widgets use.
-  final double? lowThreshold;
-  final double? highThreshold;
+  /// The ranges the host colours by, in mg/dL: they decide the guide lines and
+  /// what colour each dot is drawn. Defaulted rather than optional, so a chart
+  /// built before a snapshot arrives still draws something sensible.
+  final GlucoseRanges ranges;
 
   @override
   State<GlucoseChart> createState() => _GlucoseChartState();
@@ -148,8 +147,6 @@ class _GlucoseChartState extends State<GlucoseChart> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final low = widget.lowThreshold ?? WidgetBridge.lowThreshold;
-    final high = widget.highThreshold ?? WidgetBridge.highThreshold;
 
     return SizedBox(
       height: 140,
@@ -180,12 +177,8 @@ class _GlucoseChartState extends State<GlucoseChart> {
                 painter: _GlucosePainter(
                   scale: _scale,
                   selected: _selected,
-                  lowLine: low,
-                  highLine: high,
+                  ranges: widget.ranges,
                   gridColor: theme.colorScheme.outlineVariant,
-                  inRangeColor: Colors.green,
-                  lowColor: Colors.red,
-                  highColor: Colors.orange,
                   crosshairColor: theme.colorScheme.outline,
                   readoutColor: theme.colorScheme.inverseSurface,
                   readoutStyle: (theme.textTheme.labelLarge ?? const TextStyle(fontSize: 14))
@@ -214,12 +207,8 @@ class _GlucosePainter extends CustomPainter {
   _GlucosePainter({
     required this.scale,
     required this.selected,
-    required this.lowLine,
-    required this.highLine,
+    required this.ranges,
     required this.gridColor,
-    required this.inRangeColor,
-    required this.lowColor,
-    required this.highColor,
     required this.crosshairColor,
     required this.readoutColor,
     required this.readoutStyle,
@@ -232,12 +221,8 @@ class _GlucosePainter extends CustomPainter {
 
   final GlucoseChartScale scale;
   final int? selected;
-  final double lowLine;
-  final double highLine;
+  final GlucoseRanges ranges;
   final Color gridColor;
-  final Color inRangeColor;
-  final Color lowColor;
-  final Color highColor;
   final Color crosshairColor;
   final Color readoutColor;
   final TextStyle readoutStyle;
@@ -265,7 +250,7 @@ class _GlucosePainter extends CustomPainter {
     final gridPaint = Paint()
       ..color = gridColor
       ..strokeWidth = 1;
-    for (final line in [lowLine, highLine]) {
+    for (final line in [ranges.low, ranges.high]) {
       canvas.drawLine(Offset(0, y(line)), Offset(size.width, y(line)), gridPaint);
     }
 
@@ -284,11 +269,9 @@ class _GlucosePainter extends CustomPainter {
     }
   }
 
-  Color _colorFor(double sgv) {
-    if (sgv < lowLine) return lowColor;
-    if (sgv > highLine) return highColor;
-    return inRangeColor;
-  }
+  /// What the host would have painted this reading, from the ranges it
+  /// reported — which is the whole point of the dots being coloured at all.
+  Color _colorFor(double sgv) => glucoseColorFor(sgv, ranges);
 
   /// Crosshair, an enlarged marker, and the value and time in a bubble that
   /// stays inside the chart however close to an edge the finger is.
@@ -353,8 +336,7 @@ class _GlucosePainter extends CustomPainter {
   bool shouldRepaint(covariant _GlucosePainter oldDelegate) =>
       oldDelegate.scale != scale ||
       oldDelegate.selected != selected ||
-      oldDelegate.lowLine != lowLine ||
-      oldDelegate.highLine != highLine ||
+      oldDelegate.ranges != ranges ||
       oldDelegate.unitsLabel != unitsLabel ||
       // A theme, text size or writing direction change redraws too; none of
       // them touch the readings, and all of them change what is on screen.

@@ -42,6 +42,23 @@ struct FollowerStatusSnapshot: Encodable {
         }
     }
 
+    /// The glucose ranges the host colours by, so a follower's chart paints the
+    /// same reading the same colour the host does. Distinct from `low`/`high`
+    /// below: those are the thresholds this follower is *alerted* on, which a
+    /// follower sets for itself and which say nothing about how the host
+    /// displays glucose.
+    struct GlucoseRanges: Encodable {
+        /// The host's display low and high, in mg/dL (its `low`/`high`
+        /// settings, not the alert profile).
+        let low: Double
+        let high: Double
+        /// The glucose target in force right now, in mg/dL. The dynamic colour
+        /// scheme shades towards green at this value.
+        let target: Double
+        /// `GlucoseColorScheme`'s raw value: "staticColor" or "dynamicColor".
+        let scheme: String
+    }
+
     let type: String
     /// Unix seconds when the snapshot was created; followers reject stale or
     /// out-of-order snapshots.
@@ -65,6 +82,10 @@ struct FollowerStatusSnapshot: Encodable {
     /// follower by `withThresholds(from:)`.
     var low: Double
     var high: Double
+
+    /// How the host colours glucose. Optional: hosts that predate this send no
+    /// ranges, and a follower talking to one falls back to its own defaults.
+    var ranges: GlucoseRanges?
 
     /// Whether insulin delivery is stopped right now, straight from the pump's
     /// own state. A follower only ever learns that its emergency suspension
@@ -96,6 +117,7 @@ struct FollowerStatusSnapshot: Encodable {
         case maxCarbs = "max_carbs"
         case low
         case high
+        case ranges
         case suspended
         case suspendedBy = "suspended_by"
         case suspendedAt = "suspended_at"
@@ -119,6 +141,7 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
     @Injected() private var settingsManager: SettingsManager!
     @Injected() private var iobService: IOBService!
     @Injected() private var apsManager: APSManager!
+    @Injected() private var fileStorage: FileStorage!
 
     private let context = CoreDataStack.shared.newTaskContext()
     private let throttleQueue = DispatchQueue(label: "BaseFollowerStatusPublisher.throttle")
@@ -268,6 +291,16 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
         let suspended = apsManager.isSuspended
         let suspension = suspended ? FollowerSuspensionManager.shared.current : nil
 
+        // Sent so the follower's chart can colour a reading the way the host's
+        // own chart colours it, rather than by the follower's alert thresholds
+        // — which are a different question with different numbers.
+        let ranges = FollowerStatusSnapshot.GlucoseRanges(
+            low: Double(truncating: settings.low as NSNumber),
+            high: Double(truncating: settings.high as NSNumber),
+            target: Double(truncating: (await currentGlucoseTarget() ?? Self.fallbackTarget) as NSNumber),
+            scheme: settings.glucoseColorScheme.rawValue
+        )
+
         return FollowerStatusSnapshot(
             type: "status",
             timestamp: Date().timeIntervalSince1970.rounded(),
@@ -283,6 +316,7 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             maxCarbs: Double(truncating: settings.maxCarbs as NSNumber),
             low: Double(truncating: FollowerAlertSettings.default.low.threshold as NSNumber),
             high: Double(truncating: FollowerAlertSettings.default.high.threshold as NSNumber),
+            ranges: ranges,
             suspended: suspended,
             suspendedBy: suspension?.followerName,
             suspendedAt: suspension?.requestedAt.timeIntervalSince1970.rounded(),
@@ -318,6 +352,52 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             }
         }
     }
+
+    /// The glucose target in force at this moment, from the host's own target
+    /// schedule.
+    ///
+    /// Read straight from storage rather than from a view model: the publisher
+    /// runs whether or not the Home screen has ever been on screen.
+    private func currentGlucoseTarget() async -> Decimal? {
+        let bgTargets = await fileStorage.retrieveAsync(OpenAPS.Settings.bgTargets, as: BGTargets.self)
+            ?? BGTargets(from: OpenAPS.defaults(for: OpenAPS.Settings.bgTargets))
+        guard let entries = bgTargets?.targets, !entries.isEmpty else { return nil }
+
+        let now = Date()
+        let calendar = Calendar.current
+
+        func startOfToday(_ start: String) -> Date? {
+            guard let parsed = TherapySettingsUtil.parseTime(start) else { return nil }
+            let components = calendar.dateComponents([.hour, .minute, .second], from: parsed)
+            return calendar.date(
+                bySettingHour: components.hour ?? 0,
+                minute: components.minute ?? 0,
+                second: components.second ?? 0,
+                of: now
+            )
+        }
+
+        for (index, entry) in entries.enumerated() {
+            guard let entryStart = startOfToday(entry.start) else { continue }
+
+            let entryEnd: Date
+            if index < entries.count - 1, let nextStart = startOfToday(entries[index + 1].start) {
+                entryEnd = nextStart
+            } else {
+                entryEnd = calendar.date(byAdding: .day, value: 1, to: entryStart) ?? now
+            }
+
+            if now >= entryStart, now < entryEnd { return entry.low }
+        }
+
+        // Before the first entry of the day the last one is still running, the
+        // way it has been since yesterday.
+        return entries.last?.low
+    }
+
+    /// Stands in when the host has no readable target schedule; the same
+    /// default the Home screen starts from.
+    private static let fallbackTarget: Decimal = 100
 
     private struct DeterminationSummary {
         let cob: Double?

@@ -75,7 +75,13 @@ import Testing
             maxBolus: 6.5,
             maxCarbs: 120,
             low: 70,
-            high: 180
+            high: 180,
+            ranges: FollowerStatusSnapshot.GlucoseRanges(
+                low: 80,
+                high: 160,
+                target: 110,
+                scheme: "dynamicColor"
+            )
         )
 
         let data = try JSONEncoder().encode(snapshot)
@@ -95,10 +101,54 @@ import Testing
         #expect(tempTarget["target"] as? Double == 140)
         #expect(tempTarget["started_at"] as? Double == 1_723_398_000)
 
-        // The follower colours its chart and widgets with these rather than
-        // assuming 70/180.
+        // The follower alerts on these rather than assuming 70/180.
         #expect(json["low"] as? Double == 70)
         #expect(json["high"] as? Double == 180)
+
+        // And colours its chart by these, which are the host's own display
+        // settings and nothing to do with what this follower is alerted on.
+        let ranges = try #require(json["ranges"] as? [String: Any])
+        #expect(ranges["low"] as? Double == 80)
+        #expect(ranges["high"] as? Double == 160)
+        #expect(ranges["target"] as? Double == 110)
+        #expect(ranges["scheme"] as? String == "dynamicColor")
+    }
+
+    @Test("Per-follower thresholds leave the host's display ranges alone")
+    func rangesSurvivePersonalisation() {
+        let snapshot = FollowerStatusSnapshot(
+            type: "status",
+            timestamp: 1_723_400_000,
+            units: "mg/dL",
+            readings: [],
+            iob: nil,
+            cob: nil,
+            lastLoop: nil,
+            eventualBG: nil,
+            tempTarget: nil,
+            override: nil,
+            maxBolus: 6.5,
+            maxCarbs: 120,
+            low: 70,
+            high: 180,
+            ranges: FollowerStatusSnapshot.GlucoseRanges(
+                low: 70,
+                high: 180,
+                target: 100,
+                scheme: "staticColor"
+            )
+        )
+
+        var settings = FollowerAlertSettings.default
+        settings.low.threshold = 80
+        settings.high.threshold = 200
+
+        // A follower that wants to be woken at 80 has not asked for its chart
+        // to be redrawn; the host still displays what the host displays.
+        let personalised = snapshot.withThresholds(from: settings)
+        #expect(personalised.low == 80)
+        #expect(personalised.ranges?.low == 70)
+        #expect(personalised.ranges?.high == 180)
     }
 
     @Test("Per-follower thresholds replace the defaults in the snapshot") func snapshotThresholds() {

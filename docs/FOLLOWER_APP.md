@@ -208,13 +208,24 @@ Encrypted exactly like commands, with the same per-follower key:
   "temp_target": { "target": 140, "name": "Exercise", "started_at": 1723398000, "duration": 120 },
   "override": { "name": "Sports", "started_at": 1723398000, "duration": 60 },
   "max_bolus": 6.5,
-  "max_carbs": 120
+  "max_carbs": 120,
+  "low": 70,
+  "high": 180,
+  "ranges": { "low": 70, "high": 180, "target": 100, "scheme": "staticColor" }
 }
 ```
 
 `readings` is newest-first, up to 6 hours, always mg/dL. The follower ignores
 snapshots older than the one it already has (out-of-order pushes) and marks
 data stale in the UI when the newest snapshot is older than 15 minutes.
+
+`low`/`high` are the glucose thresholds *this* follower is alerted on, and are
+substituted per follower. `ranges` is a different thing: how the host itself
+displays glucose — its own display low and high, the glucose target in force
+when the snapshot was built, and its colour scheme (`staticColor` or
+`dynamicColor`) — which is what the follower colours each point of its chart
+by, so a reading is the same colour on both screens. A host that predates
+either sends neither, and the follower falls back to its own defaults.
 
 ## Revocation
 

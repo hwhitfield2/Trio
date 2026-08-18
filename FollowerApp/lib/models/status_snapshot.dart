@@ -1,3 +1,5 @@
+import 'glucose_ranges.dart';
+
 /// Status snapshot pushed by the Trio host, decrypted from the
 /// `encrypted_status` push field. Schema is produced by
 /// `FollowerStatusPublisher` on the host — keep both sides in sync.
@@ -16,6 +18,7 @@ class StatusSnapshot {
     this.maxCarbs,
     this.lowThreshold,
     this.highThreshold,
+    this.ranges,
     this.suspended = false,
     this.suspendedBy,
     this.suspendedAt,
@@ -45,6 +48,29 @@ class StatusSnapshot {
   /// app's own defaults.
   final double? lowThreshold;
   final double? highThreshold;
+
+  /// The ranges the host colours glucose by, when it reports them. Not the
+  /// same numbers as the alert thresholds above: the host displays by its own
+  /// settings and alerts by this follower's.
+  final GlucoseRanges? ranges;
+
+  /// What to colour a reading by: the host's ranges when it sends them, and
+  /// otherwise the alert thresholds, which are the closest an older host gets
+  /// us to how it draws its own chart.
+  GlucoseRanges get glucoseRanges {
+    final reported = ranges;
+    if (reported != null) return reported;
+
+    final low = lowThreshold;
+    final high = highThreshold;
+    if (low == null || high == null) return GlucoseRanges.defaults;
+    if (!low.isFinite || !high.isFinite || low <= 0 || low >= high) {
+      return GlucoseRanges.defaults;
+    }
+    // No target on this path — nothing to shade towards, and nothing asks for
+    // one: the dynamic scheme only comes from a host that reports its ranges.
+    return GlucoseRanges(low: low, high: high, target: (low + high) / 2);
+  }
 
   /// Whether insulin delivery is stopped on the host right now, as reported by
   /// the pump itself. This — and only this — is what tells a follower that an
@@ -109,6 +135,7 @@ class StatusSnapshot {
       maxCarbs: (json['max_carbs'] as num?)?.toDouble(),
       lowThreshold: (json['low'] as num?)?.toDouble(),
       highThreshold: (json['high'] as num?)?.toDouble(),
+      ranges: GlucoseRanges.fromJson(json['ranges']),
       suspended: json['suspended'] == true,
       suspendedBy: json['suspended_by'] as String?,
       suspendedAt: json['suspended_at'] is num
