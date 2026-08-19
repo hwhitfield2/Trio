@@ -332,9 +332,29 @@ final class TandemPumpState: RawRepresentable {
     var microbolusSuspended: Bool
 
     /// Play a phone-side sound when the driver changes delivery (bolus accepted,
-    /// cancel, suspend/resume). The t:slim X2 protocol has no remote beep
-    /// command, so the phone provides the Omnipod-style audio indication.
+    /// cancel, suspend/resume).
+    ///
+    /// The phone does it because the pump's only annunciation command,
+    /// `PlaySound`, takes no parameters — one undifferentiated noise, at the
+    /// pump's own volume — which is no use for telling a bolus from a cancel.
+    /// It is enough for glucose alarms, where the pattern can be composed from
+    /// repeats; see `TandemGlucoseAnnunciation`.
     var audioFeedbackEnabled: Bool
+
+    /// User opt-in: let Trio buzz the pump itself when its own glucose alarms
+    /// fire, with a different pattern for low than for high.
+    ///
+    /// Off by default. It sends `PlaySound`, which pumpX2 defines but never
+    /// sends, so it is unverified against real hardware — and it is the pump's
+    /// own Sound setting, not Trio, that decides whether that comes out as a
+    /// buzz or a beep.
+    var glucoseAnnunciationEnabled: Bool
+
+    /// Runtime-only: when the last annunciation started, for the driver's own
+    /// rate limit. Not persisted — after a restart the worst case is one extra
+    /// buzz, and remembering it across launches would be a way to miss a real
+    /// alarm.
+    var lastAnnunciationAt: Date?
 
     /// Also play the dose sound for automatic deliveries (SMBs and basal
     /// microboluses). Off by default — in microbolus-basal mode this sounds
@@ -473,6 +493,7 @@ final class TandemPumpState: RawRepresentable {
         microbolusSuspended = false
         audioFeedbackEnabled = true
         audioFeedbackForAutomaticDoses = false
+        glucoseAnnunciationEnabled = false
         owedBasalInsulin = 0
         lastBasalRate = 0
         lastBasalUpdate = nil
@@ -526,6 +547,7 @@ final class TandemPumpState: RawRepresentable {
         microbolusSuspended = rawValue["microbolusSuspended"] as? Bool ?? false
         audioFeedbackEnabled = rawValue["audioFeedbackEnabled"] as? Bool ?? true
         audioFeedbackForAutomaticDoses = rawValue["audioFeedbackForAutomaticDoses"] as? Bool ?? false
+        glucoseAnnunciationEnabled = rawValue["glucoseAnnunciationEnabled"] as? Bool ?? false
         // owedBasalInsulin / lastBasalRate / lastBasalUpdate / recentBolusIds
         // are runtime-only: they keep the init() defaults so the accumulator and
         // dedup state always start fresh after a restart, never dumping stale
@@ -573,6 +595,7 @@ final class TandemPumpState: RawRepresentable {
         value["microbolusSuspended"] = microbolusSuspended
         value["audioFeedbackEnabled"] = audioFeedbackEnabled
         value["audioFeedbackForAutomaticDoses"] = audioFeedbackForAutomaticDoses
+        value["glucoseAnnunciationEnabled"] = glucoseAnnunciationEnabled
         // owedBasalInsulin / lastBasalRate / lastBasalUpdate / recentBolusIds
         // are intentionally NOT persisted (runtime-only; see declarations).
         value["insulinType"] = insulinType?.rawValue

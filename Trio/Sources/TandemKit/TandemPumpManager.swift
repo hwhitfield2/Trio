@@ -1256,9 +1256,13 @@ extension TandemPumpManager {
 
     // MARK: - Audio feedback
 
-    /// Distinct phone-side cues for pump activity. The t:slim X2 protocol has no
-    /// remote annunciate/beep command (unlike the Omnipod), so the phone plays
-    /// the indication instead of the pump.
+    /// Distinct phone-side cues for pump activity.
+    ///
+    /// The pump does have an annunciation command — `PlaySound` — but it takes
+    /// no parameters at all, so every use of it sounds identical. That is fine
+    /// for a glucose alarm, where the pattern can be built from repeats
+    /// (`TandemGlucoseAnnunciation`), and no use for telling a bolus from a
+    /// cancel. So the phone plays these.
     enum FeedbackTone {
         /// Insulin was accepted for delivery (bolus, SMB, basal microbolus).
         case dose
@@ -1273,6 +1277,17 @@ extension TandemPumpManager {
 
     func setAudioFeedbackForAutomaticDoses(_ enabled: Bool) {
         state.audioFeedbackForAutomaticDoses = enabled
+        notifyStateDidChange()
+    }
+
+    /// User opt-in for buzzing the pump on Trio's glucose alarms. Turning it off
+    /// also drops the rate-limit clock, so turning it back on can annunciate
+    /// straight away rather than sitting out the tail of an old window.
+    func setGlucoseAnnunciationEnabled(_ enabled: Bool) {
+        state.glucoseAnnunciationEnabled = enabled
+        if !enabled {
+            state.lastAnnunciationAt = nil
+        }
         notifyStateDidChange()
     }
 

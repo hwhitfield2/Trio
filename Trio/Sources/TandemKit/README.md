@@ -419,6 +419,54 @@ checklist evaluated with the driver's own constants
 `basalPreconditionEpsilonUnitsPerHour`, `minimumProfileBasalForTempRate`), so
 "Trio is not looping" reads as "Control-IQ is on" instead of as silence.
 
+## Glucose alarms on the pump
+
+The pump has exactly one annunciation command, and it takes no arguments.
+`PlaySound` (opcode `0xF4`, signed, control characteristic, **empty cargo**) is
+the noise Tandem's own app uses to find a misplaced pump: no pattern, no
+duration, no tone, and no say in whether it comes out as a buzz or a beep —
+that follows the pump's own Sound setting. It is not `modifiesInsulinDelivery`,
+so like the notification dismissal it sits outside the delivery opt-in.
+
+So "low feels different from high" cannot be asked of the pump; it has to be
+built out of the only two things Trio controls, **how many times it asks and how
+far apart**. `TandemGlucoseAnnunciation.swift` defines low as three pulses a
+second apart and high as two pulses three seconds apart. Both dimensions differ
+on purpose and a test asserts they always will: counting buzzes through a
+pocket is unreliable and so is judging one gap in isolation, so neither alone is
+enough to tell two alarms apart.
+
+The alarm itself is not re-derived. `BaseUserNotificationsManager` already
+decides what counts as a low or high — the thresholds, the snooze, and the
+token that stops one CGM reading alarming twice — so the pump buzz hangs off
+that same decision. The pump never buzzes for something the phone stayed quiet
+about.
+
+Three things keep it from becoming a therapy problem:
+
+- **It never wakes the pump.** If the radio link is not already up the buzz is
+  skipped, because connecting would tie up the command queue for the whole
+  connect timeout and the phone has already alarmed by then.
+- **Each pulse is its own queue item.** A pattern is scheduled as
+  `commandQueue.asyncAfter` between pulses rather than held in one blocking
+  loop, so a temp basal or bolus enqueued mid-pattern waits for one pulse's
+  round trip instead of the whole pattern. A pulse that fails abandons the rest.
+- **The driver rate-limits itself** to one annunciation every five minutes,
+  independently of what the caller claims, and the opt-in is off by default.
+
+`PlaySound` is defined by pumpX2 for every model and **never sent by it**, so
+the encoding is transcribed and the behaviour is unverified — the same standing
+as the cartridge flow. The settings screen therefore offers a test button per
+pattern, which is both how the user learns the difference and how they find out
+whether their pump answers the command at all.
+
+pumpX2 also defines `SetPumpSounds`, which can set the pump's annunciation
+preference per category (quick bolus, general, reminder, alert, alarm, CGM
+alert) to `AUDIO_HIGH` / `AUDIO_MEDIUM` / `AUDIO_LOW` / `VIBRATE`. Trio does not
+send it: it rewrites a global preference governing all of the pump's own alarms,
+which is not Trio's to change as a side effect of a Trio setting. The screen
+says to set Vibrate on the pump instead.
+
 Two rules the UI must keep. It may never clear `state.lastSync` to force a
 read — `automaticDosingPreconditionFailure` fails closed on `.distantPast`, so
 that would disarm dosing; `refreshPumpData(completion:)` exists for this. And it

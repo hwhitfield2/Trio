@@ -291,3 +291,46 @@ struct TandemResumePumpingResponse: TandemResponse {
         status = first
     }
 }
+
+// MARK: - Annunciation
+
+/// Make the pump annunciate once — the noise its own app uses to find a
+/// misplaced pump.
+///
+/// The cargo is **empty**: there is no pattern, duration, tone or volume
+/// parameter anywhere in the message, and whether the pump beeps or vibrates
+/// comes from its own Sound settings rather than from the caller. Anything that
+/// has to be told apart therefore has to be composed outside the protocol, out
+/// of repeats and the gaps between them — which is what
+/// `TandemGlucoseAnnunciation` does.
+///
+/// Signed and on the control characteristic, but deliberately NOT
+/// `modifiesInsulinDelivery`: it moves no insulin, so like the notification
+/// dismissal it sits outside the delivery opt-in. That matches pumpX2, where
+/// `PlaySoundRequest` carries no `modifiesInsulinDelivery` annotation either.
+///
+/// pumpX2 defines this message for every model (`supportedDevices` defaults to
+/// ALL, `minApi` 2.1) but never sends it, so — exactly like the cartridge
+/// commands — the encoding is transcribed and the behaviour is unverified
+/// against a real pump.
+struct TandemPlaySoundRequest: TandemRequest {
+    typealias Response = TandemPlaySoundResponse
+    /// pumpX2 `opCode = -12`.
+    static let opcode: UInt8 = 0xF4
+    static let characteristic: TandemCharacteristic = .control
+    static let signed = true
+}
+
+struct TandemPlaySoundResponse: TandemResponse {
+    /// pumpX2 `opCode = -11`.
+    static let opcode: UInt8 = 0xF5
+    static let signed = true
+    let status: UInt8
+
+    init(cargo: Data) throws {
+        guard let first = cargo.first else {
+            throw TandemMessageError.unexpectedCargoSize(message: "PlaySoundResponse", expected: 1, actual: 0)
+        }
+        status = first
+    }
+}

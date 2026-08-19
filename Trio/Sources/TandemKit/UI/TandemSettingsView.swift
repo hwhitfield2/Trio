@@ -28,6 +28,9 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     @Published var testDoseUnits: Double = TandemSettingsViewModel.testDoseOptions[0]
     @Published var acknowledgingAlarms = false
     @Published var alarmErrorMessage: String?
+    @Published var glucoseAnnunciationEnabled: Bool
+    @Published var testingAnnunciation: TandemGlucoseAlarmKind?
+    @Published var annunciationResult: (success: Bool, message: String)?
 
     let pumpManager: TandemPumpManager
 
@@ -42,6 +45,7 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
         microbolusBasalEnabled = pumpManager.state.microbolusBasalEnabled
         audioFeedbackEnabled = pumpManager.state.audioFeedbackEnabled
         audioFeedbackForAutomaticDoses = pumpManager.state.audioFeedbackForAutomaticDoses
+        glucoseAnnunciationEnabled = pumpManager.state.glucoseAnnunciationEnabled
         pumpManager.addStatusObserver(self, queue: .main)
     }
 
@@ -444,6 +448,48 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
         audioFeedbackForAutomaticDoses = enabled
         pumpManager.setAudioFeedbackForAutomaticDoses(enabled)
     }
+
+    // MARK: - Glucose alarms on the pump
+
+    func setGlucoseAnnunciation(_ enabled: Bool) {
+        glucoseAnnunciationEnabled = enabled
+        annunciationResult = nil
+        pumpManager.setGlucoseAnnunciationEnabled(enabled)
+    }
+
+    func describePattern(_ kind: TandemGlucoseAlarmKind) -> String {
+        let pattern = TandemAnnunciationPattern.pattern(for: kind)
+        let seconds = TandemPumpState.doseText(pattern.gap)
+        return String(localized: "\(pattern.pulses) buzzes, \(seconds) s apart")
+    }
+
+    /// Play one of the patterns on demand. The point of the test is that the
+    /// user can tell the two apart before they have to recognise one through a
+    /// pocket at 3am — and, because the command is unverified, that they can
+    /// find out whether their pump answers it at all.
+    func testAnnunciation(_ kind: TandemGlucoseAlarmKind) {
+        testingAnnunciation = kind
+        annunciationResult = nil
+        pumpManager.testAnnunciation(kind) { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.testingAnnunciation = nil
+                if let error {
+                    TandemHaptics.failure()
+                    self.annunciationResult = (false, error.localizedDescription)
+                } else {
+                    TandemHaptics.success()
+                    self.annunciationResult = (
+                        true,
+                        String(
+                            localized: "Sent. The pump should have played the \(kind.localizedTitle.lowercased()) pattern: \(self.describePattern(kind))."
+                        )
+                    )
+                }
+                self.objectWillChange.send()
+            }
+        }
+    }
 }
 
 struct TandemSettingsView: View {
@@ -467,6 +513,7 @@ struct TandemSettingsView: View {
             Group {
                 remoteBolusSection
                 cartridgeSection
+                glucoseAlarmSection
                 soundsSection
                 // A section that pushes real insulin belongs with the
                 // diagnostics, not above the settings that decide how the pump
@@ -971,6 +1018,79 @@ struct TandemSettingsView: View {
             )
         }
         .tandemRowBackground()
+    }
+
+    // MARK: - Glucose alarms on the pump
+
+    /// The pump's only annunciation command takes no arguments, so the two
+    /// patterns are built here out of how many times Trio asks and how far
+    /// apart — which is also why the test buttons matter more than usual.
+    private var glucoseAlarmSection: some View {
+        Section {
+            Toggle(
+                String(localized: "Buzz the pump on glucose alarms"),
+                isOn: Binding(
+                    get: { viewModel.glucoseAnnunciationEnabled },
+                    set: { viewModel.setGlucoseAnnunciation($0) }
+                )
+            )
+
+            if viewModel.glucoseAnnunciationEnabled {
+                TandemInfoRow(
+                    label: TandemGlucoseAlarmKind.low.localizedTitle,
+                    value: viewModel.describePattern(.low),
+                    tone: .critical
+                )
+                TandemInfoRow(
+                    label: TandemGlucoseAlarmKind.high.localizedTitle,
+                    value: viewModel.describePattern(.high),
+                    tone: .caution
+                )
+
+                TandemActionButton(
+                    title: String(localized: "Test the low pattern"),
+                    systemImage: "arrow.down.circle",
+                    emphasis: .bordered,
+                    isBusy: viewModel.testingAnnunciation == .low,
+                    busyTitle: String(localized: "Buzzing…")
+                ) {
+                    viewModel.testAnnunciation(.low)
+                }
+                .disabled(viewModel.testingAnnunciation != nil)
+
+                TandemActionButton(
+                    title: String(localized: "Test the high pattern"),
+                    systemImage: "arrow.up.circle",
+                    emphasis: .bordered,
+                    isBusy: viewModel.testingAnnunciation == .high,
+                    busyTitle: String(localized: "Buzzing…")
+                ) {
+                    viewModel.testAnnunciation(.high)
+                }
+                .disabled(viewModel.testingAnnunciation != nil)
+
+                if let result = viewModel.annunciationResult {
+                    TandemCallout(
+                        title: result.success
+                            ? String(localized: "Sent to the pump")
+                            : String(localized: "The pump did not buzz"),
+                        message: result.message,
+                        tone: result.success ? .ok : .critical
+                    )
+                }
+            }
+        } header: {
+            Text("Glucose alarms").glassCaption()
+        } footer: {
+            Text(glucoseAlarmFooter)
+        }
+        .tandemRowBackground()
+    }
+
+    private var glucoseAlarmFooter: String {
+        String(
+            localized: "Uses Trio's own low and high alarms — the same thresholds, snooze and once-per-reading rule as the phone alert, so the pump never buzzes for something the phone stayed quiet about. It only buzzes while the pump is already connected, and never more than once every five minutes. Whether it buzzes or beeps is the pump's own Sound setting, not Trio's — set it to Vibrate in \(viewModel.elsewhereName) if you want a buzz. This command has not been verified against a real pump; use the test buttons before relying on it."
+        )
     }
 
     // MARK: - Sounds

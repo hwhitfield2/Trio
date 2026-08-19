@@ -521,3 +521,72 @@ private extension Data {
         #expect(!restored.isAlarming)
     }
 }
+
+@Suite("Tandem glucose annunciation") struct TandemGlucoseAnnunciationTests {
+    @Test("PlaySound matches the reverse-engineered protocol") func messageShape() {
+        // pumpX2 PlaySoundRequest opCode = -12, PlaySoundResponse = -11.
+        #expect(TandemPlaySoundRequest.opcode == 0xF4)
+        #expect(TandemPlaySoundResponse.opcode == 0xF5)
+        #expect(TandemPlaySoundRequest.signed)
+        #expect(TandemPlaySoundRequest.characteristic == .control)
+        // It moves no insulin, so it must not sit behind the delivery opt-in —
+        // an alarm the user cannot be told about is the failure this feature
+        // exists to prevent.
+        #expect(!TandemPlaySoundRequest.modifiesInsulinDelivery)
+        // The message carries nothing at all: no pattern, no tone, no volume.
+        #expect(TandemPlaySoundRequest().cargo.isEmpty)
+    }
+
+    @Test("The response reports the pump's status byte") func responseParsing() throws {
+        #expect(try TandemPlaySoundResponse(cargo: Data([0])).status == 0)
+        #expect(try TandemPlaySoundResponse(cargo: Data([1])).status == 1)
+        #expect(throws: TandemMessageError.self) { try TandemPlaySoundResponse(cargo: Data()) }
+    }
+
+    @Test("Low and high differ in both count and rhythm") func patternsAreDistinguishable() {
+        let low = TandemAnnunciationPattern.pattern(for: .low)
+        let high = TandemAnnunciationPattern.pattern(for: .high)
+
+        // Either dimension alone is easy to miss through a pocket: counting
+        // buzzes is unreliable, and so is judging a gap in isolation. Both must
+        // differ, or the two alarms are not actually tellable apart.
+        #expect(low.pulses != high.pulses)
+        #expect(low.gap != high.gap)
+
+        // Low is the urgent one: more buzzes, closer together.
+        #expect(low.pulses > high.pulses)
+        #expect(low.gap < high.gap)
+
+        // And neither pattern may drag on so long it is still buzzing at the
+        // next CGM reading.
+        #expect(low.nominalDuration < .minutes(1))
+        #expect(high.nominalDuration < .minutes(1))
+    }
+
+    @Test("A single pulse has no gap to wait out") func singlePulseDuration() {
+        #expect(TandemAnnunciationPattern(pulses: 1, gap: 5).nominalDuration == 0)
+        #expect(TandemAnnunciationPattern(pulses: 3, gap: 2).nominalDuration == 4)
+    }
+
+    @Test("The opt-in persists and the rate-limit clock does not") func statePersistence() {
+        let state = TandemPumpState()
+        #expect(!state.glucoseAnnunciationEnabled)
+
+        state.glucoseAnnunciationEnabled = true
+        state.lastAnnunciationAt = Date.now
+
+        let restored = TandemPumpState(rawValue: state.rawValue)
+        #expect(restored.glucoseAnnunciationEnabled)
+        // Runtime-only: after a restart the worst case is one extra buzz, which
+        // is the safe direction for an alarm.
+        #expect(restored.lastAnnunciationAt == nil)
+    }
+
+    @Test("Every alarm kind has a pattern and a name") func kindCoverage() {
+        for kind in TandemGlucoseAlarmKind.allCases {
+            #expect(!kind.localizedTitle.isEmpty)
+            #expect(TandemAnnunciationPattern.pattern(for: kind).pulses > 0)
+        }
+        #expect(TandemGlucoseAlarmKind.allCases.count == 2)
+    }
+}

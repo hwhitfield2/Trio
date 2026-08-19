@@ -388,12 +388,35 @@ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, In
                 )
                 if notificationAlarm {
                     lastGlucoseAlertToken = token
+                    annunciateOnPump(for: glucoseStorage.alarm)
                 }
             }
         } catch {
             debugPrint(
                 "\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to send glucose notification with error: \(error)"
             )
+        }
+    }
+
+    /// Ask the pump to buzz, if it is a pump that can and the user asked it to.
+    ///
+    /// This hangs off the glucose alarm rather than off the readings because
+    /// every judgement has already been made here: the thresholds, the snooze,
+    /// and the token that stops one reading alarming twice. A second pass over
+    /// the same data would only be a second chance to disagree with it.
+    ///
+    /// A Tandem pump is the only one Trio can do this on — its `PlaySound`
+    /// command is the only remote annunciation in any of the drivers — so the
+    /// cast is the feature, not a shortcut around a protocol that exists.
+    private func annunciateOnPump(for alarm: GlucoseAlarm?) {
+        guard let tandem = apsManager.pumpManager as? TandemPumpManager else { return }
+        switch alarm {
+        case .low:
+            tandem.annunciateGlucoseAlarm(.low)
+        case .high:
+            tandem.annunciateGlucoseAlarm(.high)
+        case .none:
+            break
         }
     }
 

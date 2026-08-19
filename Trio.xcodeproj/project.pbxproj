@@ -939,6 +939,7 @@
 		7ADEE0000000000000000302 /* TandemCartridgeChange.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000302 /* TandemCartridgeChange.swift */; };
 		7ADEE0000000000000000400 /* TandemUITheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000400 /* TandemUITheme.swift */; };
 		7ADEE0000000000000000402 /* TandemPumpStatusSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000402 /* TandemPumpStatusSummary.swift */; };
+		7ADEE0000000000000000404 /* TandemGlucoseAnnunciation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000404 /* TandemGlucoseAnnunciation.swift */; };
 		7ADEE0000000000000000304 /* TandemCartridgeChangeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000304 /* TandemCartridgeChangeView.swift */; };
 		7ADEE0000000000000000310 /* TandemCartridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000310 /* TandemCartridgeTests.swift */; };
 /* End PBXBuildFile section */
@@ -1972,6 +1973,7 @@
 		7ADEF0000000000000000302 /* TandemCartridgeChange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCartridgeChange.swift"; sourceTree = "<group>"; };
 		7ADEF0000000000000000400 /* TandemUITheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemUITheme.swift"; sourceTree = "<group>"; };
 		7ADEF0000000000000000402 /* TandemPumpStatusSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemPumpStatusSummary.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000404 /* TandemGlucoseAnnunciation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemGlucoseAnnunciation.swift"; sourceTree = "<group>"; };
 		7ADEF0000000000000000304 /* TandemCartridgeChangeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCartridgeChangeView.swift"; sourceTree = "<group>"; };
 		7ADEF0000000000000000310 /* TandemCartridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCartridgeTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -2094,6 +2096,7 @@
 				7ADEF0000000000000000100 /* TandemMicrobolusBasal.swift */,
 				7ADEF0000000000000000202 /* TandemNativeBasal.swift */,
 				7ADEF0000000000000000302 /* TandemCartridgeChange.swift */,
+				7ADEF0000000000000000404 /* TandemGlucoseAnnunciation.swift */,
 				7ADEB000000000000000000A /* Bluetooth */,
 				7ADEB0000000000000000220 /* Crypto */,
 				7ADEB000000000000000000F /* Protocol */,
@@ -5170,6 +5173,7 @@
 				7ADEE0000000000000000302 /* TandemCartridgeChange.swift in Sources */,
 				7ADEE0000000000000000400 /* TandemUITheme.swift in Sources */,
 				7ADEE0000000000000000402 /* TandemPumpStatusSummary.swift in Sources */,
+				7ADEE0000000000000000404 /* TandemGlucoseAnnunciation.swift in Sources */,
 				7ADEE0000000000000000304 /* TandemCartridgeChangeView.swift in Sources */,
 				7ADEE0000000000000000204 /* TandemBigUInt.swift in Sources */,
 				7ADEE0000000000000000206 /* TandemP256.swift in Sources */,
