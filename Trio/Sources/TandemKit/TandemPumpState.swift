@@ -350,13 +350,24 @@ final class TandemPumpState: RawRepresentable {
     /// buzz or a beep.
     var glucoseAnnunciationEnabled: Bool
 
-    /// Runtime-only: the pump refused `PlaySound`, so stop asking.
+    /// Runtime-only: the pump refused `PlaySound` even after a fresh handshake,
+    /// so leave it alone until this time.
     ///
     /// This matters more now that an alarm connects to deliver itself: without
-    /// it, a pump that does not implement the command would be woken every five
-    /// minutes to refuse it again. Runtime-only on purpose — a relaunch is one
-    /// free retry, and the test button clears it deliberately.
-    var annunciationRefusedByPump: Bool = false
+    /// it, a pump that will not play the sound would be woken every five
+    /// minutes to refuse it again. It expires rather than latching, because the
+    /// refusal the field has actually produced matched a stale signing key — a
+    /// transient — not a missing feature. The test button clears it outright:
+    /// pressing test IS the retry.
+    var annunciationRefusedUntil: Date?
+
+    /// How long a refusal keeps Trio from asking again on its own.
+    static let annunciationRefusalSuppression: TimeInterval = .hours(1)
+
+    var annunciationRefusalActive: Bool {
+        guard let until = annunciationRefusedUntil else { return false }
+        return Date.now < until
+    }
 
     /// Runtime-only: when the last annunciation started, for the driver's own
     /// rate limit. Not persisted — after a restart the worst case is one extra

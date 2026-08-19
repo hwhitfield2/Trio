@@ -226,8 +226,16 @@ extension TandemPumpManager {
             if let error = connectionError {
                 return .transport(error)
             }
+        }
 
-            // Fresh connection: authenticate and re-establish identity/time.
+        // Authenticate per LINK, not per "did we just connect". A signing key
+        // belongs to the connection whose handshake produced it — JPAKE keys
+        // are derived from a per-connection nonce — and CoreBluetooth can
+        // re-establish a dropped link on its own (state restoration, pending
+        // connects). A key carried across that boundary signs every control
+        // command with the wrong nonce, and the pump answers each one with its
+        // generic ErrorResponse while unsigned status reads keep working.
+        if !session.isAuthenticatedForCurrentLink {
             if let error = authenticateSession() {
                 return error
             }

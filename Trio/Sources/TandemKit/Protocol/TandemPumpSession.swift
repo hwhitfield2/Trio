@@ -100,12 +100,32 @@ final class TandemPumpSession {
         bluetooth.delegate = self
     }
 
+    /// The BLE link the current key was established on. A signing key is only
+    /// trustworthy on the link whose handshake produced it — JPAKE keys are
+    /// derived from a per-connection nonce, and the legacy challenge is also a
+    /// per-connection exchange — so a key from a previous link must never be
+    /// used to sign on a new one.
+    private var authenticatedLinkGeneration: Int?
+
     func setAuthenticationKey(_ key: Data?) {
-        lock.perform { authenticationKey = key }
+        lock.perform {
+            authenticationKey = key
+            authenticatedLinkGeneration = key == nil ? nil : bluetooth.linkGeneration
+        }
     }
 
     var isAuthenticated: Bool {
         lock.perform { authenticationKey != nil }
+    }
+
+    /// True only when the signing key was established on the link that is up
+    /// right now. False after any reconnect — including one CoreBluetooth made
+    /// on its own — which is exactly when signed commands would otherwise be
+    /// sent with a stale key and refused one by one.
+    var isAuthenticatedForCurrentLink: Bool {
+        lock.perform {
+            authenticationKey != nil && authenticatedLinkGeneration == bluetooth.linkGeneration
+        }
     }
 
     // MARK: - Request/response

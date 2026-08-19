@@ -72,6 +72,17 @@ final class TandemBluetoothManager: NSObject {
         peripheral?.state == .connected && !characteristics.isEmpty
     }
 
+    /// Counts up on every established connection, including ones CoreBluetooth
+    /// re-establishes on its own (state restoration, pending connects).
+    ///
+    /// This exists because a JPAKE signing key belongs to one link: it is
+    /// derived from a nonce the pump issues per connection, so a key carried
+    /// across a silent reconnect signs every control command with the wrong
+    /// nonce — the pump then refuses each one with its generic error while
+    /// unsigned status reads keep working. The session compares the generation
+    /// it authenticated on against this to know when it must re-key.
+    private(set) var linkGeneration: Int = 0
+
     /// Whether the radio is available to scan at all. `startScan` silently
     /// gives up when it is not, which used to leave the pairing screen
     /// searching forever with nothing to say; the screen asks this so it can
@@ -271,7 +282,8 @@ extension TandemBluetoothManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        log.info("Connected, discovering services")
+        linkGeneration += 1
+        log.info("Connected (link \(linkGeneration)), discovering services")
         characteristics = [:]
         peripheral.discoverServices([TandemBLE.pumpServiceUUID])
     }

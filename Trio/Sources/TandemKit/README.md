@@ -456,11 +456,35 @@ Three things keep it from becoming a therapy problem:
 - **The driver rate-limits itself** to one annunciation every five minutes,
   independently of what the caller claims, and the opt-in is off by default.
 
-`PlaySound` is defined by pumpX2 for every model and **never sent by it**, so
-the encoding is transcribed and the behaviour is unverified — the same standing
-as the cartridge flow. The settings screen therefore offers a test button per
-pattern, which is both how the user learns the difference and how they find out
-whether their pump answers the command at all.
+`PlaySound` is better-attested than first thought: pumpX2's test vectors for it
+are **captures of the official Tandem app's own traffic** (recorded with HMAC
+validation off, i.e. sniffed, not synthesised), and jwoglom's controlx2 app
+ships it as its "Find my pump" feature. This is the official app's
+locate-the-pump command, byte-identical to what this driver sends. The settings
+screen still offers a test button per pattern — it is how the user learns the
+difference, and how a refusal gets diagnosed.
+
+About refusals: the first field test of this command got back the pump's
+generic `ErrorResponse` with code 0 (`UNDEFINED_ERROR`) — which pumpX2's own
+field notes document as what a pump answers a signed command **whose signature
+it does not accept**. That pointed at a real driver hole rather than a missing
+feature: a JPAKE signing key is derived from a nonce the pump issues **per
+connection**, and CoreBluetooth can re-establish a dropped link on its own
+(state restoration, pending connects) without the driver noticing. A key
+carried across that boundary signs every control command with the wrong nonce;
+unsigned status reads keep working, so the pump looks healthy while refusing
+everything signed. The fix is structural and protects boluses and temp rates,
+not just the buzz: the transport counts **link generations**, the session
+records which generation its key was established on, and
+`ensureConnectedAndAuthenticated` re-runs the handshake whenever the two
+disagree — authenticating per link, not per "did we just connect".
+
+On top of that, an annunciation that is refused gets **one second attempt over
+a deliberately torn-down and re-keyed link** (curing exactly the stale-key
+case), and only a pump that refuses the re-keyed attempt too is left alone —
+for an hour, not forever, since the known failure mode is transient. The test
+button reports a double refusal with the pump's named reason and the pump's own
+state reading, so the answer can be diagnosed rather than shrugged at.
 
 One distinction the screen is careful about: pumpX2's `StatusMessage` documents
 **status 0 as success**, and success means the pump *accepted* the command — not

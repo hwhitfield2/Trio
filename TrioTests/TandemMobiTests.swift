@@ -571,19 +571,26 @@ private extension Data {
     @Test("The opt-in persists and the rate-limit clock does not") func statePersistence() {
         let state = TandemPumpState()
         #expect(!state.glucoseAnnunciationEnabled)
-        #expect(!state.annunciationRefusedByPump)
+        #expect(!state.annunciationRefusalActive)
 
         state.glucoseAnnunciationEnabled = true
         state.lastAnnunciationAt = Date.now
-        state.annunciationRefusedByPump = true
+        state.annunciationRefusedUntil = Date.now
+            .addingTimeInterval(TandemPumpState.annunciationRefusalSuppression)
+        #expect(state.annunciationRefusalActive)
 
+        // The pause expires on its own — a refusal is a pause, not a verdict.
+        state.annunciationRefusedUntil = Date.now.addingTimeInterval(-1)
+        #expect(!state.annunciationRefusalActive)
+
+        state.annunciationRefusedUntil = Date.now.addingTimeInterval(.hours(1))
         let restored = TandemPumpState(rawValue: state.rawValue)
         #expect(restored.glucoseAnnunciationEnabled)
         // Runtime-only: after a restart the worst case is one extra buzz, which
         // is the safe direction for an alarm — and a relaunch is one free retry
         // against a pump that refused it last time.
         #expect(restored.lastAnnunciationAt == nil)
-        #expect(!restored.annunciationRefusedByPump)
+        #expect(restored.annunciationRefusedUntil == nil)
     }
 
     @Test("A refusal is named, not left as a bare number") func errorCodeNaming() throws {
