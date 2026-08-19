@@ -22,13 +22,29 @@ extension RemoteControlConfig {
         @Environment(AppState.self) var appState
 
         private func followerDetailText(_ follower: PairedFollower) -> String {
+            // A follower moved here by a device-setup transfer that could never
+            // register a push address cannot be told where this device is — the
+            // only way forward for it is a fresh pairing QR code.
+            if follower.needsHostUpdate == true, !follower.isPushRegistered {
+                return String(
+                    localized: "Moved from the old device, but unreachable — re-pair this follower with a new QR code.",
+                    comment: "Follower migrated by device setup that cannot be told the new host address"
+                )
+            }
+
             let paired = String(
                 format: String(localized: "Paired %@", comment: "Follower pairing date"),
                 follower.createdAt.formatted(date: .abbreviated, time: .omitted)
             )
-            let push = follower.isPushRegistered
+            var push = follower.isPushRegistered
                 ? String(localized: "Status pushes on")
                 : String(localized: "Awaiting first connection")
+            if follower.needsHostUpdate == true {
+                push = String(
+                    localized: "Moving to this device…",
+                    comment: "Follower migrated by device setup, not yet told the new host address"
+                )
+            }
             guard let lastSeen = follower.lastSeenAt else {
                 return paired + " · " + push
             }

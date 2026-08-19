@@ -1387,12 +1387,9 @@ extension SettingsExport.StateModel {
     /// The backup contains the raw storage models (settings, algorithm preferences,
     /// delivery limits, therapy profiles and presets) and can be re-imported via
     /// `readBackup(from:)` + `applyBackup(_:)`.
-    func exportBackup() async -> Result<URL, ExportError> {
-        await MainActor.run { isExporting = true }
-        defer { Task { @MainActor in self.isExporting = false } }
-
-        debug(.default, "🔄 EXPORT: Starting settings backup export...")
-
+    /// Assembles the complete backup of the current configuration, shared by
+    /// the backup file export and the device-setup QR transfer.
+    private func buildBackup() async -> Result<TrioSettingsBackup, ExportError> {
         var backup = TrioSettingsBackup()
         backup.exportDate = Date()
         backup.appVersion = "\(versionNumber) (\(buildNumber))"
@@ -1412,6 +1409,20 @@ extension SettingsExport.StateModel {
             backup.mealPresets = try await fetchMealPresetBackups()
         } catch {
             return .failure(.unknown("Failed to read presets: \(error.localizedDescription)"))
+        }
+        return .success(backup)
+    }
+
+    func exportBackup() async -> Result<URL, ExportError> {
+        await MainActor.run { isExporting = true }
+        defer { Task { @MainActor in self.isExporting = false } }
+
+        debug(.default, "🔄 EXPORT: Starting settings backup export...")
+
+        let backup: TrioSettingsBackup
+        switch await buildBackup() {
+        case let .success(built): backup = built
+        case let .failure(error): return .failure(error)
         }
 
         let formatter = DateFormatter()
@@ -1942,5 +1953,79 @@ extension SettingsExport.StateModel {
                 )
             }
         }
+    }
+
+    // MARK: - Device setup transfer (QR code sequence)
+
+    /// Builds the QR frame strings that set up a new device exactly like this
+    /// one: the full settings backup plus the remote-control identity —
+    /// paired followers, their secrets and the push credentials.
+    func makeDeviceSetupFrames() async -> Result<[String], ExportError> {
+        var transfer = DeviceSetupTransfer()
+        transfer.createdAt = Date()
+        transfer.hostName = await MainActor.run { UIDevice.current.name }
+        transfer.appVersion = "\(versionNumber) (\(buildNumber))"
+
+        switch await buildBackup() {
+        case let .success(backup): transfer.backup = backup
+        case let .failure(error): return .failure(error)
+        }
+        transfer.remoteControl = FollowerPairingManager.shared.makeRemoteControlTransfer()
+
+        do {
+            return try .success(DeviceSetupQRCodec.encode(transfer))
+        } catch {
+            return .failure(.unknown(error.localizedDescription))
+        }
+    }
+
+    /// Runs the assembled transfer through the same sanity checks a backup
+    /// file import gets before anything is applied.
+    func validateDeviceSetup(_ transfer: DeviceSetupTransfer) -> ImportError? {
+        guard transfer.backup != nil || transfer.remoteControl != nil else {
+            return .validationFailed(String(localized: "The setup code is empty."))
+        }
+        if let backup = transfer.backup, let error = validate(backup) {
+            return error
+        }
+        return nil
+    }
+
+    /// Applies a scanned device-setup transfer: the settings backup first
+    /// (with all its concentration-rescaling safety), then the remote-control
+    /// identity, then a first attempt to tell the migrated followers this
+    /// device's push address.
+    func applyDeviceSetup(_ transfer: DeviceSetupTransfer) async -> Result<ImportSummary, ImportError> {
+        var summary = ImportSummary()
+
+        if let backup = transfer.backup {
+            switch await applyBackup(backup) {
+            case let .success(backupSummary):
+                summary = backupSummary
+            case let .failure(error):
+                return .failure(error)
+            }
+        }
+
+        if let remoteControl = transfer.remoteControl {
+            let migratedFollowers = FollowerPairingManager.shared.applyRemoteControlTransfer(remoteControl)
+            summary.appliedCategories.append(String(localized: "Remote Control"))
+            if migratedFollowers > 0 {
+                summary.notes.append(String(
+                    localized: "\(migratedFollowers) follower(s) were moved to this device. Each will switch over automatically the next time it can be reached — until then it still sends commands to the old device, so turn off remote control there."
+                ))
+                // The device token may already be known (this is also retried
+                // on every APNS registration); reach the followers as soon as
+                // possible rather than waiting for the next launch.
+                Task { await FollowerHostMigrationNotifier.shared.notifyPendingFollowers() }
+            }
+        }
+
+        guard !summary.appliedCategories.isEmpty || summary.importedPresets > 0 || summary.skippedPresets > 0 else {
+            return .failure(.applyFailed(String(localized: "Nothing could be imported from this setup code.")))
+        }
+
+        debug(.default, "✅ IMPORT: Applied device setup transfer — \(summary.message)")
+        return .success(summary)
     }
 }

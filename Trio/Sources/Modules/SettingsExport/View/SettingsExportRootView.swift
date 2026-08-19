@@ -20,6 +20,14 @@ extension SettingsExport {
         @State private var showImportSuccess = false
         @State private var importSuccessMessage = ""
 
+        // Device setup transfer (QR code sequence between two phones)
+        @State private var deviceSetupFrames: [String] = []
+        @State private var showDeviceSetupPresenter = false
+        @State private var isPreparingSetupCode = false
+        @State private var showDeviceSetupScanner = false
+        @State private var pendingTransfer: DeviceSetupTransfer?
+        @State private var showTransferConfirmation = false
+
         @Environment(\.colorScheme) var colorScheme
         @Environment(AppState.self) var appState
 
@@ -173,6 +181,35 @@ extension SettingsExport {
                             .disabled(state.isImporting)
                     }
                 ).listRowBackground(Color.chart)
+
+                Section(
+                    header: Text("Set Up a New Device"),
+                    footer: Text(
+                        "Moves everything to a new phone by QR code: all settings, therapy profiles, presets and remote control — including paired followers, which switch to the new device automatically. Show the code on this phone and scan it with the new one. Afterwards, turn off remote control on the old phone."
+                    ),
+                    content: {
+                        Button(action: {
+                            Task { await prepareDeviceSetup() }
+                        }, label: {
+                            if isPreparingSetupCode {
+                                HStack {
+                                    ProgressView().padding(.trailing, 10)
+                                    Text("Preparing...")
+                                }
+                            } else {
+                                Label("Show Setup Code", systemImage: "qrcode")
+                            }
+                        })
+                            .disabled(isPreparingSetupCode)
+
+                        Button(action: {
+                            showDeviceSetupScanner = true
+                        }, label: {
+                            Label("Scan Setup Code", systemImage: "qrcode.viewfinder")
+                        })
+                            .disabled(state.isImporting)
+                    }
+                ).listRowBackground(Color.chart)
             }
             .listSectionSpacing(sectionSpacing)
             .scrollContentBackground(.hidden).background(appState.trioBackgroundColor(for: colorScheme))
@@ -208,6 +245,45 @@ extension SettingsExport {
                 if let fileURL = exportedFileURL {
                     ShareSheet(activityItems: [fileURL])
                 }
+            }
+            .sheet(isPresented: $showDeviceSetupPresenter) {
+                DeviceSetupPresenterView(frames: deviceSetupFrames) {
+                    showDeviceSetupPresenter = false
+                    deviceSetupFrames = []
+                }
+                .interactiveDismissDisabled()
+            }
+            .sheet(isPresented: $showDeviceSetupScanner) {
+                DeviceSetupScannerView(
+                    onTransfer: { transfer in
+                        showDeviceSetupScanner = false
+                        // The scanner sheet is still dismissing; a confirmation
+                        // presented during the dismissal is silently dropped.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            if let validationError = state.validateDeviceSetup(transfer) {
+                                importErrorMessage = validationError.localizedDescription
+                                showImportError = true
+                            } else {
+                                pendingTransfer = transfer
+                                showTransferConfirmation = true
+                            }
+                        }
+                    },
+                    onCancel: { showDeviceSetupScanner = false }
+                )
+            }
+            .alert(
+                "Set Up This Device?",
+                isPresented: $showTransferConfirmation,
+                presenting: pendingTransfer
+            ) { transfer in
+                Button("Cancel", role: .cancel) { pendingTransfer = nil }
+                Button("Set Up", role: .destructive) {
+                    pendingTransfer = nil
+                    Task { await applyTransfer(transfer) }
+                }
+            } message: { transfer in
+                Text(transferConfirmationText(for: transfer))
             }
             .alert("Export Error", isPresented: $showExportError) {
                 Button("OK", role: .cancel) {}
@@ -295,6 +371,57 @@ extension SettingsExport {
                 importErrorMessage = error.localizedDescription
                 showImportError = true
             }
+        }
+
+        private func prepareDeviceSetup() async {
+            isPreparingSetupCode = true
+            defer { isPreparingSetupCode = false }
+
+            switch await state.makeDeviceSetupFrames() {
+            case let .success(frames):
+                deviceSetupFrames = frames
+                showDeviceSetupPresenter = true
+            case let .failure(error):
+                exportErrorMessage = error.localizedDescription
+                showExportError = true
+            }
+        }
+
+        private func applyTransfer(_ transfer: DeviceSetupTransfer) async {
+            // Give the confirmation alert time to finish dismissing — presenting the
+            // result alert while it is still animating away silently drops it.
+            try? await Task.sleep(nanoseconds: 600_000_000)
+
+            switch await state.applyDeviceSetup(transfer) {
+            case let .success(summary):
+                importSuccessMessage = summary.message
+                showImportSuccess = true
+            case let .failure(error):
+                importErrorMessage = error.localizedDescription
+                showImportError = true
+            }
+        }
+
+        private func transferConfirmationText(for transfer: DeviceSetupTransfer) -> String {
+            var lines: [String] = []
+
+            if let hostName = transfer.hostName {
+                lines.append(String(localized: "Setup code from \(hostName)."))
+            }
+            if let backup = transfer.backup {
+                lines.append(importConfirmationText(for: backup))
+            }
+            if let remoteControl = transfer.remoteControl {
+                let followerCount = remoteControl.followers?.count ?? 0
+                if followerCount > 0 {
+                    lines.append(String(
+                        localized: "Also moves remote control with \(followerCount) paired follower(s) to this phone. Turn off remote control on the old phone afterwards — until then followers may still reach it."
+                    ))
+                } else {
+                    lines.append(String(localized: "Also moves the remote control configuration to this phone."))
+                }
+            }
+            return lines.joined(separator: "\n\n")
         }
 
         private func importConfirmationText(for backup: TrioSettingsBackup) -> String {

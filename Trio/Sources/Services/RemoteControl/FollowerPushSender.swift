@@ -47,15 +47,26 @@ final class FollowerPushSender {
     /// Sends an encrypted status blob to a follower using whichever push
     /// transport it registered.
     func sendStatus(encryptedStatus: String, to follower: PairedFollower) async throws {
+        try await sendEncryptedPayload(encryptedStatus, key: "encrypted_status", to: follower)
+    }
+
+    /// Tells a follower the host moved to a new device: an encrypted
+    /// `FollowerHostUpdate` carrying this device's push address, under its own
+    /// payload key so a follower too old to know it ignores it harmlessly.
+    func sendHostUpdate(encryptedUpdate: String, to follower: PairedFollower) async throws {
+        try await sendEncryptedPayload(encryptedUpdate, key: "encrypted_host_update", to: follower)
+    }
+
+    private func sendEncryptedPayload(_ encrypted: String, key: String, to follower: PairedFollower) async throws {
         guard let token = follower.pushToken, !token.isEmpty else {
             throw FollowerPushError.notRegistered
         }
 
         switch follower.pushTransport {
         case "apns":
-            try await sendViaAPNS(encryptedStatus: encryptedStatus, to: follower, token: token)
+            try await sendViaAPNS(encrypted: encrypted, payloadKey: key, to: follower, token: token)
         case "fcm":
-            try await sendViaFCM(encryptedStatus: encryptedStatus, to: follower, token: token)
+            try await sendViaFCM(encrypted: encrypted, payloadKey: key, to: follower, token: token)
         default:
             throw FollowerPushError.transportFailure("Unknown push transport: \(follower.pushTransport ?? "nil")")
         }
@@ -219,7 +230,8 @@ final class FollowerPushSender {
     // MARK: - APNS (iOS followers)
 
     private func sendViaAPNS(
-        encryptedStatus: String,
+        encrypted: String,
+        payloadKey: String,
         to follower: PairedFollower,
         token: String,
         allowEnvironmentRetry: Bool = true
@@ -253,7 +265,7 @@ final class FollowerPushSender {
 
         let payload: [String: Any] = [
             "aps": ["content-available": 1],
-            "encrypted_status": encryptedStatus,
+            payloadKey: encrypted,
             "follower_id": follower.id
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
@@ -274,7 +286,8 @@ final class FollowerPushSender {
             var flipped = follower
             flipped.pushEnvironment = production ? "sandbox" : "production"
             try await sendViaAPNS(
-                encryptedStatus: encryptedStatus,
+                encrypted: encrypted,
+                payloadKey: payloadKey,
                 to: flipped,
                 token: token,
                 allowEnvironmentRetry: false
@@ -421,7 +434,7 @@ final class FollowerPushSender {
 
     // MARK: - FCM (Android followers)
 
-    private func sendViaFCM(encryptedStatus: String, to follower: PairedFollower, token: String) async throws {
+    private func sendViaFCM(encrypted: String, payloadKey: String, to follower: PairedFollower, token: String) async throws {
         guard let account = FCMServiceAccount(json: FollowerPairingManager.shared.fcmServiceAccountJSON) else {
             throw FollowerPushError.missingFCMCredentials
         }
@@ -441,7 +454,7 @@ final class FollowerPushSender {
             "message": [
                 "token": token,
                 "data": [
-                    "encrypted_status": encryptedStatus,
+                    payloadKey: encrypted,
                     "follower_id": follower.id
                 ],
                 "android": ["priority": "HIGH"]

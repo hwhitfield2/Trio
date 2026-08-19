@@ -25,6 +25,11 @@ extension TrioRemoteControl {
         } else {
             debug(.remoteControl, "No changes detected in device token or APNS environment.")
         }
+
+        // Registration fires on every launch, which makes this the reliable
+        // retry point for followers migrated from another device that could
+        // not be reached yet: a no-op unless any are still flagged.
+        await FollowerHostMigrationNotifier.shared.notifyPendingFollowers()
     }
 
     private func isRunningInAPNSProductionEnvironment() -> Bool {

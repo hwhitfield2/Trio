@@ -52,6 +52,13 @@ struct PairedFollower: Codable, Identifiable, Equatable {
 
     var maySuspendInsulin: Bool { maySuspend ?? true }
 
+    /// Set when this follower record was carried over from another host device
+    /// and has not yet been told the new host's push address. Followers keep
+    /// sending commands to the address from their pairing bundle until the new
+    /// host reaches them, so the flag survives until a host-update push is
+    /// actually accepted by APNS/FCM. Optional so existing pairings decode.
+    var needsHostUpdate: Bool?
+
     /// Which alerts this follower receives, and how loudly.
     ///
     /// Optional because the keychain already holds followers paired before this
@@ -347,6 +354,84 @@ final class FollowerPairingManager: Injectable {
 
     var hasFCMCredentials: Bool {
         FCMServiceAccount(json: fcmServiceAccountJSON) != nil
+    }
+
+    // MARK: - Device migration
+
+    /// Snapshot of the remote-control identity for a device-setup transfer:
+    /// credentials, toggles and the complete follower list. Nil when remote
+    /// control has never been configured on this device — there is nothing to
+    /// migrate then.
+    func makeRemoteControlTransfer() -> RemoteControlTransfer? {
+        let enabled = UserDefaults.standard.bool(forKey: "isTrioRemoteControlEnabled")
+        let sharedSecret = UserDefaults.standard.string(forKey: "trioRemoteControlSharedSecret") ?? ""
+        let allFollowers = followers
+
+        guard enabled || !sharedSecret.isEmpty || hasAPNSCredentials || !allFollowers.isEmpty else {
+            return nil
+        }
+
+        return RemoteControlTransfer(
+            enabled: enabled,
+            sharedSecret: sharedSecret.isEmpty ? nil : sharedSecret,
+            apnsTeamId: apnsTeamId.isEmpty ? nil : apnsTeamId,
+            apnsKeyId: apnsKeyId.isEmpty ? nil : apnsKeyId,
+            apnsKey: apnsKey.isEmpty ? nil : apnsKey,
+            fcmServiceAccountJSON: fcmServiceAccountJSON.isEmpty ? nil : fcmServiceAccountJSON,
+            followers: allFollowers.isEmpty ? nil : allFollowers
+        )
+    }
+
+    /// Applies a migrated remote-control identity on the new device.
+    ///
+    /// Followers are merged by id — a follower already paired with this device
+    /// is replaced by the migrated record — and every migrated follower is
+    /// flagged `needsHostUpdate`, because its app still sends commands to the
+    /// old device's push address until this device tells it otherwise
+    /// (see `FollowerHostMigrationNotifier`).
+    ///
+    /// Returns the number of followers taken over.
+    @discardableResult func applyRemoteControlTransfer(_ transfer: RemoteControlTransfer) -> Int {
+        if let teamId = transfer.apnsTeamId { apnsTeamId = teamId }
+        if let keyId = transfer.apnsKeyId { apnsKeyId = keyId }
+        if let key = transfer.apnsKey { apnsKey = key }
+        if let fcm = transfer.fcmServiceAccountJSON { fcmServiceAccountJSON = fcm }
+        if let secret = transfer.sharedSecret, !secret.isEmpty {
+            UserDefaults.standard.set(secret, forKey: "trioRemoteControlSharedSecret")
+        }
+        UserDefaults.standard.set(transfer.enabled, forKey: "isTrioRemoteControlEnabled")
+
+        let migrated = transfer.followers ?? []
+        guard !migrated.isEmpty else { return 0 }
+
+        queue.sync {
+            var all = loadFollowers()
+            for var follower in migrated {
+                follower.needsHostUpdate = true
+                if let index = all.firstIndex(where: { $0.id == follower.id }) {
+                    all[index] = follower
+                } else {
+                    all.append(follower)
+                }
+            }
+            saveFollowers(all)
+        }
+        return migrated.count
+    }
+
+    /// Clears (or sets) the pending host-update marker for one follower.
+    func setNeedsHostUpdate(followerId: String, _ pending: Bool) {
+        queue.sync {
+            var all = loadFollowers()
+            guard let index = all.firstIndex(where: { $0.id == followerId }) else { return }
+            all[index].needsHostUpdate = pending ? true : nil
+            saveFollowers(all)
+        }
+    }
+
+    /// Followers still waiting to hear this device's push address.
+    var followersNeedingHostUpdate: [PairedFollower] {
+        followers.filter { $0.needsHostUpdate == true }
     }
 
     // MARK: - Pairing bundle

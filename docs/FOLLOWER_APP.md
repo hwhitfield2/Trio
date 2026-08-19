@@ -244,6 +244,73 @@ when the snapshot was built, and its colour scheme (`staticColor` or
 by, so a reading is the same colour on both screens. A host that predates
 either sends neither, and the follower falls back to its own defaults.
 
+## Host device migration
+
+When the host user moves Trio to a new phone with the device-setup QR
+transfer (Settings → Export & Import Settings → **Set Up New Device**), the
+new device receives the complete settings backup *and* the remote-control
+identity: every `PairedFollower` record (secret, `lastSequence`, push
+registration, alert profile), the APNS/FCM credentials and the remote-control
+toggles. Followers do not re-pair — but their pairing bundle still names the
+*old* device's APNS token, so commands would keep going to the old phone.
+
+**Keep in sync:**
+
+| Concern | Host (Swift) | Follower (Dart) |
+| --- | --- | --- |
+| Transfer payload & QR framing | `Trio/Sources/Services/RemoteControl/DeviceSetupTransfer.swift` | n/a (device-to-device only) |
+| Host update push | `Trio/Sources/Services/RemoteControl/FollowerHostMigration.swift` | `FollowerApp/lib/services/host_migration_service.dart` |
+
+### Device-setup QR framing
+
+The transfer is JSON, zlib-compressed, base64-encoded and split into frames:
+
+```
+TRIODS<version>:<transferId>:<index>:<count>:<chunk>
+```
+
+The old device cycles the frames on screen; the new device scans them in any
+order until all are seen. `transferId` is the first 8 hex characters of
+SHA-256 over the complete base64 payload — it keys frames to one session and
+is verified on assembly, so a frame from a restarted session or a corrupted
+chunk can never produce a silently wrong transfer. The frames carry every
+follower secret and the APNS key: they are the same security boundary as the
+pairing QR, rendered only on the host screen and never persisted.
+
+### Host update push (host → follower)
+
+After the transfer, each migrated follower is flagged on the new host until
+it has been told the new address. As soon as the new device knows its own
+APNS token (and again on every launch, for followers that could not be
+reached yet), it pushes to each flagged follower's registered address:
+
+Envelope: `{"aps": {"content-available": 1}, "encrypted_host_update": "...",
+"follower_id": "..."}` (FCM: a data message with the same keys). The
+encrypted plaintext, AES-256-GCM with the follower's own secret exactly like
+status snapshots:
+
+```json
+{
+  "type": "host_migration",
+  "timestamp": 1723400000,
+  "host_name": "<new device name>",
+  "apns": { "device_token": "<new host APNS token>",
+            "bundle_id": "<host app bundle id>", "production": true }
+}
+```
+
+The follower verifies the type, discards updates older than 7 days, and
+applies an update only when its timestamp is newer than the last one applied
+— so a replayed push can never point the follower back at a dead device. It
+then rewrites its stored bundle with the new address (same secret, same
+credentials, **same sequence counter** — the new host carried `lastSequence`
+over, so resetting the counter would make every command look like a replay),
+re-sends `register_follower`, and requests a fresh status.
+
+A migrated follower that never registered a push address cannot be reached
+this way; the host's Remote Control screen marks it as needing a fresh
+pairing QR code.
+
 ## Revocation
 
 - Host: Settings → Remote Control → swipe follower → **Revoke**. Deletes the

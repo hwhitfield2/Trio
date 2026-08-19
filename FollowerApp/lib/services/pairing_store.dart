@@ -19,6 +19,7 @@ class PairingStore {
   static const _sequenceKey = 'trio_follower.sequence';
   static const _registeredTokenKey = 'trio_follower.registered_push_token';
   static const _registeredVersionKey = 'trio_follower.registered_app_version';
+  static const _hostUpdatedAtKey = 'trio_follower.host_updated_at';
 
   Future<PairingBundle?> loadPairing() async {
     final raw = await _storage.read(key: _pairingKey);
@@ -33,13 +34,35 @@ class PairingStore {
   Future<void> savePairing(PairingBundle bundle) async {
     await _storage.write(key: _pairingKey, value: jsonEncode(bundle.toJson()));
     await _storage.write(key: _sequenceKey, value: '0');
+    await _storage.delete(key: _hostUpdatedAtKey);
   }
+
+  /// Rewrites the stored bundle WITHOUT touching the sequence counter.
+  ///
+  /// Used when the paired host moves to a new device: the migrated host kept
+  /// this follower's `lastSequence`, so resetting the counter here would make
+  /// every subsequent command look like a replay and be rejected.
+  Future<void> updatePairing(PairingBundle bundle) async {
+    await _storage.write(key: _pairingKey, value: jsonEncode(bundle.toJson()));
+  }
+
+  /// Timestamp of the last host migration applied, so an older (replayed)
+  /// migration push can never point this follower back at a dead device.
+  Future<DateTime?> get hostUpdatedAt async {
+    final raw = await _storage.read(key: _hostUpdatedAtKey);
+    final millis = int.tryParse(raw ?? '');
+    return millis == null ? null : DateTime.fromMillisecondsSinceEpoch(millis);
+  }
+
+  Future<void> setHostUpdatedAt(DateTime timestamp) => _storage.write(
+      key: _hostUpdatedAtKey, value: timestamp.millisecondsSinceEpoch.toString());
 
   Future<void> clear() async {
     await _storage.delete(key: _pairingKey);
     await _storage.delete(key: _sequenceKey);
     await _storage.delete(key: _registeredTokenKey);
     await _storage.delete(key: _registeredVersionKey);
+    await _storage.delete(key: _hostUpdatedAtKey);
   }
 
   /// The push token last successfully registered with the host, so we only
