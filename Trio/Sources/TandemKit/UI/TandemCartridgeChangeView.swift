@@ -138,7 +138,7 @@ struct TandemCartridgeChangeView: View {
     private var startSection: some View {
         Section(
             footer: Text(
-                "The pump will not start a change while it is delivering insulin. Trio stops delivery first where it can; on a t:slim X2 you need to stop insulin on the pump yourself."
+                "The pump will not start a change while it is delivering insulin, so Trio stops delivery first and checks with the pump that it really stopped. On a t:slim X2 there is no remote stop — stop insulin on the pump yourself first."
             )
         ) {
             Button {

@@ -106,9 +106,12 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
         #expect(cannula.loadState == .primeCannula)
         #expect(cannula.primeTubingStatus == nil)
 
-        // An unrecognised state must not be mistaken for a known one.
+        // An unrecognised state must not be mistaken for a known one, and the
+        // byte the pump actually sent has to survive for the logs.
         let future = try TandemLoadStatusResponse(cargo: Data([0x01, 0x7F, 0x00]))
         #expect(future.loadState == .unknown)
+        #expect(future.loadStateId == 0x7F)
+        #expect(future.diagnosticDescription.contains("loadState=127"))
 
         #expect(throws: TandemMessageError.self) { try TandemLoadStatusResponse(cargo: Data([0x00, 0x00])) }
     }
@@ -123,20 +126,39 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
         #expect(!TandemLoadStatusRequest.modifiesInsulinDelivery)
     }
 
+    @Test("An idle pump is described as idle, not as broken") func idleDescription() throws {
+        // isLoadingActive == false means no load is running, and byte 1 is then
+        // whatever the state machine last held. A Mobi at rest reports INVALID
+        // there, which is its resting value; calling that out as "an invalid
+        // load state" sends the user hunting for a fault that does not exist.
+        let idle = try TandemLoadStatusResponse(cargo: Data([0x00, 0x05, 0x00]))
+        #expect(idle.loadState == .invalid)
+        #expect(idle.localizedDescription.contains("not loading"))
+        #expect(idle.localizedDescription.contains("invalid") == false)
+
+        // While a load IS running, the state is the whole point of the message.
+        let priming = try TandemLoadStatusResponse(cargo: Data([0x01, 0x02, 0x01]))
+        #expect(priming.localizedDescription.contains("priming the tubing"))
+    }
+
     @Test("A refusal reports what the pump was doing") func diagnosticError() {
-        let bare = TandemCartridgeError.rejected(step: "start the cartridge change", status: 1, loadState: nil)
+        let bare = TandemCartridgeError.rejected(step: "start the cartridge change", status: 1, detail: nil)
         #expect(bare.errorDescription?.contains("status 1") == true)
 
         let diagnosed = TandemCartridgeError.rejected(
             step: "start the cartridge change",
             status: 1,
-            loadState: "the pump is priming the tubing"
+            detail: "insulin is still running, the pump is not loading a cartridge"
         )
-        #expect(diagnosed.errorDescription?.contains("priming the tubing") == true)
+        #expect(diagnosed.errorDescription?.contains("insulin is still running") == true)
 
-        // The precondition the pump actually enforces gets its own message
-        // rather than surfacing as an opaque status byte.
+        // The preconditions the pump actually enforces each get their own
+        // message rather than surfacing as an opaque status byte.
         #expect(TandemCartridgeError.deliveryMustBeStoppedOnPump.errorDescription?.contains("Stop insulin") == true)
+        #expect(TandemCartridgeError.bolusInProgress.errorDescription?.contains("bolus") == true)
+        // A suspend the pump accepted but did not act on is a different problem
+        // from one it refused, and needs a different instruction.
+        #expect(TandemCartridgeError.suspendDidNotTake.errorDescription?.contains("still delivering") == true)
     }
 }
 

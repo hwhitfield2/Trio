@@ -136,13 +136,34 @@ tubing, prime cannula, prime nudge — and a prime-detail byte. It costs nothing
 and is ungated, so the driver reads it before a cartridge command and again
 after a refusal.
 
-That turns the pump's bare status byte into something actionable. **On hardware,
-`EnterChangeCartridgeMode` was refused with status 1 while the pump was
-delivering** — a Tandem pump stops insulin before starting a load, exactly as
-its own on-pump flow does. So the driver now stops delivery first: on a Mobi it
-suspends (there is a remote suspend), and on a t:slim X2, which has none, it
-says so and asks the user to stop insulin on the pump. A refusal that still
-happens reports what the pump said it was doing rather than just the number.
+One reading needs care: `isLoadingActive == false` means *no load is running*,
+and `LoadState` is then whatever the machine last held. A Mobi at rest reports
+`INVALID` there — that is its resting value, not a fault — so the driver
+describes an inactive pump as "not loading a cartridge" and quotes the state
+only while a load is actually under way.
+
+pumpx2 documents the precondition for `EnterChangeCartridgeMode` outright:
+**insulin must be suspended**. `beginCartridgeChange` therefore establishes that
+state and then *verifies it against the pump* rather than trusting its own
+record or the suspend command's status byte:
+
+1. refuse if a bolus is requesting or delivering (`CurrentBolusStatus`) — the
+   pump does one insulin operation at a time, and in microbolus-basal mode Trio
+   boluses every few minutes;
+2. read `HomeScreenMirror`; if the basal icon is not `SUSPEND`/`HYPO_SUSPEND`,
+   send `SuspendPumping` (Mobi only — the t:slim X2 has no remote suspend, so
+   the user is asked to stop insulin on the pump);
+3. re-read `HomeScreenMirror`. A suspend the pump *accepted but did not act on*
+   is a different problem from one it refused, and gets its own message instead
+   of resurfacing as an unexplained refusal one command later.
+
+**On hardware, `EnterChangeCartridgeMode` was still refused with status 1 on a
+Mobi after the suspend.** The pump gives one generic status byte and no reason —
+pumpx2 defines no status enum for it — so a refusal now reports what the pump
+says about itself immediately afterwards ("insulin is stopped", "insulin is
+still running", plus the load state when a load is running), and logs the raw
+`loadActive`/`loadState`/`prime` ids. Whether the suspend is the *whole*
+precondition is still unknown.
 
 Reading the state first also means a load the user started on the pump, or an
 earlier attempt whose reply was lost, is **adopted** rather than restarted.

@@ -70,6 +70,10 @@ struct TandemLoadStatusResponse: TandemResponse {
     /// True while a load sequence is running on the pump.
     let isLoadingActive: Bool
     let loadState: LoadState
+    /// The raw state byte, kept separately because anything the enum does not
+    /// recognise collapses to `.unknown` and the original value is the part
+    /// worth reporting when a command is refused for no stated reason.
+    let loadStateId: UInt8
     let primeStatusId: UInt8
 
     /// Prime-tubing detail, when that is the current state.
@@ -84,15 +88,29 @@ struct TandemLoadStatusResponse: TandemResponse {
         }
         let bytes = [UInt8](cargo)
         isLoadingActive = bytes[0] != 0
+        loadStateId = bytes[1]
         loadState = LoadState(rawValue: bytes[1]) ?? .unknown
         primeStatusId = bytes[2]
     }
 
     /// One-line summary for error messages and the cartridge screen.
+    ///
+    /// When `isLoadingActive` is false the pump is simply not in a load, and
+    /// `loadState` is then whatever the state machine last held — commonly
+    /// `invalid`, which is its resting value, not a fault. Saying so would send
+    /// the user looking for a problem that is not there, so idle reads as idle.
     var localizedDescription: String {
-        isLoadingActive
-            ? String(localized: "the pump is \(loadState.localizedDescription)")
-            : String(localized: "the pump is not loading (last state: \(loadState.localizedDescription))")
+        guard isLoadingActive else {
+            return String(localized: "the pump is not loading a cartridge")
+        }
+        return String(localized: "the pump is \(loadState.localizedDescription)")
+    }
+
+    /// Raw ids, for logs. The pump explains a refusal with a single status byte
+    /// and nothing else, so the exact values it reports either side of one are
+    /// the only evidence there is.
+    var diagnosticDescription: String {
+        "loadActive=\(isLoadingActive) loadState=\(loadStateId) prime=\(primeStatusId)"
     }
 }
 
