@@ -155,6 +155,23 @@ final class TandemPumpState: RawRepresentable {
     /// Most recent progress line from the pump's control stream, for display.
     var lastCartridgeEventDescription: String?
 
+    /// The pump's active-alarm bitmask from the last AlarmStatus read, or nil
+    /// if it has not been read this session. Runtime-only: an alarm state must
+    /// be re-observed after a restart, never inherited.
+    var activeAlarmBits: UInt64?
+
+    /// Names of active alarms the cartridge screen may offer to acknowledge
+    /// (the cartridge-change family only), or nil when there are none.
+    var dismissableCartridgeAlarmNames: String? {
+        guard let bits = activeAlarmBits, bits != 0 else { return nil }
+        let related = TandemAlarmStatusResponse(bitmask: bits).cartridgeRelatedBits
+        guard !related.isEmpty else { return nil }
+        var seen = Set<String>()
+        return related.map(TandemAlarmStatusResponse.name(forBit:))
+            .filter { seen.insert($0).inserted }
+            .joined(separator: " + ")
+    }
+
     /// Where the user last said the infusion set is. Runtime-only for the same
     /// reason as the timestamp: a restart must not inherit it.
     var confirmedSetPlacement: TandemSetPlacement?

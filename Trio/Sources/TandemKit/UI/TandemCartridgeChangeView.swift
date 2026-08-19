@@ -66,7 +66,10 @@ final class TandemCartridgeChangeViewModel: ObservableObject, PumpManagerStatusO
         }
     }
 
+    var alarmNames: String? { pumpManager.state.dismissableCartridgeAlarmNames }
+
     func begin() { run(pumpManager.beginCartridgeChange) }
+    func acknowledgeAlarms() { run(pumpManager.acknowledgeCartridgeAlarms) }
     func refreshLoadStatus() { run(pumpManager.refreshLoadStatus) }
     func startFillTubing() { run(pumpManager.startFillTubing) }
     func stopFillTubing() { run(pumpManager.stopFillTubing) }
@@ -94,6 +97,9 @@ struct TandemCartridgeChangeView: View {
                     stepsSection
                     cancelSection
                 } else {
+                    if viewModel.alarmNames != nil {
+                        alarmSection
+                    }
                     startSection
                 }
             }
@@ -131,6 +137,26 @@ struct TandemCartridgeChangeView: View {
         ) {
             if let stage = viewModel.stage {
                 row(String(localized: "Step"), stageTitle(stage))
+            }
+        }
+    }
+
+    /// Shown when the pump reports an alarm the change itself addresses. The
+    /// pump refuses to start anything while alarming, so this is step zero.
+    private var alarmSection: some View {
+        Section(
+            header: Text("Pump alarm"),
+            footer: Text(
+                "The pump will not start a cartridge change while it is alarming. Acknowledging clears the alarm — the same as tapping OK in the pump's own app — and then the change can start. Only this alarm is acknowledged; nothing else on the pump changes."
+            )
+        ) {
+            if let names = viewModel.alarmNames {
+                Button {
+                    viewModel.acknowledgeAlarms()
+                } label: {
+                    buttonLabel(String(localized: "Acknowledge \(names) alarm"))
+                }
+                .disabled(viewModel.busy)
             }
         }
     }

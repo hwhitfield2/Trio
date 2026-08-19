@@ -86,6 +86,10 @@ extension Data {
             | (UInt32(bytes[offset + 3]) << 24)
     }
 
+    func tandemUInt64(at offset: Int) -> UInt64 {
+        UInt64(tandemUInt32(at: offset)) | (UInt64(tandemUInt32(at: offset + 4)) << 32)
+    }
+
     mutating func appendTandemUInt16(_ value: UInt16) {
         append(UInt8(value & 0xFF))
         append(UInt8(value >> 8))

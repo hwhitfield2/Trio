@@ -162,6 +162,93 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
     }
 }
 
+@Suite("Tandem pump alarms") struct TandemAlarmTests {
+    @Test("Decodes the alarm bitmask with names") func alarmDecoding() throws {
+        // Bit index = pumpX2 AlarmResponseType id, little-endian uint64.
+        // Bit 8 (empty cartridge) + bit 25 (cartridge removed) + bit 18
+        // (resume pump) = 0x0204_0100.
+        var cargo = Data(count: 8)
+        cargo[1] = 0x01 // bit 8
+        cargo[2] = 0x04 // bit 18
+        cargo[3] = 0x02 // bit 25
+        let alarms = try TandemAlarmStatusResponse(cargo: cargo)
+        #expect(alarms.activeBits == [8, 18, 25])
+        #expect(alarms.localizedNames == "Empty Cartridge + Resume Pump + Cartridge Removed")
+
+        let none = try TandemAlarmStatusResponse(cargo: Data(count: 8))
+        #expect(none.isEmpty)
+        #expect(none.localizedNames == nil)
+
+        // An alarm we have no name for still surfaces its bit.
+        let unknown = TandemAlarmStatusResponse(bitmask: 1 << 40)
+        #expect(TandemAlarmStatusResponse.name(forBit: 40).contains("40"))
+        #expect(unknown.localizedNames?.contains("40") == true)
+
+        #expect(throws: TandemMessageError.self) { try TandemAlarmStatusResponse(cargo: Data(count: 7)) }
+    }
+
+    @Test("Only cartridge-family alarms are offered for acknowledgment") func dismissScope() {
+        // The change screen may clear the alarms the change itself fixes...
+        let cartridge = TandemAlarmStatusResponse(bitmask: (1 << 8) | (1 << 25) | (1 << 2))
+        #expect(cartridge.cartridgeRelatedBits == [2, 8, 25])
+
+        // ...but never a hardware alarm: a temperature or battery fault is
+        // not remedied by a cartridge, so Trio must not silence it.
+        let hardware = TandemAlarmStatusResponse(bitmask: (1 << 10) | (1 << 12) | (1 << 22))
+        #expect(hardware.cartridgeRelatedBits.isEmpty)
+
+        // Mixed: only the cartridge subset is eligible.
+        let mixed = TandemAlarmStatusResponse(bitmask: (1 << 8) | (1 << 10))
+        #expect(mixed.cartridgeRelatedBits == [8])
+    }
+
+    @Test("Alarm status is an unsigned current-status query") func alarmShape() {
+        // It must be readable before anything else works — that is the point.
+        #expect(TandemAlarmStatusRequest.opcode == 70)
+        #expect(TandemAlarmStatusResponse.opcode == 71)
+        #expect(TandemAlarmStatusRequest.characteristic == .currentStatus)
+        #expect(!TandemAlarmStatusRequest.signed)
+        #expect(!TandemAlarmStatusRequest.modifiesInsulinDelivery)
+        #expect(TandemAlertStatusRequest.opcode == 68)
+        #expect(TandemAlertStatusResponse.opcode == 69)
+    }
+
+    @Test("Alerts name the load-related conditions") func alertDecoding() throws {
+        var cargo = Data(count: 8)
+        cargo[1] = 0x60 // bits 13 + 14
+        let alerts = try TandemAlertStatusResponse(cargo: cargo)
+        #expect(alerts.activeBits == [13, 14])
+        #expect(alerts.localizedLoadRelatedNames == "Incomplete Cartridge Change + Incomplete Fill Tubing")
+
+        // Alerts outside the load flow stay out of the cartridge screen.
+        var other = Data(count: 8)
+        other[0] = 0x02 // bit 1, USB connection
+        #expect(try TandemAlertStatusResponse(cargo: other).localizedLoadRelatedNames == nil)
+    }
+
+    @Test("Dismissal is signed, explicit, and acknowledge-only") func dismissEncoding() {
+        let dismiss = TandemDismissNotificationRequest(notificationId: 8, notificationType: .alarm)
+        // uint32 LE id, type byte (alarm = 2), extra-action byte.
+        #expect(dismiss.cargo == Data([0x08, 0x00, 0x00, 0x00, 0x02, 0x00]))
+        #expect(TandemDismissNotificationRequest.opcode == 0xB8)
+        #expect(TandemDismissNotificationResponse.opcode == 0xB7)
+        #expect(TandemDismissNotificationRequest.characteristic == .control)
+        #expect(TandemDismissNotificationRequest.signed)
+        // Acknowledging a notification does not move insulin, so it must not
+        // be blocked when remote delivery actions are disabled.
+        #expect(!TandemDismissNotificationRequest.modifiesInsulinDelivery)
+        // The follow-up-action flag stays off: what it triggers per alarm is
+        // unknown, and acknowledge-only is the reviewed behaviour.
+        #expect(dismiss.executeExtraAction == false)
+    }
+
+    @Test("An uncleared alarm is reported, not papered over") func alarmErrorText() {
+        let error = TandemCartridgeError.alarmNotCleared("Empty Cartridge")
+        #expect(error.errorDescription?.contains("Empty Cartridge") == true)
+        #expect(TandemCartridgeError.noAlarmToAcknowledge.errorDescription?.isEmpty == false)
+    }
+}
+
 @Suite("Tandem cartridge progress stream") struct TandemCartridgeStreamTests {
     @Test("Decodes each progress opcode") func decoding() {
         #expect(

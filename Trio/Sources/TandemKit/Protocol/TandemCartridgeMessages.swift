@@ -370,3 +370,193 @@ enum TandemCartridgeStreamEvent: Equatable {
         }
     }
 }
+
+// MARK: - Pump notifications (alarms and alerts)
+
+// These live here because the cartridge flow is what needs them: field logs
+// from a Mobi showed EnterChangeCartridgeMode refused with status 1 while the
+// pump was suspended and idle — because the pump was sitting in an Empty
+// Cartridge alarm (reservoir 180 U → 0 U at the same minute). An alarming
+// Tandem pump refuses to start new operations, and Trio could not see the
+// alarm because it never asked. If notification handling grows beyond this
+// flow, move it to its own file.
+
+/// Active-alarm bitmask. Unsigned, on the current-status characteristic, so it
+/// can be read freely — alarms are the pump's "insulin cannot be delivered"
+/// tier of notification (cartridge faults, occlusion, temperature, ...).
+struct TandemAlarmStatusRequest: TandemRequest {
+    typealias Response = TandemAlarmStatusResponse
+    static let opcode: UInt8 = 70
+}
+
+struct TandemAlarmStatusResponse: TandemResponse {
+    static let opcode: UInt8 = 71
+
+    /// One bit per alarm; bit index = pumpX2 `AlarmResponseType` id.
+    let bitmask: UInt64
+
+    init(cargo: Data) throws {
+        guard cargo.count >= 8 else {
+            throw TandemMessageError.unexpectedCargoSize(message: "AlarmStatusResponse", expected: 8, actual: cargo.count)
+        }
+        bitmask = cargo.tandemUInt64(at: 0)
+    }
+
+    init(bitmask: UInt64) {
+        self.bitmask = bitmask
+    }
+
+    var isEmpty: Bool { bitmask == 0 }
+
+    var activeBits: [Int] {
+        (0 ..< 64).filter { bitmask & (1 << UInt64($0)) != 0 }
+    }
+
+    /// Alarms whose documented remedy is the cartridge-change flow itself:
+    /// the cartridge-fault family, empty cartridge, cartridge removed,
+    /// occlusion ("check your pump site and tubing"), and the resume-pump
+    /// nag that fires because insulin is off. These are the only alarms the
+    /// cartridge screen offers to acknowledge; anything else stays visible
+    /// but is not Trio's to clear.
+    static let cartridgeChangeFamily: Set<Int> = [
+        0, 1, 5, 6, 9, 16, 20, 29, 30, 31, 34, // cartridge fault
+        8, // empty cartridge
+        25, // cartridge removed
+        2, 26, // occlusion
+        18, 23 // resume pump
+    ]
+
+    var cartridgeRelatedBits: [Int] {
+        activeBits.filter { Self.cartridgeChangeFamily.contains($0) }
+    }
+
+    /// User-facing name for one alarm bit, from pumpX2's `AlarmResponseType`.
+    static func name(forBit bit: Int) -> String {
+        switch bit {
+        case 0, 1, 5, 6, 9, 16, 20, 29, 30, 31, 34:
+            return String(localized: "Cartridge Error")
+        case 2, 26: return String(localized: "Occlusion")
+        case 3: return String(localized: "Pump Reset")
+        case 7: return String(localized: "Auto-Off")
+        case 8: return String(localized: "Empty Cartridge")
+        case 10, 11, 15: return String(localized: "Temperature")
+        case 12: return String(localized: "Battery Shutdown")
+        case 14: return String(localized: "Invalid Date")
+        case 18, 23: return String(localized: "Resume Pump")
+        case 21: return String(localized: "Altitude")
+        case 22: return String(localized: "Stuck Button")
+        case 24: return String(localized: "Atmospheric Pressure")
+        case 25: return String(localized: "Cartridge Removed")
+        default: return String(localized: "alarm \(bit)")
+        }
+    }
+
+    /// "Empty Cartridge + Resume Pump" — deduplicated, in bit order.
+    var localizedNames: String? {
+        guard !isEmpty else { return nil }
+        var seen = Set<String>()
+        let names = activeBits.map(Self.name(forBit:)).filter { seen.insert($0).inserted }
+        return names.joined(separator: " + ")
+    }
+}
+
+/// Active-alert bitmask — the pump's advisory tier (low insulin, incomplete
+/// operations, ...). Alerts do not stop delivery; the cartridge flow reads
+/// them because the incomplete-load alerts explain a half-finished change.
+struct TandemAlertStatusRequest: TandemRequest {
+    typealias Response = TandemAlertStatusResponse
+    static let opcode: UInt8 = 68
+}
+
+struct TandemAlertStatusResponse: TandemResponse {
+    static let opcode: UInt8 = 69
+
+    /// One bit per alert; bit index = pumpX2 `AlertResponseType` id.
+    let bitmask: UInt64
+
+    init(cargo: Data) throws {
+        guard cargo.count >= 8 else {
+            throw TandemMessageError.unexpectedCargoSize(message: "AlertStatusResponse", expected: 8, actual: cargo.count)
+        }
+        bitmask = cargo.tandemUInt64(at: 0)
+    }
+
+    var activeBits: [Int] {
+        (0 ..< 64).filter { bitmask & (1 << UInt64($0)) != 0 }
+    }
+
+    /// The alerts that matter while loading: a low or spent cartridge and the
+    /// incomplete-operation alerts the pump raises when a load stops halfway.
+    static let loadRelated: [Int: String] = [
+        0: String(localized: "Low Insulin"),
+        17: String(localized: "Low Insulin"),
+        13: String(localized: "Incomplete Cartridge Change"),
+        14: String(localized: "Incomplete Fill Tubing"),
+        15: String(localized: "Incomplete Fill Cannula"),
+        49: String(localized: "Fill Tubing In Progress")
+    ]
+
+    /// Names of active load-related alerts, or nil if none.
+    var localizedLoadRelatedNames: String? {
+        var seen = Set<String>()
+        let names = activeBits.compactMap { Self.loadRelated[$0] }.filter { seen.insert($0).inserted }
+        return names.isEmpty ? nil : names.joined(separator: " + ")
+    }
+}
+
+/// Acknowledge one notification, exactly as tapping OK on the pump's own app
+/// would. Signed, on the control characteristic. Does not itself start or stop
+/// insulin, so it is deliberately NOT `modifiesInsulinDelivery` — matching
+/// pumpX2, where dismissal is signed but not delivery-gated.
+///
+/// pumpX2 defines this message (from the decompiled Mobi app) but never sends
+/// it, so one field is a reconstruction: `notificationId` here is the alarm's
+/// bit index, the only identifier the status bitmask exposes. The caller must
+/// verify by re-reading AlarmStatus afterwards rather than trusting the reply.
+struct TandemDismissNotificationRequest: TandemRequest {
+    typealias Response = TandemDismissNotificationResponse
+    static let opcode: UInt8 = 0xB8
+    static let characteristic: TandemCharacteristic = .control
+    static let signed = true
+
+    enum NotificationType: UInt8 {
+        case reminder = 0
+        case alert = 1
+        case alarm = 2
+        case cgmAlert = 3
+    }
+
+    let notificationId: UInt32
+    let notificationType: NotificationType
+    /// The pump-side "also do this alarm's follow-up action" flag seen in the
+    /// decompiled app. What the action is per alarm is unknown, so Trio always
+    /// sends false: acknowledge only, never trigger unreviewed behaviour.
+    let executeExtraAction: Bool
+
+    init(notificationId: UInt32, notificationType: NotificationType, executeExtraAction: Bool = false) {
+        self.notificationId = notificationId
+        self.notificationType = notificationType
+        self.executeExtraAction = executeExtraAction
+    }
+
+    var cargo: Data {
+        var data = Data()
+        data.appendTandemUInt32(notificationId)
+        data.append(notificationType.rawValue)
+        data.append(executeExtraAction ? 1 : 0)
+        return data
+    }
+}
+
+struct TandemDismissNotificationResponse: TandemResponse {
+    static let opcode: UInt8 = 0xB7
+    static let signed = true
+    let status: UInt8
+
+    init(cargo: Data) throws {
+        guard let first = cargo.first else {
+            throw TandemMessageError.unexpectedCargoSize(message: "DismissNotificationResponse", expected: 1, actual: 0)
+        }
+        status = first
+    }
+}

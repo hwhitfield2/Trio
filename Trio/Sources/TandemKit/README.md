@@ -158,12 +158,33 @@ record or the suspend command's status byte:
    of resurfacing as an unexplained refusal one command later.
 
 **On hardware, `EnterChangeCartridgeMode` was still refused with status 1 on a
-Mobi after the suspend.** The pump gives one generic status byte and no reason —
-pumpx2 defines no status enum for it — so a refusal now reports what the pump
-says about itself immediately afterwards ("insulin is stopped", "insulin is
-still running", plus the load state when a load is running), and logs the raw
-`loadActive`/`loadState`/`prime` ids. Whether the suspend is the *whole*
-precondition is still unknown.
+Mobi after the suspend** — with the pump verified suspended (`basalIcon=4`) and
+idle. The field logs held the answer: the reservoir reading went 180 U → 0 U in
+the same minute the refusals started, which is a cartridge alarm — Empty
+Cartridge or Cartridge Removed (`AlarmStatusResponse` bits 8/25). **An alarming
+Tandem pump refuses to start new operations until the alarm is acknowledged**,
+and Trio never read the alarm bitmask, so the refusal looked inexplicable.
+
+The driver now reads `AlarmStatus` (opcode 70) and `AlertStatus` (68) — both
+unsigned current-status queries — wherever it summarises pump state, so a
+refusal reports "the pump is alarming: Empty Cartridge" ahead of the delivery
+and load state. On a Mobi the phone app is the only place an alarm *can* be
+acknowledged (there is no pump screen), and pumpx2 carries the message for it
+from the decompiled Mobi app: `DismissNotificationRequest` (0xB8, signed,
+control). The cartridge screen offers it under deliberate constraints:
+
+- only on an explicit button press, with the alarm named on the button;
+- only for alarms whose documented remedy is this flow — the cartridge-fault
+  family, Empty Cartridge, Cartridge Removed, Occlusion, Resume Pump. A
+  temperature, battery or hardware alarm is shown but never cleared by Trio;
+- `executeExtraAction` is always false (acknowledge only — the per-alarm
+  follow-up action in the decompiled app is unreviewed);
+- pumpx2 never sends this message, so the `notificationId = alarm bit index`
+  encoding is a reconstruction: the driver re-reads `AlarmStatus` afterwards
+  and reports an alarm that did not clear instead of trusting the status byte.
+
+A refusal that still happens with no alarm active reports the raw
+`loadActive`/`loadState`/`prime` ids for the next round of diagnosis.
 
 Reading the state first also means a load the user started on the pump, or an
 earlier attempt whose reply was lost, is **adopted** rather than restarted.

@@ -28,6 +28,8 @@ enum TandemCartridgeError: LocalizedError {
     case deliveryMustBeStoppedOnPump
     case suspendDidNotTake
     case bolusInProgress
+    case alarmNotCleared(String)
+    case noAlarmToAcknowledge
 
     var errorDescription: String? {
         switch self {
@@ -65,6 +67,10 @@ enum TandemCartridgeError: LocalizedError {
             return "Trio asked the pump to stop insulin and the pump accepted, but it is still delivering. Stop insulin on the pump itself, then try again."
         case .bolusInProgress:
             return "A bolus is being delivered. Wait for it to finish, then start the cartridge change."
+        case let .alarmNotCleared(names):
+            return "Trio asked the pump to acknowledge the \(names) alarm, but the pump still reports it. Clear the alarm in the pump's own app, then try again."
+        case .noAlarmToAcknowledge:
+            return "The pump is not reporting an alarm Trio can acknowledge from here."
         }
     }
 }
@@ -571,13 +577,20 @@ extension TandemPumpManager {
     @discardableResult
     func pumpStateSummary() -> String? {
         dispatchPrecondition(condition: .onQueue(commandQueue))
+        let alarms = readActiveAlarms()
+        let alerts = readActiveAlerts()
         let iconId = refreshSuspendState()
         let loadStatus = readLoadStatus()
-        if let loadStatus = loadStatus {
-            log.info("Pump state: \(loadStatus.diagnosticDescription) basalIcon=\(iconId.map { String($0) } ?? "?")")
-        }
+        log.info(
+            "Pump state: \(loadStatus?.diagnosticDescription ?? "load=?") basalIcon=\(iconId.map { String($0) } ?? "?") alarms=\(alarms.map { String($0.bitmask, radix: 16) } ?? "?") alerts=\(alerts.map { String($0.bitmask, radix: 16) } ?? "?")"
+        )
 
         var parts: [String] = []
+        // The alarm leads because it explains everything after it: an alarming
+        // pump has already stopped insulin and will refuse new operations.
+        if let alarmNames = alarms?.localizedNames {
+            parts.append(String(localized: "the pump is alarming: \(alarmNames)"))
+        }
         if iconId != nil {
             parts.append(
                 state.suspended
@@ -588,10 +601,104 @@ extension TandemPumpManager {
         if let loadStatus = loadStatus {
             parts.append(loadStatus.localizedDescription)
         }
+        if let alertNames = alerts?.localizedLoadRelatedNames {
+            parts.append(String(localized: "alerts: \(alertNames)"))
+        }
         guard !parts.isEmpty else { return nil }
         let summary = parts.joined(separator: ", ")
         state.lastCartridgeEventDescription = summary
         return summary
+    }
+
+    /// Read the pump's active-alarm bitmask and remember it, so the cartridge
+    /// screen can offer to acknowledge the ones the change itself addresses.
+    private func readActiveAlarms() -> TandemAlarmStatusResponse? {
+        dispatchPrecondition(condition: .onQueue(commandQueue))
+        switch session.send(TandemAlarmStatusRequest()) {
+        case let .success(response):
+            state.activeAlarmBits = response.bitmask
+            return response
+        case let .failure(error):
+            log.error("AlarmStatus failed: \(error.localizedDescription)")
+            state.activeAlarmBits = nil
+            return nil
+        }
+    }
+
+    private func readActiveAlerts() -> TandemAlertStatusResponse? {
+        dispatchPrecondition(condition: .onQueue(commandQueue))
+        switch session.send(TandemAlertStatusRequest()) {
+        case let .success(response):
+            return response
+        case let .failure(error):
+            log.error("AlertStatus failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Acknowledge the active alarms whose remedy is this cartridge change —
+    /// and only those. The equivalent of tapping OK on the pump app's alarm
+    /// banner, which on a Mobi is the only place an alarm can be acknowledged.
+    ///
+    /// Deliberate constraints:
+    /// - runs only on an explicit button press, with the alarm named on screen;
+    /// - touches only the cartridge-change alarm family (cartridge faults,
+    ///   empty cartridge, cartridge removed, occlusion, resume-pump) — a
+    ///   temperature or hardware alarm is not Trio's to clear;
+    /// - verifies by re-reading AlarmStatus, because the dismiss encoding's
+    ///   `notificationId` is a reconstruction (pumpX2 never sends it) and the
+    ///   reply's status byte alone is not proof.
+    func acknowledgeCartridgeAlarms(completion: @escaping ((any LocalizedError)?) -> Void) {
+        commandQueue.async {
+            if let error = self.prepareForCartridgeCommand() {
+                completion(error)
+                return
+            }
+            guard let alarms = self.readActiveAlarms() else {
+                completion(TandemCartridgeError.noAlarmToAcknowledge)
+                return
+            }
+            let toDismiss = alarms.cartridgeRelatedBits
+            guard !toDismiss.isEmpty else {
+                self.pumpStateSummary()
+                self.notifyStateDidChange()
+                completion(TandemCartridgeError.noAlarmToAcknowledge)
+                return
+            }
+
+            self.log.info("Acknowledging pump alarms: bits \(toDismiss)")
+            for bit in toDismiss {
+                if case let .failure(error) = self.session.refreshTimeSinceReset() {
+                    completion(error)
+                    return
+                }
+                switch self.session.send(TandemDismissNotificationRequest(
+                    notificationId: UInt32(bit),
+                    notificationType: .alarm
+                )) {
+                case let .success(response):
+                    if response.status != 0 {
+                        self.log.error("Dismiss of alarm bit \(bit) returned status \(response.status)")
+                    }
+                case let .failure(error):
+                    self.log.error("Dismiss of alarm bit \(bit) failed: \(error.localizedDescription)")
+                }
+            }
+
+            // The re-read is the actual verdict.
+            let after = self.readActiveAlarms()
+            self.pumpStateSummary()
+            self.notifyStateDidChange()
+            if let after = after, !after.cartridgeRelatedBits.isEmpty {
+                var seen = Set<String>()
+                let names = after.cartridgeRelatedBits.map(TandemAlarmStatusResponse.name(forBit:))
+                    .filter { seen.insert($0).inserted }
+                    .joined(separator: " + ")
+                completion(TandemCartridgeError.alarmNotCleared(names))
+            } else {
+                completion(nil)
+            }
+        }
     }
 
     // MARK: - Helpers
