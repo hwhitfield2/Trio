@@ -67,6 +67,7 @@ final class TandemCartridgeChangeViewModel: ObservableObject, PumpManagerStatusO
     }
 
     func begin() { run(pumpManager.beginCartridgeChange) }
+    func refreshLoadStatus() { run(pumpManager.refreshLoadStatus) }
     func startFillTubing() { run(pumpManager.startFillTubing) }
     func stopFillTubing() { run(pumpManager.stopFillTubing) }
     func finish() { run(pumpManager.finishCartridgeChange) }
@@ -135,13 +136,28 @@ struct TandemCartridgeChangeView: View {
     }
 
     private var startSection: some View {
-        Section {
+        Section(
+            footer: Text(
+                "The pump will not start a change while it is delivering insulin. Trio stops delivery first where it can; on a t:slim X2 you need to stop insulin on the pump yourself."
+            )
+        ) {
             Button {
                 viewModel.begin()
             } label: {
                 buttonLabel(String(localized: "Start cartridge change"))
             }
             .disabled(viewModel.busy)
+
+            Button {
+                viewModel.refreshLoadStatus()
+            } label: {
+                Text("Check what the pump is doing")
+            }
+            .disabled(viewModel.busy)
+
+            if let progress = viewModel.progressText {
+                Text(progress).font(.footnote).foregroundColor(.secondary)
+            }
         }
     }
 

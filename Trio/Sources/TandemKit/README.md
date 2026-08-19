@@ -128,6 +128,25 @@ gated.** Two things make it different from everything else here:
   events with no dose. Counting them would make Trio under-deliver for hours
   after every set change.
 
+### The pump's own load state machine
+
+`LoadStatusRequest` (opcode 20, unsigned, current-status) reports
+`isLoadingActive`, a `LoadState` — change cartridge, load cartridge, prime
+tubing, prime cannula, prime nudge — and a prime-detail byte. It costs nothing
+and is ungated, so the driver reads it before a cartridge command and again
+after a refusal.
+
+That turns the pump's bare status byte into something actionable. **On hardware,
+`EnterChangeCartridgeMode` was refused with status 1 while the pump was
+delivering** — a Tandem pump stops insulin before starting a load, exactly as
+its own on-pump flow does. So the driver now stops delivery first: on a Mobi it
+suspends (there is a remote suspend), and on a t:slim X2, which has none, it
+says so and asks the user to stop insulin on the pump. A refusal that still
+happens reports what the pump said it was doing rather than just the number.
+
+Reading the state first also means a load the user started on the pump, or an
+earlier attempt whose reply was lost, is **adopted** rather than restarted.
+
 The safety model follows from the second point. Trio cannot see the infusion
 set, so it asks, and the two fill steps need **opposite** answers:
 

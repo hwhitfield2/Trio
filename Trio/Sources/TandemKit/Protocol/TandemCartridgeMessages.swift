@@ -18,6 +18,84 @@ import Foundation
 /// implementation whose ordering has been exercised against a pump. The
 /// sequencing in TandemCartridgeChange.swift is reconstructed, not transcribed.
 
+// MARK: - Load status
+
+/// Read-only view of the pump's cartridge-loading state machine.
+///
+/// Unsigned and on the current-status characteristic, so it can be polled
+/// freely — including before a cartridge command, to find out whether the pump
+/// is in a state that will accept one, and after a refusal, to say what it was
+/// actually doing instead of reporting a bare status byte.
+struct TandemLoadStatusRequest: TandemRequest {
+    typealias Response = TandemLoadStatusResponse
+    static let opcode: UInt8 = 20
+}
+
+struct TandemLoadStatusResponse: TandemResponse {
+    static let opcode: UInt8 = 21
+
+    /// Where the pump is in the load sequence.
+    enum LoadState: UInt8 {
+        case changeCartridge = 0
+        case loadCartridge = 1
+        case primeTubing = 2
+        case primeCannula = 3
+        case primeNudge = 4
+        case invalid = 5
+        case unknown = 6
+
+        var localizedDescription: String {
+            switch self {
+            case .changeCartridge: return String(localized: "changing the cartridge")
+            case .loadCartridge: return String(localized: "loading the cartridge")
+            case .primeTubing: return String(localized: "priming the tubing")
+            case .primeCannula: return String(localized: "priming the cannula")
+            case .primeNudge: return String(localized: "finishing the prime")
+            case .invalid: return String(localized: "in an invalid load state")
+            case .unknown: return String(localized: "in an unknown load state")
+            }
+        }
+    }
+
+    /// Detail byte, whose meaning depends on `loadState`.
+    enum PrimeTubingStatus: UInt8 {
+        case stop = 0
+        case start = 1
+        case enteredCanExit = 2
+        case enteredCannotExit = 3
+        case suspended = 4
+        case unknown = 5
+    }
+
+    /// True while a load sequence is running on the pump.
+    let isLoadingActive: Bool
+    let loadState: LoadState
+    let primeStatusId: UInt8
+
+    /// Prime-tubing detail, when that is the current state.
+    var primeTubingStatus: PrimeTubingStatus? {
+        guard loadState == .primeTubing else { return nil }
+        return PrimeTubingStatus(rawValue: primeStatusId) ?? .unknown
+    }
+
+    init(cargo: Data) throws {
+        guard cargo.count >= 3 else {
+            throw TandemMessageError.unexpectedCargoSize(message: "LoadStatusResponse", expected: 3, actual: cargo.count)
+        }
+        let bytes = [UInt8](cargo)
+        isLoadingActive = bytes[0] != 0
+        loadState = LoadState(rawValue: bytes[1]) ?? .unknown
+        primeStatusId = bytes[2]
+    }
+
+    /// One-line summary for error messages and the cartridge screen.
+    var localizedDescription: String {
+        isLoadingActive
+            ? String(localized: "the pump is \(loadState.localizedDescription)")
+            : String(localized: "the pump is not loading (last state: \(loadState.localizedDescription))")
+    }
+}
+
 // MARK: - Change cartridge mode
 
 /// Put the pump into cartridge-change mode. Delivery stops for the duration.

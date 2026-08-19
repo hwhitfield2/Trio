@@ -24,7 +24,8 @@ enum TandemCartridgeError: LocalizedError {
     case placementNotConfirmed(TandemSetPlacement)
     case cannulaFillUnsupported
     case primeAmountOutOfRange
-    case rejected(step: String, status: UInt8)
+    case rejected(step: String, status: UInt8, loadState: String?)
+    case deliveryMustBeStoppedOnPump
 
     var errorDescription: String? {
         switch self {
@@ -49,8 +50,13 @@ enum TandemCartridgeError: LocalizedError {
             return "Priming the cannula from Trio is only supported on the Tandem Mobi. On the t:slim X2, prime the cannula on the pump itself."
         case .primeAmountOutOfRange:
             return "The prime amount must be between 0.01 U and 3 U."
-        case let .rejected(step, status):
+        case let .rejected(step, status, loadState):
+            if let loadState = loadState {
+                return "The pump refused to \(step) (status \(status)) — \(loadState)."
+            }
             return "The pump refused to \(step) (status \(status))."
+        case .deliveryMustBeStoppedOnPump:
+            return "The pump will not start a cartridge change while it is delivering insulin. Stop insulin on the pump first, then try again."
         }
     }
 }
@@ -136,10 +142,37 @@ extension TandemPumpManager {
                 return
             }
 
+            // The pump runs its own load state machine. Read it first: it tells
+            // us whether a change is already under way (adopt it rather than
+            // asking twice) and, if the command is refused, what the pump was
+            // actually doing instead of a bare status byte.
+            let loadStatus = self.readLoadStatus()
+            if let loadStatus = loadStatus, loadStatus.isLoadingActive {
+                self.log.info("Pump is already loading: \(loadStatus.localizedDescription); adopting the session")
+                self.adoptExistingLoad(loadStatus)
+                completion(nil)
+                return
+            }
+
+            // A Tandem pump will not begin a load while it is delivering — its
+            // own on-pump flow stops insulin first — so do the same here.
+            if let error = self.stopDeliveryForLoad() {
+                completion(error)
+                return
+            }
+
             switch self.session.send(TandemEnterChangeCartridgeModeRequest()) {
             case let .success(response):
                 guard response.status == 0 else {
-                    completion(TandemCartridgeError.rejected(step: "start the cartridge change", status: response.status))
+                    let after = self.readLoadStatus()
+                    self.log.error(
+                        "EnterChangeCartridgeMode refused with status \(response.status); load status: \(after?.localizedDescription ?? "unavailable")"
+                    )
+                    completion(TandemCartridgeError.rejected(
+                        step: "start the cartridge change",
+                        status: response.status,
+                        loadState: after?.localizedDescription
+                    ))
                     return
                 }
                 let now = Date.now
@@ -183,7 +216,7 @@ extension TandemPumpManager {
             switch self.session.send(TandemEnterFillTubingModeRequest()) {
             case let .success(response):
                 guard response.status == 0 else {
-                    completion(TandemCartridgeError.rejected(step: "start filling the tubing", status: response.status))
+                    completion(TandemCartridgeError.rejected(step: "start filling the tubing", status: response.status, loadState: self.readLoadStatus()?.localizedDescription))
                     return
                 }
                 self.state.cartridgeSession?.stage = .fillingTubing
@@ -213,7 +246,7 @@ extension TandemPumpManager {
             switch self.session.send(TandemExitFillTubingModeRequest()) {
             case let .success(response):
                 guard response.status == 0 else {
-                    completion(TandemCartridgeError.rejected(step: "stop filling the tubing", status: response.status))
+                    completion(TandemCartridgeError.rejected(step: "stop filling the tubing", status: response.status, loadState: self.readLoadStatus()?.localizedDescription))
                     return
                 }
                 self.state.cartridgeSession?.stage = .tubingFilled
@@ -264,7 +297,7 @@ extension TandemPumpManager {
             switch self.session.send(TandemFillCannulaRequest(primeSizeMilliunits: milliunits)) {
             case let .success(response):
                 guard response.status == 0 else {
-                    completion(TandemCartridgeError.rejected(step: "prime the cannula", status: response.status))
+                    completion(TandemCartridgeError.rejected(step: "prime the cannula", status: response.status, loadState: self.readLoadStatus()?.localizedDescription))
                     return
                 }
                 self.state.cartridgeSession?.stage = .cannulaFilled
@@ -301,7 +334,7 @@ extension TandemPumpManager {
             switch self.session.send(TandemExitChangeCartridgeModeRequest()) {
             case let .success(response):
                 guard response.status == 0 else {
-                    completion(TandemCartridgeError.rejected(step: "finish the cartridge change", status: response.status))
+                    completion(TandemCartridgeError.rejected(step: "finish the cartridge change", status: response.status, loadState: self.readLoadStatus()?.localizedDescription))
                     return
                 }
                 self.completeCartridgeSession(recordSiteChange: true)
@@ -356,6 +389,26 @@ extension TandemPumpManager {
         }
     }
 
+    /// Read the pump's load state on demand, without starting anything. Useful
+    /// when a command was refused and the user wants to know what the pump
+    /// thinks is going on.
+    func refreshLoadStatus(completion: @escaping ((any LocalizedError)?) -> Void) {
+        commandQueue.async {
+            if let error = self.prepareForCartridgeCommand() {
+                completion(error)
+                return
+            }
+            self.refreshSuspendState()
+            let status = self.readLoadStatus()
+            if status == nil {
+                completion(TandemCartridgeError.notInCartridgeChange)
+            } else {
+                completion(nil)
+            }
+            self.notifyStateDidChange()
+        }
+    }
+
     // MARK: - Progress from the pump
 
     /// Handle one control-stream progress event. Called off the BLE queue.
@@ -374,6 +427,94 @@ extension TandemPumpManager {
                 self.state.cartridgeSession?.stage = .cannulaFilled
             }
             self.notifyStateDidChange()
+        }
+    }
+
+    // MARK: - Pump load state
+
+    /// Read the pump's load state machine. Unsigned and cheap, so it is safe to
+    /// call before and after any cartridge command. Returns nil if the pump did
+    /// not answer.
+    func readLoadStatus() -> TandemLoadStatusResponse? {
+        dispatchPrecondition(condition: .onQueue(commandQueue))
+        switch session.send(TandemLoadStatusRequest()) {
+        case let .success(response):
+            state.lastCartridgeEventDescription = response.localizedDescription
+            return response
+        case let .failure(error):
+            log.error("LoadStatus failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Take over a load the pump has already started — either the user began it
+    /// on the pump, or an earlier attempt succeeded without Trio seeing the
+    /// reply. Mapping the pump's state onto ours avoids asking it to enter a
+    /// mode it is already in.
+    private func adoptExistingLoad(_ loadStatus: TandemLoadStatusResponse) {
+        let stage: TandemCartridgeSession.Stage
+        switch loadStatus.loadState {
+        case .changeCartridge,
+             .loadCartridge:
+            stage = .changeMode
+        case .primeTubing:
+            stage = loadStatus.primeTubingStatus == .start ? .fillingTubing : .changeMode
+        case .primeCannula,
+             .primeNudge:
+            stage = .tubingFilled
+        case .invalid,
+             .unknown:
+            stage = .changeMode
+        }
+        state.cartridgeSession = TandemCartridgeSession(stage: stage, startedAt: Date.now)
+        state.activeTempBasal = nil
+        state.suspended = true
+        state.cartridgeDisconnectConfirmedAt = nil
+        state.confirmedSetPlacement = nil
+        notifyStateDidChange()
+    }
+
+    /// Make sure the pump is not delivering before asking it to start a load.
+    ///
+    /// On a Mobi Trio can stop delivery itself, which is what the pump's own
+    /// flow does. On a t:slim X2 there is no remote suspend at all, so the user
+    /// has to stop insulin on the pump — saying that is far more useful than
+    /// relaying a status byte.
+    private func stopDeliveryForLoad() -> (any LocalizedError)? {
+        refreshSuspendState()
+        if state.suspended { return nil }
+
+        guard state.pumpModel.supportsRemoteBasalControl else {
+            return TandemCartridgeError.deliveryMustBeStoppedOnPump
+        }
+
+        log.info("Suspending delivery before starting the cartridge change")
+        if case let .failure(error) = session.refreshTimeSinceReset() {
+            return error
+        }
+        switch session.send(TandemSuspendPumpingRequest()) {
+        case let .success(response):
+            guard response.status == 0 else {
+                log.error("Suspend before cartridge change refused with status \(response.status)")
+                return TandemCartridgeError.deliveryMustBeStoppedOnPump
+            }
+            state.suspended = true
+            state.activeTempBasal = nil
+            return nil
+        case let .failure(error):
+            return error
+        }
+    }
+
+    /// Re-read whether the pump is delivering, so the precondition is not judged
+    /// on stale status.
+    private func refreshSuspendState() {
+        switch session.send(TandemHomeScreenMirrorRequest()) {
+        case let .success(response):
+            // SUSPEND(4) and HYPO_SUSPEND_BASAL_IQ(5) both mean delivery stopped.
+            state.suspended = response.basalStatusIconId == 4 || response.basalStatusIconId == 5
+        case let .failure(error):
+            log.error("HomeScreenMirror failed before the cartridge change: \(error.localizedDescription)")
         }
     }
 

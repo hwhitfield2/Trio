@@ -89,6 +89,57 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
     }
 }
 
+@Suite("Tandem pump load status") struct TandemLoadStatusTests {
+    @Test("Reads the pump's load state machine") func parsing() throws {
+        // byte 0 = isLoadingActive, byte 1 = LoadState, byte 2 = prime detail.
+        let idle = try TandemLoadStatusResponse(cargo: Data([0x00, 0x00, 0x00]))
+        #expect(!idle.isLoadingActive)
+        #expect(idle.loadState == .changeCartridge)
+
+        let priming = try TandemLoadStatusResponse(cargo: Data([0x01, 0x02, 0x01]))
+        #expect(priming.isLoadingActive)
+        #expect(priming.loadState == .primeTubing)
+        #expect(priming.primeTubingStatus == .start)
+
+        // The detail byte only means prime-tubing status in that state.
+        let cannula = try TandemLoadStatusResponse(cargo: Data([0x01, 0x03, 0x01]))
+        #expect(cannula.loadState == .primeCannula)
+        #expect(cannula.primeTubingStatus == nil)
+
+        // An unrecognised state must not be mistaken for a known one.
+        let future = try TandemLoadStatusResponse(cargo: Data([0x01, 0x7F, 0x00]))
+        #expect(future.loadState == .unknown)
+
+        #expect(throws: TandemMessageError.self) { try TandemLoadStatusResponse(cargo: Data([0x00, 0x00])) }
+    }
+
+    @Test("Load status is an unsigned current-status query") func messageShape() {
+        // It has to be cheap and ungated so it can be polled before a command
+        // and again after a refusal, to explain what the pump was doing.
+        #expect(TandemLoadStatusRequest.opcode == 20)
+        #expect(TandemLoadStatusResponse.opcode == 21)
+        #expect(TandemLoadStatusRequest.characteristic == .currentStatus)
+        #expect(!TandemLoadStatusRequest.signed)
+        #expect(!TandemLoadStatusRequest.modifiesInsulinDelivery)
+    }
+
+    @Test("A refusal reports what the pump was doing") func diagnosticError() {
+        let bare = TandemCartridgeError.rejected(step: "start the cartridge change", status: 1, loadState: nil)
+        #expect(bare.errorDescription?.contains("status 1") == true)
+
+        let diagnosed = TandemCartridgeError.rejected(
+            step: "start the cartridge change",
+            status: 1,
+            loadState: "the pump is priming the tubing"
+        )
+        #expect(diagnosed.errorDescription?.contains("priming the tubing") == true)
+
+        // The precondition the pump actually enforces gets its own message
+        // rather than surfacing as an opaque status byte.
+        #expect(TandemCartridgeError.deliveryMustBeStoppedOnPump.errorDescription?.contains("Stop insulin") == true)
+    }
+}
+
 @Suite("Tandem cartridge progress stream") struct TandemCartridgeStreamTests {
     @Test("Decodes each progress opcode") func decoding() {
         #expect(
