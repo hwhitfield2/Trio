@@ -77,6 +77,10 @@ extension TandemPumpManager {
     ///   answering.
     func annunciateGlucoseAlarm(_ kind: TandemGlucoseAlarmKind) {
         guard state.glucoseAnnunciationEnabled else { return }
+        guard !state.annunciationRefusedByPump else {
+            log.info("Skipping \(kind.rawValue) annunciation: this pump has refused PlaySound")
+            return
+        }
 
         commandQueue.async { [weak self] in
             guard let self = self else { return }
@@ -115,6 +119,8 @@ extension TandemPumpManager {
         case let .success(response):
             if response.status != 0 {
                 log.error("PlaySound refused with status \(response.status); stopping the pattern")
+                state.annunciationRefusedByPump = true
+                notifyStateDidChange()
                 return
             }
             // Status 0 is pumpX2's documented success. It says the pump ACCEPTED
@@ -123,6 +129,12 @@ extension TandemPumpManager {
             log.info("PlaySound accepted (status 0)")
         case let .failure(error):
             log.error("PlaySound failed: \(error.localizedDescription); stopping the pattern")
+            // A refusal is about the command, not the moment — asking again in
+            // five minutes would only wake the pump to be told no again.
+            if case .pumpRejected = error {
+                state.annunciationRefusedByPump = true
+                notifyStateDidChange()
+            }
             return
         }
 
@@ -143,6 +155,9 @@ extension TandemPumpManager {
             completion(TandemAnnunciationError.notEnabled)
             return
         }
+        // Pressing test IS the retry, so it clears the "this pump refuses it"
+        // latch rather than being blocked by it.
+        state.annunciationRefusedByPump = false
         commandQueue.async { [weak self] in
             guard let self = self else { return }
             let pattern = TandemAnnunciationPattern.pattern(for: kind)
@@ -157,10 +172,14 @@ extension TandemPumpManager {
             switch self.session.send(TandemPlaySoundRequest()) {
             case let .success(response):
                 guard response.status == 0 else {
+                    self.state.annunciationRefusedByPump = true
                     completion(TandemAnnunciationError.rejected(status: response.status))
                     return
                 }
             case let .failure(error):
+                if case .pumpRejected = error {
+                    self.state.annunciationRefusedByPump = true
+                }
                 completion(error)
                 return
             }

@@ -26,7 +26,7 @@ enum TandemSessionError: LocalizedError {
         case .insulinDeliveryActionsDisabled:
             return "Remote insulin delivery actions are disabled. Enable them in the pump settings to allow this."
         case let .pumpRejected(error):
-            return "The pump rejected the request (error code \(error.errorCodeId))."
+            return "The pump rejected the request: \(error.localizedDescription)."
         case let .transport(error): return error.localizedDescription
         case let .invalidResponse(error): return "Invalid pump response: \(error.localizedDescription)"
         case let .pairingFailed(reason): return "Pairing failed: \(reason)"

@@ -350,6 +350,14 @@ final class TandemPumpState: RawRepresentable {
     /// buzz or a beep.
     var glucoseAnnunciationEnabled: Bool
 
+    /// Runtime-only: the pump refused `PlaySound`, so stop asking.
+    ///
+    /// This matters more now that an alarm connects to deliver itself: without
+    /// it, a pump that does not implement the command would be woken every five
+    /// minutes to refuse it again. Runtime-only on purpose — a relaunch is one
+    /// free retry, and the test button clears it deliberately.
+    var annunciationRefusedByPump: Bool = false
+
     /// Runtime-only: when the last annunciation started, for the driver's own
     /// rate limit. Not persisted — after a restart the worst case is one extra
     /// buzz, and remembering it across launches would be a way to miss a real

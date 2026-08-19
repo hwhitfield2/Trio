@@ -59,7 +59,7 @@ enum TandemMessageError: LocalizedError {
         case let .unexpectedCargoSize(message, expected, actual):
             return "Unexpected \(message) cargo size \(actual) (expected \(expected))."
         case let .pumpError(error):
-            return "Pump rejected request (opcode \(error.requestCodeId)) with error code \(error.errorCodeId)."
+            return "Pump rejected the request: \(error.localizedDescription)."
         case let .unexpectedResponseOpcode(found, expected):
             return "Unexpected pump response opcode \(found) (expected \(expected))."
         }
@@ -107,8 +107,58 @@ extension Data {
 /// the expected response; cargo is 2 bytes (or 26 in some situations).
 struct TandemErrorResponse: TandemResponse {
     static let opcode: UInt8 = 77
+    /// Which request the pump is complaining about. pumpX2 documents this as
+    /// the failing request's opcode, at least for a parameter error.
     let requestCodeId: UInt8
     let errorCodeId: UInt8
+
+    /// The pump's reason, from pumpX2's `ErrorResponse.ErrorCode`.
+    ///
+    /// Worth naming rather than printing a bare number: "undefined error" and
+    /// "bad opcode" and "invalid authentication" are three completely different
+    /// diagnoses, and the number alone sends whoever is reading the message
+    /// looking in the wrong place.
+    enum ErrorCode: UInt8 {
+        case undefined = 0
+        case crcMismatch = 1
+        case transactionIdMismatch = 3
+        case badCargoLength = 4
+        case badOpcode = 6
+        case invalidRequiredParameter = 7
+        case messageBufferFull = 8
+        case invalidAuthentication = 9
+
+        var localizedDescription: String {
+            switch self {
+            case .undefined:
+                return String(localized: "undefined error")
+            case .crcMismatch:
+                return String(localized: "CRC mismatch")
+            case .transactionIdMismatch:
+                return String(localized: "transaction id mismatch")
+            case .badCargoLength:
+                return String(localized: "bad cargo length")
+            case .badOpcode:
+                return String(localized: "unrecognised command")
+            case .invalidRequiredParameter:
+                return String(localized: "invalid parameter")
+            case .messageBufferFull:
+                return String(localized: "message buffer full")
+            case .invalidAuthentication:
+                return String(localized: "invalid authentication")
+            }
+        }
+    }
+
+    var errorCode: ErrorCode? { ErrorCode(rawValue: errorCodeId) }
+
+    /// "undefined error (code 0), request 0xf4" — everything there is to know
+    /// about a refusal, in one line fit for a log or an alert.
+    var localizedDescription: String {
+        let name = errorCode?.localizedDescription ?? String(localized: "unknown error")
+        let request = String(format: "0x%02x", requestCodeId)
+        return String(localized: "\(name) (code \(Int(errorCodeId))), request \(request)")
+    }
 
     init(cargo: Data) throws {
         guard cargo.count >= 2 else {

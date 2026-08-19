@@ -571,15 +571,41 @@ private extension Data {
     @Test("The opt-in persists and the rate-limit clock does not") func statePersistence() {
         let state = TandemPumpState()
         #expect(!state.glucoseAnnunciationEnabled)
+        #expect(!state.annunciationRefusedByPump)
 
         state.glucoseAnnunciationEnabled = true
         state.lastAnnunciationAt = Date.now
+        state.annunciationRefusedByPump = true
 
         let restored = TandemPumpState(rawValue: state.rawValue)
         #expect(restored.glucoseAnnunciationEnabled)
         // Runtime-only: after a restart the worst case is one extra buzz, which
-        // is the safe direction for an alarm.
+        // is the safe direction for an alarm — and a relaunch is one free retry
+        // against a pump that refused it last time.
         #expect(restored.lastAnnunciationAt == nil)
+        #expect(!restored.annunciationRefusedByPump)
+    }
+
+    @Test("A refusal is named, not left as a bare number") func errorCodeNaming() throws {
+        // This is the shape a Mobi answered PlaySound with: ErrorResponse,
+        // request byte then error byte. Code 0 is pumpX2's UNDEFINED_ERROR, and
+        // reading it as "0" sends you looking for a status byte that says
+        // success — which is the opposite of what happened.
+        let refusal = try TandemErrorResponse(cargo: Data([0xF4, 0x00]))
+        #expect(refusal.requestCodeId == 0xF4)
+        #expect(refusal.errorCodeId == 0)
+        #expect(refusal.errorCode == .undefined)
+        #expect(refusal.localizedDescription.contains("undefined error"))
+        #expect(refusal.localizedDescription.contains("0xf4"))
+
+        #expect(try TandemErrorResponse(cargo: Data([0x00, 6])).errorCode == .badOpcode)
+        #expect(try TandemErrorResponse(cargo: Data([0x00, 9])).errorCode == .invalidAuthentication)
+        // A code pumpX2 does not list must still render rather than crash.
+        let unknown = try TandemErrorResponse(cargo: Data([0x00, 99]))
+        #expect(unknown.errorCode == nil)
+        #expect(unknown.localizedDescription.contains("99"))
+
+        #expect(throws: TandemMessageError.self) { try TandemErrorResponse(cargo: Data([0x00])) }
     }
 
     @Test("Every alarm kind has a pattern and a name") func kindCoverage() {

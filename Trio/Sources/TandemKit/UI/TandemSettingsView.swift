@@ -457,6 +457,10 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
         pumpManager.setGlucoseAnnunciationEnabled(enabled)
     }
 
+    /// True once this pump has answered a buzz with a refusal. Trio stops
+    /// asking until the app restarts or the user presses test.
+    var annunciationRefused: Bool { state.annunciationRefusedByPump }
+
     func describePattern(_ kind: TandemGlucoseAlarmKind) -> String {
         let pattern = TandemAnnunciationPattern.pattern(for: kind)
         let seconds = TandemPumpState.doseText(pattern.gap)
@@ -1074,6 +1078,16 @@ struct TandemSettingsView: View {
                 }
                 .disabled(viewModel.testingAnnunciation != nil)
 
+                if viewModel.annunciationRefused, viewModel.annunciationResult == nil {
+                    TandemCallout(
+                        title: String(localized: "This pump refused the buzz"),
+                        message: String(
+                            localized: "Trio has stopped asking, so an alarm will not keep waking the pump to be refused again. The phone alert is unaffected. Press a test button to try once more — it may simply be a command your pump's software does not implement."
+                        ),
+                        tone: .caution
+                    )
+                }
+
                 if let result = viewModel.annunciationResult {
                     TandemCallout(
                         title: result.success
@@ -1096,7 +1110,7 @@ struct TandemSettingsView: View {
 
     private var glucoseAlarmFooter: String {
         String(
-            localized: "Uses Trio's own low and high alarms — the same thresholds, snooze and once-per-reading rule as the phone alert, so the pump never buzzes for something the phone stayed quiet about. Trio connects to the pump to deliver it rather than waiting for the next check-in, and never buzzes more than once every five minutes. Whether that comes out as a buzz, a beep or nothing at all is the pump's own Sound setting, not Trio's — set it to Vibrate in \(viewModel.elsewhereName). This command has not been verified against a real pump; use the test buttons before relying on it."
+            localized: "Uses Trio's own low and high alarms — the same thresholds, snooze and once-per-reading rule as the phone alert, so the pump never buzzes for something the phone stayed quiet about. Trio connects to the pump to deliver it rather than waiting for the next check-in, and never buzzes more than once every five minutes. Whether that comes out as a buzz, a beep or nothing at all is the pump's own Sound setting, not Trio's — set it to Vibrate in \(viewModel.elsewhereName). This command has not been verified against a real pump, and a pump that refuses it is not a fault you can fix here — use the test buttons before relying on it."
         )
     }
 
