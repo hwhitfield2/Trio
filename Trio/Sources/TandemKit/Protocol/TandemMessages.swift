@@ -12,6 +12,9 @@ enum TandemCharacteristic {
     case currentStatus
     case authorization
     case control
+    /// Progress the pump pushes without being asked, during long-running
+    /// operations like a cartridge change. Never carries a reply to a request.
+    case controlStream
     case historyLog
 }
 

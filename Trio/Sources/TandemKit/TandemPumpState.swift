@@ -33,6 +33,39 @@ struct TandemActiveTempBasal: Codable {
     }
 }
 
+/// A cartridge change Trio is walking the user through.
+///
+/// Persisted so that an app restart mid-change still knows the pump is in
+/// cartridge-change mode and that delivery must not resume on its own. The
+/// disconnect confirmation deliberately does NOT live here — see
+/// `TandemPumpState.cartridgeDisconnectConfirmedAt`.
+struct TandemCartridgeSession: Codable, Equatable {
+    /// How far through the change we are. The pump drives the real state
+    /// machine; this is what Trio has asked for and seen acknowledged.
+    enum Stage: String, Codable {
+        /// Pump is in change-cartridge mode; delivery is stopped.
+        case changeMode
+        /// Fill-tubing mode is active — insulin is moving through the tubing.
+        case fillingTubing
+        /// Tubing fill has been ended.
+        case tubingFilled
+        /// The cannula prime has completed (Mobi only).
+        case cannulaFilled
+    }
+
+    var stage: Stage
+    var startedAt: Date
+
+    /// Longest a change is allowed to sit before Trio stops trusting it and
+    /// insists the user start over; a stale session means the pump's real state
+    /// is unknown.
+    static let maximumDuration: TimeInterval = .hours(2)
+
+    func isStale(at date: Date = Date()) -> Bool {
+        date.timeIntervalSince(startedAt) > Self.maximumDuration
+    }
+}
+
 /// Persisted state of the Tandem pump driver.
 ///
 /// The pairing code doubles as the message-signing key on legacy-firmware
@@ -80,6 +113,44 @@ final class TandemPumpState: RawRepresentable {
     /// The temp basal Trio commanded on a Mobi, tracked until it expires.
     var activeTempBasal: TandemActiveTempBasal?
 
+    /// User opt-in for driving a cartridge change from Trio. Separate from the
+    /// bolus and basal opt-ins because it is a different kind of risk: filling
+    /// tubing and priming a cannula push insulin, and Trio cannot see whether
+    /// the infusion set is connected to the body.
+    var cartridgeChangeEnabled: Bool
+
+    /// The cartridge change currently in progress, if any.
+    var cartridgeSession: TandemCartridgeSession?
+
+    /// True while the pump is in a cartridge change and must not be dosed.
+    var cartridgeChangeInProgress: Bool {
+        guard let session = cartridgeSession else { return false }
+        return !session.isStale()
+    }
+
+    // MARK: Runtime-only cartridge state (NOT persisted)
+
+    /// When the user last confirmed the infusion set is disconnected from their
+    /// body. Deliberately not persisted: after an app restart the user must
+    /// confirm again rather than inherit a confirmation Trio cannot vouch for.
+    var cartridgeDisconnectConfirmedAt: Date?
+
+    /// Most recent progress line from the pump's control stream, for display.
+    var lastCartridgeEventDescription: String?
+
+    /// Where the user last said the infusion set is. Runtime-only for the same
+    /// reason as the timestamp: a restart must not inherit it.
+    var confirmedSetPlacement: TandemSetPlacement?
+
+    /// How long a disconnect confirmation stays good for.
+    static let disconnectConfirmationValidity: TimeInterval = .minutes(10)
+
+    /// True when the user has recently confirmed the set is off their body.
+    func hasFreshDisconnectConfirmation(at date: Date = Date()) -> Bool {
+        guard let confirmed = cartridgeDisconnectConfirmedAt else { return false }
+        return date.timeIntervalSince(confirmed) < Self.disconnectConfirmationValidity
+    }
+
     /// User opt-in for remote insulin delivery actions (bolusing). Off by
     /// default; requires firmware with API >= 2.5 (t:slim X2 7.6+).
     var remoteBolusEnabled: Bool
@@ -92,8 +163,13 @@ final class TandemPumpState: RawRepresentable {
 
     /// True when any insulin-affecting command may be sent. Drives the session's
     /// `insulinDeliveryActionsEnabled` gate.
+    ///
+    /// The cartridge opt-in counts here because entering fill-tubing mode and
+    /// priming the cannula are `modifiesInsulinDelivery` commands. This gate is
+    /// only the outermost backstop — each command still checks its own opt-in,
+    /// so enabling cartridge changes does not by itself permit a bolus.
     var insulinDeliveryActionsAllowed: Bool {
-        remoteBolusEnabled || remoteBasalEnabled
+        remoteBolusEnabled || remoteBasalEnabled || cartridgeChangeEnabled
     }
 
     /// User opt-in for the microbolus-basal closed-loop mode: Trio delivers all
@@ -165,6 +241,10 @@ final class TandemPumpState: RawRepresentable {
     }
 
     var basalDeliveryState: PumpManagerStatus.BasalDeliveryState {
+        // A cartridge change stops delivery on the pump for its whole duration.
+        if cartridgeChangeInProgress {
+            return .suspended(cartridgeSession?.startedAt ?? lastSync)
+        }
         // Either the pump's own suspend or a Trio-commanded microbolus suspend
         // stops delivery (with the pump basal zeroed, the latter is a true stop).
         if suspended || microbolusSuspended {
@@ -222,6 +302,11 @@ final class TandemPumpState: RawRepresentable {
         controlIQEnabled = false
         insulinType = nil
         activeTempBasal = nil
+        cartridgeChangeEnabled = false
+        cartridgeSession = nil
+        cartridgeDisconnectConfirmedAt = nil
+        lastCartridgeEventDescription = nil
+        confirmedSetPlacement = nil
         remoteBolusEnabled = false
         remoteBasalEnabled = false
         microbolusBasalEnabled = false
@@ -271,6 +356,12 @@ final class TandemPumpState: RawRepresentable {
         controlIQEnabled = rawValue["controlIQEnabled"] as? Bool ?? false
         remoteBolusEnabled = rawValue["remoteBolusEnabled"] as? Bool ?? false
         remoteBasalEnabled = rawValue["remoteBasalEnabled"] as? Bool ?? false
+        cartridgeChangeEnabled = rawValue["cartridgeChangeEnabled"] as? Bool ?? false
+        if let rawCartridgeSession = rawValue["cartridgeSession"] as? Data {
+            cartridgeSession = try? JSONDecoder().decode(TandemCartridgeSession.self, from: rawCartridgeSession)
+        }
+        // cartridgeDisconnectConfirmedAt is runtime-only: a restart must not
+        // inherit a confirmation that the set is off the body.
         microbolusBasalEnabled = rawValue["microbolusBasalEnabled"] as? Bool ?? false
         microbolusSuspended = rawValue["microbolusSuspended"] as? Bool ?? false
         audioFeedbackEnabled = rawValue["audioFeedbackEnabled"] as? Bool ?? true
@@ -314,6 +405,10 @@ final class TandemPumpState: RawRepresentable {
         value["controlIQEnabled"] = controlIQEnabled
         value["remoteBolusEnabled"] = remoteBolusEnabled
         value["remoteBasalEnabled"] = remoteBasalEnabled
+        value["cartridgeChangeEnabled"] = cartridgeChangeEnabled
+        if let cartridgeSession = cartridgeSession {
+            value["cartridgeSession"] = try? JSONEncoder().encode(cartridgeSession)
+        }
         value["microbolusBasalEnabled"] = microbolusBasalEnabled
         value["microbolusSuspended"] = microbolusSuspended
         value["audioFeedbackEnabled"] = audioFeedbackEnabled

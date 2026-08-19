@@ -540,6 +540,10 @@ extension TandemPumpManager {
         activationType: BolusActivationType,
         completion: @escaping (PumpManagerError?) -> Void
     ) {
+        guard !state.cartridgeChangeInProgress else {
+            completion(.deviceState(TandemUnsupportedError.cartridgeChangeInProgress))
+            return
+        }
         guard state.remoteBolusEnabled else {
             completion(.configuration(TandemUnsupportedError.remoteBolusDisabled))
             return
@@ -835,6 +839,13 @@ extension TandemPumpManager {
         for duration: TimeInterval,
         completion: @escaping (PumpManagerError?) -> Void
     ) {
+        // A cartridge change stops delivery on the pump and takes it through
+        // modes that reject dosing commands. Refuse rather than let the loop
+        // fight the change.
+        guard !state.cartridgeChangeInProgress else {
+            completion(.deviceState(TandemUnsupportedError.cartridgeChangeInProgress))
+            return
+        }
         if state.supportsNativeBasalControl, state.remoteBasalEnabled {
             commandQueue.async {
                 self.enactNativeTempBasal(unitsPerHour: unitsPerHour, duration: duration, completion: completion)
@@ -857,6 +868,11 @@ extension TandemPumpManager {
     }
 
     func suspendDelivery(completion: @escaping ((any Error)?) -> Void) {
+        guard !state.cartridgeChangeInProgress else {
+            // Already not delivering.
+            completion(nil)
+            return
+        }
         if state.supportsNativeBasalControl, state.remoteBasalEnabled {
             commandQueue.async {
                 self.suspendNativeDelivery(completion: completion)
@@ -877,6 +893,10 @@ extension TandemPumpManager {
     }
 
     func resumeDelivery(completion: @escaping ((any Error)?) -> Void) {
+        guard !state.cartridgeChangeInProgress else {
+            completion(TandemUnsupportedError.cartridgeChangeInProgress)
+            return
+        }
         if state.supportsNativeBasalControl, state.remoteBasalEnabled {
             commandQueue.async {
                 self.resumeNativeDelivery(completion: completion)
@@ -1039,6 +1059,9 @@ extension TandemPumpManager {
     }
 
     /// User opt-in/out for remote bolus.
+    /// True while the pump is mid-cartridge-change and must not be dosed.
+    var isChangingCartridge: Bool { state.cartridgeChangeInProgress }
+
     func setRemoteBolusEnabled(_ enabled: Bool) {
         state.remoteBolusEnabled = enabled
         // Disabling remote bolus also forces the microbolus-basal mode off,
@@ -1154,6 +1177,10 @@ extension TandemPumpManager: TandemPumpSessionDelegate {
         log.info("Session disconnected: \(error?.localizedDescription ?? "clean")")
         notifyStateDidChange()
     }
+
+    func session(_: TandemPumpSession, didReceiveCartridgeEvent event: TandemCartridgeStreamEvent) {
+        handleCartridgeStreamEvent(event)
+    }
 }
 
 // MARK: - Errors
@@ -1176,6 +1203,7 @@ enum TandemUnsupportedError: LocalizedError {
     case tempBasalRejected(UInt8)
     case suspendRejected(UInt8)
     case resumeRejected(UInt8)
+    case cartridgeChangeInProgress
 
     var errorDescription: String? {
         switch self {
@@ -1195,6 +1223,8 @@ enum TandemUnsupportedError: LocalizedError {
             return "The pump refused to suspend delivery (status \(status))."
         case let .resumeRejected(status):
             return "The pump refused to resume delivery (status \(status))."
+        case .cartridgeChangeInProgress:
+            return "A cartridge change is in progress. Finish or cancel it before Trio delivers insulin again."
         case .microbolusBasalPreconditionFailed:
             return "Microbolus-basal is on but the pump is still delivering its own basal or Control-IQ. Set the pump's basal profile to 0 U/hr and turn Control-IQ off, or Trio would stack insulin on top of the pump."
         case .remoteBolusDisabled:

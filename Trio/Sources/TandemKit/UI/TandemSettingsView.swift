@@ -10,6 +10,9 @@ final class TandemSettingsViewModel: ObservableObject {
     @Published var microbolusBasalEnabled: Bool
     @Published var showMicrobolusWarning = false
     @Published var showDeleteConfirmation = false
+    @Published var cartridgeChangeEnabled: Bool = false
+    @Published var showCartridgeWarning = false
+    @Published var showCartridgeSheet = false
     @Published var audioFeedbackEnabled: Bool
     @Published var audioFeedbackForAutomaticDoses: Bool
     @Published var showTestDoseConfirmation = false
@@ -26,6 +29,7 @@ final class TandemSettingsViewModel: ObservableObject {
         self.pumpManager = pumpManager
         remoteBolusEnabled = pumpManager.state.remoteBolusEnabled
         remoteBasalEnabled = pumpManager.state.remoteBasalEnabled
+        cartridgeChangeEnabled = pumpManager.state.cartridgeChangeEnabled
         microbolusBasalEnabled = pumpManager.state.microbolusBasalEnabled
         audioFeedbackEnabled = pumpManager.state.audioFeedbackEnabled
         audioFeedbackForAutomaticDoses = pumpManager.state.audioFeedbackForAutomaticDoses
@@ -150,6 +154,30 @@ final class TandemSettingsViewModel: ObservableObject {
         remoteBasalEnabled = false
     }
 
+    func requestCartridgeChangeEnabled(_ enabled: Bool) {
+        if enabled {
+            showCartridgeWarning = true
+        } else {
+            cartridgeChangeEnabled = false
+            pumpManager.setCartridgeChangeEnabled(false)
+        }
+    }
+
+    func confirmCartridgeChangeEnable() {
+        cartridgeChangeEnabled = true
+        pumpManager.setCartridgeChangeEnabled(true)
+    }
+
+    func cancelCartridgeChangeEnable() {
+        cartridgeChangeEnabled = false
+    }
+
+    var cartridgeChangeInProgress: Bool { state.cartridgeChangeInProgress }
+
+    /// Created once and reused, so presenting the sheet does not spawn a new
+    /// view model (and a new status observer) on every redraw.
+    lazy var cartridgeViewModel = TandemCartridgeChangeViewModel(pumpManager: pumpManager)
+
     func requestMicrobolusChange(_ enabled: Bool) {
         if enabled {
             showMicrobolusWarning = true
@@ -264,9 +292,20 @@ struct TandemSettingsView: View {
             } else {
                 microbolusBasalSection
             }
+            cartridgeSection
             soundsSection
             aboutSection
             deleteSection
+        }
+        .sheet(isPresented: $viewModel.showCartridgeSheet) {
+            NavigationView {
+                TandemCartridgeChangeView(viewModel: viewModel.cartridgeViewModel)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(String(localized: "Done")) { viewModel.showCartridgeSheet = false }
+                    }
+                }
+            }
         }
         .navigationTitle(Text(viewModel.model.localizedTitle))
         .toolbar {
@@ -288,6 +327,14 @@ struct TandemSettingsView: View {
         } message: {
             Text(
                 "Trio will set temp basal rates on the pump and can suspend and resume delivery, which is what lets it close the loop. You MUST turn the pump's own Control-IQ OFF first — two systems adjusting basal at once is unsafe. The pump also needs a non-zero basal profile, because Tandem temp rates are a percentage (0-250%) of the profile rate. Only enable this if you understand the risks."
+            )
+        }
+        .alert(String(localized: "Change cartridges from Trio?"), isPresented: $viewModel.showCartridgeWarning) {
+            Button(String(localized: "Cancel"), role: .cancel) { viewModel.cancelCartridgeChangeEnable() }
+            Button(String(localized: "I understand, enable"), role: .destructive) { viewModel.confirmCartridgeChangeEnable() }
+        } message: {
+            Text(
+                "Trio will be able to put the pump into cartridge-change mode, fill the tubing and prime the cannula. Filling and priming push real insulin, and Trio cannot see whether your infusion set is on your body — it can only ask you. Get that wrong and insulin goes somewhere it should not. This flow has not been tested against a real pump. Doing the change on the pump itself is always the safer option."
             )
         }
         .alert(String(localized: "Enable microbolus-basal looping?"), isPresented: $viewModel.showMicrobolusWarning) {
@@ -531,6 +578,38 @@ struct TandemSettingsView: View {
                     Text(viewModel.preconditionDetail)
                         .font(.footnote)
                         .foregroundColor(viewModel.microbolusPreconditionsMet ? .secondary : .orange)
+                }
+            }
+        }
+    }
+
+    private var cartridgeSection: some View {
+        Section(
+            header: Text("Cartridge"),
+            footer: Text(
+                "Lets Trio walk through loading a new cartridge, filling the tubing and — on a Mobi — priming the cannula. Delivery is stopped and Trio will not loop for the whole change. Untested against a real pump; changing the cartridge on the pump itself is the safer option."
+            )
+        ) {
+            Toggle(
+                String(localized: "Allow cartridge changes"),
+                isOn: Binding(
+                    get: { viewModel.cartridgeChangeEnabled },
+                    set: { viewModel.requestCartridgeChangeEnabled($0) }
+                )
+            )
+            if viewModel.cartridgeChangeInProgress {
+                HStack(alignment: .top) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                    Text("A cartridge change is in progress. Trio is not delivering insulin until it is finished or cancelled.")
+                        .font(.footnote)
+                        .foregroundColor(.orange)
+                }
+            }
+            if viewModel.cartridgeChangeEnabled {
+                Button {
+                    viewModel.showCartridgeSheet = true
+                } label: {
+                    Text(viewModel.cartridgeChangeInProgress ? "Resume cartridge change" : "Change cartridge…")
                 }
             }
         }

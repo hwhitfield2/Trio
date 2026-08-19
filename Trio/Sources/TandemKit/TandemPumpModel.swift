@@ -51,6 +51,16 @@ enum TandemPumpModel: String, CaseIterable {
         }
     }
 
+    /// True when the pump accepts a remote cannula prime. Per pumpX2's
+    /// `supportedDevices = MOBI_ONLY` on FillCannula; on the t:slim X2 the
+    /// cannula prime is a pump-screen operation with no remote equivalent.
+    var supportsRemoteCannulaFill: Bool {
+        switch self {
+        case .tslimX2: return false
+        case .mobi: return true
+        }
+    }
+
     /// Prefixes the pump advertises its Bluetooth name with.
     var bluetoothNamePrefixes: [String] {
         switch self {

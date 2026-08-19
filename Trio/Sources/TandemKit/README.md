@@ -21,6 +21,8 @@ implements what each pump actually supports:
 | Suspend / resume | ✅ (opt-in) | ❌ | Same |
 | Automatic dosing (SMB) | ✅ with basal control on | ⚠️ only in microbolus-basal mode | Requires Trio to be the pump's only automated dosing authority |
 | Closed loop | ✅ natively | ⚠️ experimental microbolus-basal only | |
+| Cartridge change + fill tubing | ⚠️ opt-in, untested | ⚠️ opt-in, untested | Enter/exit change mode and fill tubing exist on both models |
+| Prime cannula | ⚠️ opt-in, untested | ❌ | `FillCannula` is Mobi-only; prime on the pump itself on a t:slim X2 |
 
 So the two models give Trio genuinely different roles:
 
@@ -88,6 +90,48 @@ on hardware**, and must not be relied on without real-pump testing.
 
 The mode is offered only on the t:slim X2. On a Mobi there is no reason to
 emulate basal with boluses when the pump accepts real temp rates.
+
+## Cartridge changes
+
+`TandemCartridgeChange.swift` walks through loading a new cartridge, filling the
+tubing and (on a Mobi) priming the cannula, using the pump's own
+`EnterChangeCartridgeMode` / `EnterFillTubingMode` / `FillCannula` commands, with
+live progress from the control-stream characteristic.
+
+**This is the least proven part of the driver, and deliberately the most
+gated.** Two things make it different from everything else here:
+
+- **There is no reference implementation.** pumpx2 defines these message
+  encodings and unit-tests them, but nothing in its Android library or sample
+  app ever sends them, and its progress-state enums have a single known value
+  each (`READY_TO_CHANGE(2)`, `CANNULA_FILLED(2)`). The encodings are
+  transcribed with the same confidence as the rest of the driver; the
+  **sequence** is reconstructed from how the pump's own procedure works.
+- **It moves insulin outside any dosing calculation.** Filling tubing pushes
+  insulin through the line; priming pushes it into the infusion site. Neither is
+  IOB — the pump does not count them either, so they are recorded as `prime`
+  events with no dose. Counting them would make Trio under-deliver for hours
+  after every set change.
+
+The safety model follows from the second point. Trio cannot see the infusion
+set, so it asks, and the two fill steps need **opposite** answers:
+
+| Step | Required confirmation |
+|---|---|
+| Fill tubing | the set is **off the body** — insulin sprays from the end of the line |
+| Prime cannula | the set is **inserted and connected** — the prime fills its dead space |
+
+A confirmation is good for ten minutes, is cleared whenever the stage advances,
+and is never persisted: after an app restart the user answers again rather than
+inheriting an answer Trio cannot vouch for. Nothing runs automatically — each
+step is a separate button — and while a change is open Trio refuses every
+dosing command and reports delivery as suspended, so the loop cannot fight the
+change. A session older than two hours stops being trusted, because by then the
+pump's real state is anyone's guess.
+
+Removing the pump, or turning the opt-in off, clears the session; cancelling
+attempts to leave fill-tubing mode and change mode in turn, and tells the user
+to check the pump if either failed.
 
 ## Pairing
 
@@ -172,6 +216,7 @@ TandemKit/
   TandemPumpManager+UI.swift       (UI/) PumpManagerUI conformance
   TandemPumpState.swift            Persisted state (RawRepresentable round-trip)
   TandemNativeBasal.swift          Mobi temp rate / suspend / resume
+  TandemCartridgeChange.swift      Cartridge change / fill tubing / prime cannula
   TandemMicrobolusBasal.swift      t:slim X2 experimental basal-via-bolus engine
   TandemDoseProgressReporter.swift Bolus progress estimate
   TandemLogger.swift               Logging shim over Trio's logger
@@ -188,15 +233,23 @@ TandemKit/
     TandemMessages.swift           Status (read-only) request/response messages
     TandemControlMessages.swift    Signed control messages
     TandemJpakeMessages.swift      JPAKE pairing messages
+    TandemCartridgeMessages.swift  Cartridge control + control-stream progress
     TandemJpakeAuthenticator.swift JPAKE handshake driver + key derivation
     TandemPumpSession.swift        Request/response orchestration + authentication
   UI/
     TandemUICoordinator.swift      Setup/settings navigation controller
     TandemPairingView.swift        Scan + pairing-code entry
     TandemSettingsView.swift       Status, opt-in toggles, minimum-dose test, delete
+    TandemCartridgeChangeView.swift Step-by-step cartridge change
 ```
 
 ## Threading
+
+Control-stream progress is the one inbound path with no request behind it: the
+pump pushes it during a cartridge change. Those frames are reassembled in their
+own accumulator, signature-checked like any control response — forged progress
+could otherwise convince Trio a prime finished when it had not — and handed to
+the delegate outside the session lock.
 
 `TandemPumpSession.send()` writes a request and **blocks** on a semaphore until
 the response is reassembled. It runs on `TandemPumpManager.commandQueue`;
@@ -224,7 +277,14 @@ no Tandem firmware or proprietary code is included.
 ## Hardware verification status
 
 The t:slim X2 status, pairing and remote-bolus paths have been exercised on real
-hardware (firmware 7.6.0.1). The **Mobi paths — JPAKE pairing, temp rate,
-suspend and resume — are unverified on hardware.** They are transcribed from the
-protocol and covered by unit tests, but must be tested against a real pump
-before being relied on.
+hardware (firmware 7.6.0.1).
+
+The **Mobi paths — JPAKE pairing, temp rate, suspend and resume — are unverified
+on hardware.** They are transcribed from the protocol and covered by unit tests,
+but must be tested against a real pump before being relied on.
+
+The **cartridge-change flow is unverified on hardware and, unlike everything
+else here, has no reference implementation behind its sequencing** (see above).
+Treat it as the least trustworthy surface in the driver: the encodings are
+tested, the ordering is a reconstruction. Changing the cartridge on the pump
+itself remains the safer option.

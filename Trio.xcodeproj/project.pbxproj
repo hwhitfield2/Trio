@@ -935,6 +935,10 @@
 		7ADEE000000000000000020C /* TandemJpakeAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF000000000000000020C /* TandemJpakeAuthenticator.swift */; };
 		7ADEE0000000000000000210 /* TandemCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000210 /* TandemCryptoTests.swift */; };
 		7ADEE0000000000000000212 /* TandemMobiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000212 /* TandemMobiTests.swift */; };
+		7ADEE0000000000000000300 /* TandemCartridgeMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000300 /* TandemCartridgeMessages.swift */; };
+		7ADEE0000000000000000302 /* TandemCartridgeChange.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000302 /* TandemCartridgeChange.swift */; };
+		7ADEE0000000000000000304 /* TandemCartridgeChangeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000304 /* TandemCartridgeChangeView.swift */; };
+		7ADEE0000000000000000310 /* TandemCartridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADEF0000000000000000310 /* TandemCartridgeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1962,6 +1966,10 @@
 		7ADEF000000000000000020C /* TandemJpakeAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemJpakeAuthenticator.swift"; sourceTree = "<group>"; };
 		7ADEF0000000000000000210 /* TandemCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCryptoTests.swift"; sourceTree = "<group>"; };
 		7ADEF0000000000000000212 /* TandemMobiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemMobiTests.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000300 /* TandemCartridgeMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCartridgeMessages.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000302 /* TandemCartridgeChange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCartridgeChange.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000304 /* TandemCartridgeChangeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCartridgeChangeView.swift"; sourceTree = "<group>"; };
+		7ADEF0000000000000000310 /* TandemCartridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TandemCartridgeTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -2081,6 +2089,7 @@
 			children = (
 				7ADEF0000000000000000100 /* TandemMicrobolusBasal.swift */,
 				7ADEF0000000000000000202 /* TandemNativeBasal.swift */,
+				7ADEF0000000000000000302 /* TandemCartridgeChange.swift */,
 				7ADEB000000000000000000A /* Bluetooth */,
 				7ADEB0000000000000000220 /* Crypto */,
 				7ADEB000000000000000000F /* Protocol */,
@@ -2121,6 +2130,7 @@
 				7ADEF0000000000000000014 /* TandemMessages.swift */,
 				7ADEF0000000000000000016 /* TandemControlMessages.swift */,
 				7ADEF000000000000000020A /* TandemJpakeMessages.swift */,
+				7ADEF0000000000000000300 /* TandemCartridgeMessages.swift */,
 				7ADEF0000000000000000018 /* TandemPumpSession.swift */,
 				7ADEF000000000000000020C /* TandemJpakeAuthenticator.swift */,
 			);
@@ -2134,6 +2144,7 @@
 				7ADEF000000000000000001D /* TandemPairingView.swift */,
 				7ADEF000000000000000001F /* TandemSettingsView.swift */,
 				7ADEF0000000000000000021 /* TandemUICoordinator.swift */,
+				7ADEF0000000000000000304 /* TandemCartridgeChangeView.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -3337,6 +3348,7 @@
 				D11E0000000000000000A010 /* DeliveryDiagnosticsTests.swift */,
 				3BAAE60B2DE776630049589B /* DynamicISFEnableTests.swift */,
 				7ADEF0000000000000000210 /* TandemCryptoTests.swift */,
+				7ADEF0000000000000000310 /* TandemCartridgeTests.swift */,
 				7ADEF0000000000000000212 /* TandemMobiTests.swift */,
 				FAB1E5000000000000000006 /* SafetyEnvelopeTests.swift */,
 				FAB1E5000000000000000047 /* DeliveryCapsTests.swift */,
@@ -5148,6 +5160,9 @@
 				7ADEE0000000000000000100 /* TandemMicrobolusBasal.swift in Sources */,
 				7ADEE0000000000000000200 /* TandemPumpModel.swift in Sources */,
 				7ADEE0000000000000000202 /* TandemNativeBasal.swift in Sources */,
+				7ADEE0000000000000000300 /* TandemCartridgeMessages.swift in Sources */,
+				7ADEE0000000000000000302 /* TandemCartridgeChange.swift in Sources */,
+				7ADEE0000000000000000304 /* TandemCartridgeChangeView.swift in Sources */,
 				7ADEE0000000000000000204 /* TandemBigUInt.swift in Sources */,
 				7ADEE0000000000000000206 /* TandemP256.swift in Sources */,
 				7ADEE0000000000000000208 /* TandemEcJpake.swift in Sources */,
@@ -5943,6 +5958,7 @@
 				BD8FC05B2D6618AF00B95AED /* DeterminationStorageTests.swift in Sources */,
 				3BAAE60C2DE7766C0049589B /* DynamicISFEnableTests.swift in Sources */,
 				7ADEE0000000000000000210 /* TandemCryptoTests.swift in Sources */,
+				7ADEE0000000000000000310 /* TandemCartridgeTests.swift in Sources */,
 				7ADEE0000000000000000212 /* TandemMobiTests.swift in Sources */,
 				FAB1E5000000000000000016 /* SafetyEnvelopeTests.swift in Sources */,
 				FAB1E5000000000000000057 /* DeliveryCapsTests.swift in Sources */,

@@ -209,6 +209,7 @@ final class TandemBluetoothManager: NSObject {
         case .currentStatus: return characteristics[TandemBLE.currentStatusCharacteristicUUID]
         case .authorization: return characteristics[TandemBLE.authorizationCharacteristicUUID]
         case .control: return characteristics[TandemBLE.controlCharacteristicUUID]
+        case .controlStream: return characteristics[TandemBLE.controlStreamCharacteristicUUID]
         case .historyLog: return characteristics[TandemBLE.historyLogCharacteristicUUID]
         }
     }
@@ -350,6 +351,7 @@ extension TandemBluetoothManager: CBPeripheralDelegate {
         case TandemBLE.currentStatusCharacteristicUUID: target = .currentStatus
         case TandemBLE.authorizationCharacteristicUUID: target = .authorization
         case TandemBLE.controlCharacteristicUUID: target = .control
+        case TandemBLE.controlStreamCharacteristicUUID: target = .controlStream
         case TandemBLE.historyLogCharacteristicUUID: target = .historyLog
         case TandemBLE.qualifyingEventsCharacteristicUUID:
             if value.count >= 4 {

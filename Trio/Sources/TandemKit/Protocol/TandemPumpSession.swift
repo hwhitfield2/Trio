@@ -40,6 +40,9 @@ protocol TandemPumpSessionDelegate: AnyObject {
     func sessionDidAuthenticate(_ session: TandemPumpSession)
     func session(_ session: TandemPumpSession, didReceiveQualifyingEvents events: TandemQualifyingEvents)
     func session(_ session: TandemPumpSession, didDisconnect error: Error?)
+    /// Unsolicited cartridge-change progress from the control-stream
+    /// characteristic. Already signature-verified.
+    func session(_ session: TandemPumpSession, didReceiveCartridgeEvent event: TandemCartridgeStreamEvent)
 }
 
 /// Request/response orchestration on top of the BLE transport: transaction
@@ -57,6 +60,7 @@ final class TandemPumpSession {
         .currentStatus: TandemResponseAccumulator(),
         .authorization: TandemResponseAccumulator(),
         .control: TandemResponseAccumulator(),
+        .controlStream: TandemResponseAccumulator(),
         .historyLog: TandemResponseAccumulator()
     ]
 
@@ -292,6 +296,18 @@ extension TandemPumpSession: TandemBluetoothManagerDelegate {
     }
 
     func bluetoothManager(_: TandemBluetoothManager, didReceive packet: Data, on characteristic: TandemCharacteristic) {
+        // Control-stream traffic is unsolicited: it never answers a pending
+        // request, so it is reassembled separately and handed straight to the
+        // delegate. Notify outside the lock — the delegate is free to call back
+        // into the session.
+        if characteristic == .controlStream {
+            let event = lock.perform { accumulateCartridgeEvent(packet: packet) }
+            if let event = event {
+                delegate?.session(self, didReceiveCartridgeEvent: event)
+            }
+            return
+        }
+
         lock.lock()
         defer { lock.unlock() }
 
@@ -335,5 +351,33 @@ extension TandemPumpSession: TandemBluetoothManagerDelegate {
 
     func bluetoothManager(_: TandemBluetoothManager, didReceiveQualifyingEvents events: TandemQualifyingEvents) {
         delegate?.session(self, didReceiveQualifyingEvents: events)
+    }
+
+    /// Reassemble one control-stream packet. Caller must hold `lock`.
+    ///
+    /// Stream frames are signed like any control response, so a frame that
+    /// fails its HMAC is dropped rather than acted on: cartridge progress
+    /// drives UI and pump-event recording, and forged progress could make Trio
+    /// believe a prime finished when it had not.
+    private func accumulateCartridgeEvent(packet: Data) -> TandemCartridgeStreamEvent? {
+        do {
+            guard let frame = try accumulators[.controlStream]?.accumulate(
+                packet: packet,
+                expectedTxId: nil,
+                signed: true,
+                authenticationKey: authenticationKey
+            ) else {
+                return nil // more packets needed
+            }
+            guard let event = TandemCartridgeStreamEvent(frame: frame) else {
+                log.info("Ignoring unmodelled control-stream opcode \(frame.opcode)")
+                return nil
+            }
+            return event
+        } catch {
+            log.error("Control-stream packet rejected: \(error.localizedDescription)")
+            accumulators[.controlStream]?.reset()
+            return nil
+        }
     }
 }
