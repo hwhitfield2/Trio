@@ -461,10 +461,12 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     /// after an hour, and a test button re-tries immediately.
     var annunciationRefused: Bool { state.annunciationRefusalActive }
 
+    /// One "round" is the pump's own fixed burst — two beeps and two
+    /// vibrations, as measured on a real Mobi — because that is the only unit
+    /// the pump offers.
     func describePattern(_ kind: TandemGlucoseAlarmKind) -> String {
         let pattern = TandemAnnunciationPattern.pattern(for: kind)
-        let seconds = TandemPumpState.doseText(pattern.gap)
-        return String(localized: "\(pattern.pulses) buzzes, \(seconds) s apart")
+        return String(localized: "\(pattern.bursts) rounds of beeps")
     }
 
     /// Play one of the patterns on demand. The point of the test is that the
@@ -1110,7 +1112,7 @@ struct TandemSettingsView: View {
 
     private var glucoseAlarmFooter: String {
         String(
-            localized: "Uses Trio's own low and high alarms — the same thresholds, snooze and once-per-reading rule as the phone alert, so the pump never buzzes for something the phone stayed quiet about. Trio connects to the pump to deliver it rather than waiting for the next check-in, and never buzzes more than once every five minutes. Whether that comes out as a buzz, a beep or nothing at all is the pump's own Sound setting, not Trio's — set it to Vibrate in \(viewModel.elsewhereName). This command has not been verified against a real pump, and a pump that refuses it is not a fault you can fix here — use the test buttons before relying on it."
+            localized: "Uses Trio's own low and high alarms — the same thresholds, snooze and once-per-reading rule as the phone alert, so the pump never sounds for something the phone stayed quiet about. Each round is the pump's own fixed beep-and-vibrate burst; the pump offers no other sound, so the two alarms differ by how many rounds play. Trio connects to the pump to deliver it rather than waiting for the next check-in, never more than once every five minutes, and paces the rounds to the pump's own rhythm. Use the test buttons to learn the two apart before relying on them."
         )
     }
 

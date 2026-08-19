@@ -16,25 +16,21 @@ enum TandemGlucoseAlarmKind: String, Codable, CaseIterable {
 
 /// How a glucose alarm is spelled out on the pump.
 ///
-/// `PlaySound` has no parameters at all — no pattern, no duration, no tone —
-/// so the only thing that can distinguish one alarm from another is how many
-/// times Trio asks and how far apart it asks. Both fields differ between low
-/// and high on purpose: count alone is easy to miscount through a shirt, and
-/// rhythm alone is easy to miss, so the two patterns differ in both.
+/// Field-verified on a real Mobi: one accepted `PlaySound` plays one FIXED
+/// burst — two beeps and two vibrations — and while that burst is playing the
+/// pump answers the next request with status 1. There is no pattern, tone or
+/// duration parameter, and gaps shorter than the burst are simply swallowed.
+/// So the only audible knob is HOW MANY bursts are played, paced at whatever
+/// rhythm the pump itself allows.
 struct TandemAnnunciationPattern: Equatable {
-    let pulses: Int
-    /// Quiet time after one pulse is acknowledged before the next is sent.
-    ///
-    /// Measured from the END of the previous round trip, not its start, because
-    /// that is all a serial command queue can promise — the real rhythm is this
-    /// plus however long the pump took to answer. Both patterns pay the same
-    /// round trip, so they stay tellable apart regardless.
-    let gap: TimeInterval
+    /// How many of the pump's fixed beep-and-vibrate bursts to play.
+    let bursts: Int
 
-    /// Low is urgent: three pulses, close together.
-    static let low = TandemAnnunciationPattern(pulses: 3, gap: 1.0)
-    /// High is not: two pulses, spaced out.
-    static let high = TandemAnnunciationPattern(pulses: 2, gap: 3.0)
+    /// Low is two bursts and high is three — chosen by ear against a real
+    /// Mobi. The phone alert still carries the urgency; the pump's job is
+    /// only to be tellable apart through a pocket.
+    static let low = TandemAnnunciationPattern(bursts: 2)
+    static let high = TandemAnnunciationPattern(bursts: 3)
 
     static func pattern(for kind: TandemGlucoseAlarmKind) -> TandemAnnunciationPattern {
         switch kind {
@@ -43,9 +39,18 @@ struct TandemAnnunciationPattern: Equatable {
         }
     }
 
-    /// Roughly how long the whole pattern takes, ignoring BLE round trips.
-    var nominalDuration: TimeInterval {
-        gap * Double(max(0, pulses - 1))
+    /// Pause after an accepted burst before asking for the next one.
+    static let interBurstDelay: TimeInterval = 4
+
+    /// The pump refuses a request that lands while it is still playing —
+    /// status 1 is its pacing, not a rejection — so a refused burst is retried
+    /// on this cadence, up to the cap, instead of being treated as a failure.
+    static let busyRetryDelay: TimeInterval = 2.5
+    static let maxBusyRetries = 6
+
+    /// Longest a pattern can take with every retry spent, for sanity tests.
+    var worstCaseDuration: TimeInterval {
+        Double(bursts) * (Self.interBurstDelay + Self.busyRetryDelay * Double(Self.maxBusyRetries))
     }
 }
 
@@ -94,8 +99,13 @@ extension TandemPumpManager {
             }
             self.state.lastAnnunciationAt = Date.now
             let pattern = TandemAnnunciationPattern.pattern(for: kind)
-            self.log.info("Annunciating \(kind.rawValue): \(pattern.pulses) pulses \(pattern.gap)s apart")
-            self.playAnnunciationPulse(remaining: pattern.pulses, gap: pattern.gap, canRekey: true)
+            self.log.info("Annunciating \(kind.rawValue): \(pattern.bursts) bursts")
+            self.playAnnunciationBurst(
+                remaining: pattern.bursts,
+                anyPlayed: false,
+                canRekey: true,
+                busyRetries: TandemAnnunciationPattern.maxBusyRetries
+            )
         }
     }
 
@@ -229,13 +239,18 @@ extension TandemPumpManager {
         notifyStateDidChange()
     }
 
-    /// Play one pulse and schedule the next. commandQueue only.
+    /// Play one burst and schedule the next. commandQueue only.
     ///
-    /// A refusal gets ONE second chance, over a torn-down and re-keyed link —
-    /// the failure mode the field has actually produced is a stale signing key,
-    /// which that cures. A pump that refuses the re-keyed attempt too gets left
-    /// alone for an hour.
-    private func playAnnunciationPulse(remaining: Int, gap: TimeInterval, canRekey: Bool) {
+    /// Three different "no"s get three different treatments:
+    /// - a refusal while a burst is (or may be) still playing is the pump's
+    ///   pacing, so the same burst is retried on a short cadence;
+    /// - a refusal on a pattern that has not produced a single burst gets ONE
+    ///   fresh-handshake retry (the stale-signing-key cure), and only if that
+    ///   also fails does the hour-long suppression arm — a pattern that has
+    ///   already sounded must NEVER suppress alarms just because its last
+    ///   burst landed in a busy window;
+    /// - a transport failure stops the pattern quietly.
+    private func playAnnunciationBurst(remaining: Int, anyPlayed: Bool, canRekey: Bool, busyRetries: Int) {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         guard remaining > 0 else { return }
 
@@ -243,42 +258,63 @@ extension TandemPumpManager {
         defer {
             for note in notes { log.info("Annunciation \(note)") }
         }
-        switch sendOnePulse("pulse", notes: &notes) {
+        switch sendOnePulse("burst", notes: &notes) {
         case .accepted:
-            break
+            guard remaining > 1 else { return }
+            commandQueue.asyncAfter(deadline: .now() + TandemAnnunciationPattern.interBurstDelay) { [weak self] in
+                self?.playAnnunciationBurst(
+                    remaining: remaining - 1,
+                    anyPlayed: true,
+                    canRekey: false,
+                    busyRetries: TandemAnnunciationPattern.maxBusyRetries
+                )
+            }
         case let .refused(reason):
+            if busyRetries > 0 {
+                commandQueue.asyncAfter(deadline: .now() + TandemAnnunciationPattern.busyRetryDelay) { [weak self] in
+                    self?.playAnnunciationBurst(
+                        remaining: remaining,
+                        anyPlayed: anyPlayed,
+                        canRekey: canRekey,
+                        busyRetries: busyRetries - 1
+                    )
+                }
+                return
+            }
+            if anyPlayed {
+                // The pattern sounded; losing a tail burst to a stubborn busy
+                // window is a cosmetic miss, not a reason to disarm alarms.
+                log.error("Annunciation ended \(remaining) burst(s) early: still refused (\(reason))")
+                return
+            }
             guard canRekey else {
                 suppressAnnunciations(reason: reason)
                 return
             }
-            if reauthenticateOverFreshLink(notes: &notes) != nil {
+            if let error = reauthenticateOverFreshLink(notes: &notes) {
+                log.error("Annunciation stopped: re-key failed (\(error.localizedDescription))")
                 return
             }
-            playAnnunciationPulse(remaining: remaining, gap: gap, canRekey: false)
-            return
+            playAnnunciationBurst(
+                remaining: remaining,
+                anyPlayed: false,
+                canRekey: false,
+                busyRetries: TandemAnnunciationPattern.maxBusyRetries
+            )
         case .failed:
             return
-        }
-
-        guard remaining > 1 else { return }
-        commandQueue.asyncAfter(deadline: .now() + gap) { [weak self] in
-            self?.playAnnunciationPulse(remaining: remaining - 1, gap: gap, canRekey: false)
         }
     }
 
     /// Play a pattern from the settings screen so the user can hear (or feel)
     /// the difference between the two before relying on it.
     ///
-    /// This is a PROBE, not just a button: it records every stage with a
-    /// timestamp — connect, authenticate, time refresh, the command, the
-    /// re-key, the second attempt — and hands the whole transcript back on any
-    /// failure. The command is unverified against real hardware, so the
-    /// transcript IS the finding; a bare "timed out" from an unknown stage is
-    /// what this replaces.
-    ///
-    /// Any first-attempt failure gets one retry over a torn-down, re-keyed
-    /// link: a refusal because that cures a stale signing key, a timeout
-    /// because the link may be dead in a way `isConnected` has not noticed yet.
+    /// This is a PROBE, not just a button: it records every stage with its
+    /// outcome and hands the whole transcript back on any failure. A refusal on
+    /// the first burst gets a few short "the pump may still be playing the last
+    /// sound" retries, then one fresh-handshake retry, before it is treated as
+    /// real. Success completes once the FIRST burst is accepted; the rest of
+    /// the pattern plays on behind it, paced by the pump's own busy answers.
     func testAnnunciation(_ kind: TandemGlucoseAlarmKind, completion: @escaping ((any LocalizedError)?) -> Void) {
         guard state.glucoseAnnunciationEnabled else {
             completion(TandemAnnunciationError.notEnabled)
@@ -302,6 +338,17 @@ extension TandemPumpManager {
 
             var outcome = self.sendOnePulse("attempt 1", notes: &notes)
 
+            // A refusal right after another sound — a double-tapped test, an
+            // alarm burst still playing — is the pump's pacing. Give it a few
+            // short waits before treating the refusal as real.
+            var busyRetries = 3
+            while case .refused = outcome, busyRetries > 0 {
+                notes.append("waiting — the pump refuses while a sound is still playing")
+                Thread.sleep(forTimeInterval: TandemAnnunciationPattern.busyRetryDelay)
+                busyRetries -= 1
+                outcome = self.sendOnePulse("busy retry", notes: &notes)
+            }
+
             if case .accepted = outcome {} else {
                 // Whatever went wrong, note what the pump says about itself
                 // while we are still on the original link — unsigned reads
@@ -321,12 +368,19 @@ extension TandemPumpManager {
 
             switch outcome {
             case .accepted:
-                // The first pulse is the one that proves the pump accepts the
-                // command; the rest are the pattern, and are best effort.
+                // The first burst proves the pump accepts the command; the rest
+                // of the pattern is best effort, paced by the pump.
                 self.state.lastAnnunciationAt = Date.now
-                if pattern.pulses > 1 {
-                    self.commandQueue.asyncAfter(deadline: .now() + pattern.gap) { [weak self] in
-                        self?.playAnnunciationPulse(remaining: pattern.pulses - 1, gap: pattern.gap, canRekey: false)
+                if pattern.bursts > 1 {
+                    self.commandQueue.asyncAfter(
+                        deadline: .now() + TandemAnnunciationPattern.interBurstDelay
+                    ) { [weak self] in
+                        self?.playAnnunciationBurst(
+                            remaining: pattern.bursts - 1,
+                            anyPlayed: true,
+                            canRekey: false,
+                            busyRetries: TandemAnnunciationPattern.maxBusyRetries
+                        )
                     }
                 }
                 finish(nil)

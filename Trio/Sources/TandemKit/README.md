@@ -428,13 +428,17 @@ duration, no tone, and no say in whether it comes out as a buzz or a beep —
 that follows the pump's own Sound setting. It is not `modifiesInsulinDelivery`,
 so like the notification dismissal it sits outside the delivery opt-in.
 
-So "low feels different from high" cannot be asked of the pump; it has to be
-built out of the only two things Trio controls, **how many times it asks and how
-far apart**. `TandemGlucoseAnnunciation.swift` defines low as three pulses a
-second apart and high as two pulses three seconds apart. Both dimensions differ
-on purpose and a test asserts they always will: counting buzzes through a
-pocket is unreliable and so is judging one gap in isolation, so neither alone is
-enough to tell two alarms apart.
+So "low feels different from high" cannot be asked of the pump. Field testing
+on a real Mobi pinned down what one accepted `PlaySound` actually does: it
+plays **one fixed burst — two beeps and two vibrations** — and while that burst
+is playing, the pump answers the next request with **status 1**. That status is
+the pump's pacing, not a rejection, and gaps shorter than the burst are simply
+swallowed. The only audible knob is therefore how many bursts play:
+`TandemGlucoseAnnunciation.swift` plays two for a low and three for a high
+(chosen by ear against the real pump), retrying a busy-refused burst on a short
+cadence instead of guessing a gap. Only a pattern that never produced a single
+burst counts as a real refusal; a busy refusal on a tail burst must never arm
+the hour-long suppression, or every alarm would disarm the next one.
 
 The alarm itself is not re-derived. `BaseUserNotificationsManager` already
 decides what counts as a low or high — the thresholds, the snooze, and the

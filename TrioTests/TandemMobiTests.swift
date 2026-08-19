@@ -543,29 +543,32 @@ private extension Data {
         #expect(throws: TandemMessageError.self) { try TandemPlaySoundResponse(cargo: Data()) }
     }
 
-    @Test("Low and high differ in both count and rhythm") func patternsAreDistinguishable() {
+    @Test("Low and high differ by burst count, the pump's only audible knob") func patternsAreDistinguishable() {
         let low = TandemAnnunciationPattern.pattern(for: .low)
         let high = TandemAnnunciationPattern.pattern(for: .high)
 
-        // Either dimension alone is easy to miss through a pocket: counting
-        // buzzes is unreliable, and so is judging a gap in isolation. Both must
-        // differ, or the two alarms are not actually tellable apart.
-        #expect(low.pulses != high.pulses)
-        #expect(low.gap != high.gap)
+        // Field-measured: one accepted PlaySound is one fixed burst (two beeps
+        // and two vibrations), and requests that land while it plays are
+        // refused. Rhythm is therefore not controllable — burst count is the
+        // whole difference, so the two counts must differ and stay small
+        // enough to count through a pocket.
+        #expect(low.bursts == 2)
+        #expect(high.bursts == 3)
+        #expect(low.bursts != high.bursts)
 
-        // Low is the urgent one: more buzzes, closer together.
-        #expect(low.pulses > high.pulses)
-        #expect(low.gap < high.gap)
-
-        // And neither pattern may drag on so long it is still buzzing at the
-        // next CGM reading.
-        #expect(low.nominalDuration < .minutes(1))
-        #expect(high.nominalDuration < .minutes(1))
+        // And neither pattern may drag on so long it is still sounding at the
+        // next CGM reading, even with every busy retry spent.
+        #expect(low.worstCaseDuration < .minutes(2))
+        #expect(high.worstCaseDuration < .minutes(2))
     }
 
-    @Test("A single pulse has no gap to wait out") func singlePulseDuration() {
-        #expect(TandemAnnunciationPattern(pulses: 1, gap: 5).nominalDuration == 0)
-        #expect(TandemAnnunciationPattern(pulses: 3, gap: 2).nominalDuration == 4)
+    @Test("Busy pacing is bounded") func busyPacingBounds() {
+        // The pump refuses a request while a burst is still playing; the retry
+        // budget must outlast one burst comfortably without hammering the pump.
+        let budget = TandemAnnunciationPattern.busyRetryDelay * Double(TandemAnnunciationPattern.maxBusyRetries)
+        #expect(budget >= 10)
+        #expect(budget <= 30)
+        #expect(TandemAnnunciationPattern.interBurstDelay > 0)
     }
 
     @Test("The opt-in persists and the rate-limit clock does not") func statePersistence() {
@@ -618,7 +621,7 @@ private extension Data {
     @Test("Every alarm kind has a pattern and a name") func kindCoverage() {
         for kind in TandemGlucoseAlarmKind.allCases {
             #expect(!kind.localizedTitle.isEmpty)
-            #expect(TandemAnnunciationPattern.pattern(for: kind).pulses > 0)
+            #expect(TandemAnnunciationPattern.pattern(for: kind).bursts > 0)
         }
         #expect(TandemGlucoseAlarmKind.allCases.count == 2)
     }
