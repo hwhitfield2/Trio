@@ -479,10 +479,15 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                     self.annunciationResult = (false, error.localizedDescription)
                 } else {
                     TandemHaptics.success()
+                    // Deliberately does not claim it worked. The pump answering
+                    // "accepted" says nothing about whether anything was
+                    // audible — PlaySound has no volume of its own — and
+                    // reporting success for a silent pump is how someone ends
+                    // up trusting an alarm that never reaches them.
                     self.annunciationResult = (
                         true,
                         String(
-                            localized: "Sent. The pump should have played the \(kind.localizedTitle.lowercased()) pattern: \(self.describePattern(kind))."
+                            localized: "The pump accepted the command and should be playing the \(kind.localizedTitle.lowercased()) pattern: \(self.describePattern(kind)). If you felt and heard nothing, the pump decided that, not Trio — this command has no volume of its own and follows the pump's own Sound setting. Check it in \(self.elsewhereName)."
                         )
                     )
                 }
@@ -1072,10 +1077,12 @@ struct TandemSettingsView: View {
                 if let result = viewModel.annunciationResult {
                     TandemCallout(
                         title: result.success
-                            ? String(localized: "Sent to the pump")
-                            : String(localized: "The pump did not buzz"),
+                            ? String(localized: "The pump accepted it")
+                            : String(localized: "The pump did not accept it"),
                         message: result.message,
-                        tone: result.success ? .ok : .critical
+                        // Not `.ok`: the pump accepting a command is not the
+                        // same as the user having felt it.
+                        tone: result.success ? .info : .critical
                     )
                 }
             }
@@ -1089,7 +1096,7 @@ struct TandemSettingsView: View {
 
     private var glucoseAlarmFooter: String {
         String(
-            localized: "Uses Trio's own low and high alarms — the same thresholds, snooze and once-per-reading rule as the phone alert, so the pump never buzzes for something the phone stayed quiet about. It only buzzes while the pump is already connected, and never more than once every five minutes. Whether it buzzes or beeps is the pump's own Sound setting, not Trio's — set it to Vibrate in \(viewModel.elsewhereName) if you want a buzz. This command has not been verified against a real pump; use the test buttons before relying on it."
+            localized: "Uses Trio's own low and high alarms — the same thresholds, snooze and once-per-reading rule as the phone alert, so the pump never buzzes for something the phone stayed quiet about. Trio connects to the pump to deliver it rather than waiting for the next check-in, and never buzzes more than once every five minutes. Whether that comes out as a buzz, a beep or nothing at all is the pump's own Sound setting, not Trio's — set it to Vibrate in \(viewModel.elsewhereName). This command has not been verified against a real pump; use the test buttons before relying on it."
         )
     }
 

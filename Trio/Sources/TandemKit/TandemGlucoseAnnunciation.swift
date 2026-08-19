@@ -64,9 +64,10 @@ extension TandemPumpManager {
     /// reason something that moves insulin was slow.
     ///
     /// - It does nothing unless the user opted in.
-    /// - It does nothing unless the pump is **already connected**. Waking a pump
-    ///   to buzz it would tie up the command queue for the whole connect
-    ///   timeout, and the phone has already alarmed by then anyway.
+    /// - It **connects if it has to**. An alarm that only reaches the pump when
+    ///   the radio link happens to be up is an alarm you cannot rely on, and
+    ///   between loop cycles the link often is not up. The rate limit below is
+    ///   what stops that from meaning "wake the pump constantly".
     /// - Each pulse is scheduled as its own item on `commandQueue` rather than
     ///   held in a single blocking loop, so a temp basal or a bolus enqueued
     ///   during a pattern waits for one pulse's round trip instead of the whole
@@ -76,13 +77,11 @@ extension TandemPumpManager {
     ///   answering.
     func annunciateGlucoseAlarm(_ kind: TandemGlucoseAlarmKind) {
         guard state.glucoseAnnunciationEnabled else { return }
-        guard bluetooth.isConnected else {
-            log.info("Skipping \(kind.rawValue) annunciation: pump is not connected")
-            return
-        }
 
         commandQueue.async { [weak self] in
             guard let self = self else { return }
+            // Checked before connecting, so a rate-limited alarm never wakes the
+            // pump just to be dropped.
             if let last = self.state.lastAnnunciationAt,
                Date.now.timeIntervalSince(last) < Self.minimumAnnunciationInterval
             {
@@ -101,10 +100,11 @@ extension TandemPumpManager {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         guard remaining > 0 else { return }
 
-        // Re-check rather than assume: a pattern takes seconds, and the pump can
-        // go out of range in the middle of one.
-        guard bluetooth.isConnected else {
-            log.info("Annunciation stopped: pump went out of range")
+        // Connects when it has to and is a cheap no-op when the link is already
+        // up, so the same call covers both the first pulse and a pump that
+        // dropped out mid-pattern.
+        if let error = ensureConnectedAndAuthenticated() {
+            log.error("Annunciation stopped: \(error.localizedDescription)")
             return
         }
         if case let .failure(error) = session.refreshTimeSinceReset() {
@@ -114,9 +114,13 @@ extension TandemPumpManager {
         switch session.send(TandemPlaySoundRequest()) {
         case let .success(response):
             if response.status != 0 {
-                log.error("PlaySound rejected with status \(response.status); stopping the pattern")
+                log.error("PlaySound refused with status \(response.status); stopping the pattern")
                 return
             }
+            // Status 0 is pumpX2's documented success. It says the pump ACCEPTED
+            // the command, not that anything was audible: PlaySound has no
+            // volume of its own and follows the pump's Sound settings.
+            log.info("PlaySound accepted (status 0)")
         case let .failure(error):
             log.error("PlaySound failed: \(error.localizedDescription); stopping the pattern")
             return
@@ -132,15 +136,11 @@ extension TandemPumpManager {
     /// the difference between the two before relying on it.
     ///
     /// Unlike the real thing this ignores the rate limit — the user is standing
-    /// there asking for it — but it still requires the opt-in and a live
-    /// connection, and it reports what happened instead of failing silently.
+    /// there asking for it — but it still requires the opt-in, connects the same
+    /// way, and reports what happened instead of failing silently.
     func testAnnunciation(_ kind: TandemGlucoseAlarmKind, completion: @escaping ((any LocalizedError)?) -> Void) {
         guard state.glucoseAnnunciationEnabled else {
             completion(TandemAnnunciationError.notEnabled)
-            return
-        }
-        guard bluetooth.isConnected else {
-            completion(TandemAnnunciationError.notConnected)
             return
         }
         commandQueue.async { [weak self] in
@@ -179,20 +179,19 @@ extension TandemPumpManager {
 
 enum TandemAnnunciationError: LocalizedError {
     case notEnabled
-    case notConnected
     case rejected(status: UInt8)
 
     var errorDescription: String? {
         switch self {
         case .notEnabled:
             return String(localized: "Buzzing the pump for glucose alarms is turned off.")
-        case .notConnected:
-            return String(
-                localized: "Trio is not connected to the pump right now, so it cannot buzz it. Bring the pump closer and try again."
-            )
         case let .rejected(status):
+            // pumpX2's StatusMessage documents 0 as success, so anything else is
+            // the pump saying no. The number is worth quoting: this command has
+            // never been sent to a real pump by anyone, so which value comes
+            // back is itself the finding.
             return String(
-                localized: "The pump refused to play a sound (status \(Int(status))). This command has not been verified against a real pump, so it may simply not be supported by your pump's software."
+                localized: "The pump refused to play a sound and answered status \(Int(status)). This command has not been verified against a real pump, so your pump's software may not support it."
             )
         }
     }

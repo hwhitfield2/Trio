@@ -444,9 +444,11 @@ about.
 
 Three things keep it from becoming a therapy problem:
 
-- **It never wakes the pump.** If the radio link is not already up the buzz is
-  skipped, because connecting would tie up the command queue for the whole
-  connect timeout and the phone has already alarmed by then.
+- **It connects if it has to.** An alarm that only lands when the radio link
+  happens to be up is one you cannot rely on, and between loop cycles it often
+  is not up, so the annunciation goes through `ensureConnectedAndAuthenticated`
+  like any other command. The rate limit below is what keeps that from meaning
+  "wake the pump constantly".
 - **Each pulse is its own queue item.** A pattern is scheduled as
   `commandQueue.asyncAfter` between pulses rather than held in one blocking
   loop, so a temp basal or bolus enqueued mid-pattern waits for one pulse's
@@ -459,6 +461,14 @@ the encoding is transcribed and the behaviour is unverified — the same standin
 as the cartridge flow. The settings screen therefore offers a test button per
 pattern, which is both how the user learns the difference and how they find out
 whether their pump answers the command at all.
+
+One distinction the screen is careful about: pumpX2's `StatusMessage` documents
+**status 0 as success**, and success means the pump *accepted* the command — not
+that anything was audible. `PlaySound` carries no volume of its own, so a pump
+whose Sound setting silences that category will answer status 0 and do nothing.
+The test result says exactly that rather than claiming it worked, because
+reporting success for a silent pump is how someone ends up trusting an alarm
+that never reaches them.
 
 pumpX2 also defines `SetPumpSounds`, which can set the pump's annunciation
 preference per category (quick bolus, general, reminder, alert, alarm, CGM
