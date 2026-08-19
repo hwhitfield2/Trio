@@ -516,3 +516,87 @@ struct TandemQualifyingEvents: OptionSet {
     static let basalChange = TandemQualifyingEvents(rawValue: 512)
     static let bolusChange = TandemQualifyingEvents(rawValue: 1024)
 }
+
+/// The pump's global settings — read here for the seven annunciation modes,
+/// which say whether each category of pump feedback is a tone (at one of three
+/// volumes) or a vibration.
+///
+/// Unsigned, current-status, free to read. The annunciation fields matter to
+/// the glucose-alarm probe: the pump has refused `PlaySound` (status 1) with a
+/// valid signature, insulin running and no alarms, and the leading suspect is
+/// a pump-side sound-mode gate. These fields are how that gets confirmed or
+/// eliminated from a field report.
+struct TandemPumpGlobalsRequest: TandemRequest {
+    typealias Response = TandemPumpGlobalsResponse
+    static let opcode: UInt8 = 86
+}
+
+/// One of the pump's annunciation modes, per pumpX2's `AnnunciationEnum`.
+enum TandemAnnunciationMode: UInt8 {
+    case audioHigh = 0
+    case audioMedium = 1
+    case audioLow = 2
+    case vibrate = 3
+
+    var localizedDescription: String {
+        switch self {
+        case .audioHigh: return String(localized: "loud")
+        case .audioMedium: return String(localized: "medium")
+        case .audioLow: return String(localized: "quiet")
+        case .vibrate: return String(localized: "vibrate")
+        }
+    }
+}
+
+struct TandemPumpGlobalsResponse: TandemResponse {
+    static let opcode: UInt8 = 87
+
+    let quickBolusEnabled: Bool
+    let buttonAnnunId: UInt8
+    let quickBolusAnnunId: UInt8
+    let bolusAnnunId: UInt8
+    let reminderAnnunId: UInt8
+    let alertAnnunId: UInt8
+    let alarmAnnunId: UInt8
+    let fillTubingAnnunId: UInt8
+
+    init(cargo: Data) throws {
+        guard cargo.count >= 14 else {
+            throw TandemMessageError.unexpectedCargoSize(message: "PumpGlobalsResponse", expected: 14, actual: cargo.count)
+        }
+        let bytes = [UInt8](cargo)
+        quickBolusEnabled = bytes[0] == 1
+        // bytes 1-6 are quick-bolus increments and entry type, not needed here.
+        buttonAnnunId = bytes[7]
+        quickBolusAnnunId = bytes[8]
+        bolusAnnunId = bytes[9]
+        reminderAnnunId = bytes[10]
+        alertAnnunId = bytes[11]
+        alarmAnnunId = bytes[12]
+        fillTubingAnnunId = bytes[13]
+    }
+
+    private static func name(_ id: UInt8) -> String {
+        TandemAnnunciationMode(rawValue: id)?.localizedDescription ?? String(localized: "mode \(Int(id))")
+    }
+
+    /// "button vibrate, bolus quiet, alarm loud, …" — one line for the probe's
+    /// pump-state report.
+    var localizedSoundSummary: String {
+        let pairs: [(String, UInt8)] = [
+            (String(localized: "button"), buttonAnnunId),
+            (String(localized: "bolus"), bolusAnnunId),
+            (String(localized: "reminder"), reminderAnnunId),
+            (String(localized: "alert"), alertAnnunId),
+            (String(localized: "alarm"), alarmAnnunId)
+        ]
+        return pairs.map { "\($0.0) \(Self.name($0.1))" }.joined(separator: ", ")
+    }
+
+    /// True when every category is vibration — the configuration most likely
+    /// to make the pump decline to play a speaker tone.
+    var allVibrate: Bool {
+        [buttonAnnunId, bolusAnnunId, reminderAnnunId, alertAnnunId, alarmAnnunId]
+            .allSatisfy { $0 == TandemAnnunciationMode.vibrate.rawValue }
+    }
+}

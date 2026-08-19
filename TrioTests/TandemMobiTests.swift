@@ -623,3 +623,40 @@ private extension Data {
         #expect(TandemGlucoseAlarmKind.allCases.count == 2)
     }
 }
+
+@Suite("Tandem pump globals") struct TandemPumpGlobalsTests {
+    @Test("PumpGlobals matches the reverse-engineered protocol") func messageShape() {
+        #expect(TandemPumpGlobalsRequest.opcode == 86)
+        #expect(TandemPumpGlobalsResponse.opcode == 87)
+        #expect(!TandemPumpGlobalsRequest.signed)
+        #expect(TandemPumpGlobalsRequest.characteristic == .currentStatus)
+        #expect(TandemPumpGlobalsRequest().cargo.isEmpty)
+    }
+
+    @Test("Parses the annunciation modes out of the globals") func parsing() throws {
+        // Layout per pumpX2 PumpGlobalsResponse: quickBolusEnabled, increment
+        // (2+2 bytes), entry type, status, then seven annunciation ids —
+        // button, quick bolus, bolus, reminder, alert, alarm, fill tubing.
+        let cargo = Data([1, 0xF4, 0x01, 0, 0, 0, 0, 3, 3, 2, 1, 0, 3, 2])
+        let globals = try TandemPumpGlobalsResponse(cargo: cargo)
+        #expect(globals.quickBolusEnabled)
+        #expect(globals.buttonAnnunId == 3)
+        #expect(globals.bolusAnnunId == 2)
+        #expect(globals.reminderAnnunId == 1)
+        #expect(globals.alertAnnunId == 0)
+        #expect(globals.alarmAnnunId == 3)
+        #expect(globals.fillTubingAnnunId == 2)
+        #expect(!globals.allVibrate)
+
+        let summary = globals.localizedSoundSummary
+        #expect(summary.contains("button vibrate"))
+        #expect(summary.contains("alert loud"))
+
+        // Every category on vibrate — the configuration suspected of making
+        // the pump decline to play a tone.
+        let quiet = try TandemPumpGlobalsResponse(cargo: Data([0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3]))
+        #expect(quiet.allVibrate)
+
+        #expect(throws: TandemMessageError.self) { try TandemPumpGlobalsResponse(cargo: Data(count: 13)) }
+    }
+}

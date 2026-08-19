@@ -197,6 +197,12 @@ extension TandemPumpManager {
 
     /// What the pump says about itself right after a refusal, for the log and
     /// for the test button's result. One line, cheap unsigned reads only.
+    ///
+    /// The sound modes are in here because they are the leading suspect: the
+    /// pump has refused `PlaySound` with a valid signature, insulin running and
+    /// no alarms, and a Mobi set to vibrate-everything may simply decline to
+    /// play a speaker tone. Whether that is true is exactly what one field
+    /// report of this line answers.
     private func annunciationPumpContext() -> String {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         var parts: [String] = []
@@ -209,6 +215,9 @@ extension TandemPumpManager {
         }
         if let alarms = readActiveAlarms()?.localizedNames {
             parts.append(String(localized: "alarming: \(alarms)"))
+        }
+        if case let .success(globals) = session.send(TandemPumpGlobalsRequest()) {
+            parts.append(String(localized: "sounds: \(globals.localizedSoundSummary)"))
         }
         return parts.isEmpty ? String(localized: "no state reading") : parts.joined(separator: ", ")
     }

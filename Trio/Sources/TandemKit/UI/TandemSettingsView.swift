@@ -1082,7 +1082,7 @@ struct TandemSettingsView: View {
                     TandemCallout(
                         title: String(localized: "The pump refused the last buzz"),
                         message: String(
-                            localized: "It refused even after Trio reconnected with a fresh key, so Trio is leaving it alone for an hour rather than waking it to be refused again. The phone alert is unaffected. A test button asks again immediately."
+                            localized: "It refused even after Trio reconnected with a fresh key, so Trio is leaving it alone for an hour rather than waking it to be refused again. The phone alert is unaffected. Two things worth trying: check the pump's sound setting in the Tandem Mobi app (a pump set to vibrate may decline to play a tone), and try that app's own Find My Pump — if the official feature cannot make your pump sound either, no command from Trio will. A test button here asks again immediately."
                         ),
                         tone: .caution
                     )
