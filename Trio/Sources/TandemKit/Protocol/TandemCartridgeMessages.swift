@@ -506,6 +506,10 @@ struct TandemAlertStatusResponse: TandemResponse {
         bitmask = cargo.tandemUInt64(at: 0)
     }
 
+    init(bitmask: UInt64) {
+        self.bitmask = bitmask
+    }
+
     var activeBits: [Int] {
         (0 ..< 64).filter { bitmask & (1 << UInt64($0)) != 0 }
     }
@@ -526,6 +530,17 @@ struct TandemAlertStatusResponse: TandemResponse {
         var seen = Set<String>()
         let names = activeBits.compactMap { Self.loadRelated[$0] }.filter { seen.insert($0).inserted }
         return names.isEmpty ? nil : names.joined(separator: " + ")
+    }
+
+    /// The procedural leftovers of a load: started-but-not-finished alerts
+    /// the pump raises when a change, fill or prime stops halfway, and which
+    /// then block resuming delivery. These are the only alerts the cartridge
+    /// screen clears — a Low Insulin alert is a real warning about the
+    /// cartridge's contents, not a leftover, and is never dismissed.
+    static let incompleteLoadBits: Set<Int> = [13, 14, 15, 49]
+
+    var incompleteLoadAlertBits: [Int] {
+        activeBits.filter { Self.incompleteLoadBits.contains($0) }
     }
 }
 

@@ -142,20 +142,22 @@ struct TandemCartridgeChangeView: View {
         }
     }
 
-    /// Shown when the pump reports an alarm the change itself addresses. The
-    /// pump refuses to start anything while alarming, so this is step zero.
+    /// Shown when the pump reports an alarm or leftover load alert the change
+    /// itself addresses. The pump refuses to start anything while alarming,
+    /// and refuses to resume over an incomplete-load alert, so this is step
+    /// zero.
     private var alarmSection: some View {
         Section(
             header: Text("Pump alarm"),
             footer: Text(
-                "The pump will not start a cartridge change while it is alarming. Acknowledging clears the alarm — the same as tapping OK in the pump's own app — and then the change can start. Only this alarm is acknowledged; nothing else on the pump changes."
+                "The pump blocks operations while these stand — an alarm stops a change from starting, and a leftover \"incomplete\" alert from an interrupted load stops insulin from resuming. Acknowledging clears them, the same as tapping OK in the pump's own app. Nothing else on the pump changes; warnings like Low Insulin are never cleared by Trio."
             )
         ) {
             if let names = viewModel.alarmNames {
                 Button {
                     viewModel.acknowledgeAlarms()
                 } label: {
-                    buttonLabel(String(localized: "Acknowledge \(names) alarm"))
+                    buttonLabel(String(localized: "Acknowledge: \(names)"))
                 }
                 .disabled(viewModel.busy)
             }

@@ -228,6 +228,14 @@ Cancelling is stage-aware for the same reason: only a pump still in change
 mode has a mode to exit; sending the exit later would not cancel anything,
 it would ask the pump to detect whatever cartridge is present.
 
+An interrupted load leaves **started-but-unfinished alerts** behind
+(Incomplete Cartridge Change / Fill Tubing / Fill Cannula, bits 13/14/15/49),
+and the pump refuses to resume delivery over them. Finishing the change
+clears exactly those before sending the resume, and the acknowledge button
+covers them alongside the cartridge alarms — because the user completing
+the change *is* the completion of those operations. Low Insulin and every
+other alert is a real warning, not a leftover, and is never dismissed.
+
 Reading the state first also means a load the user started on the pump, or an
 earlier attempt whose reply was lost, is **adopted** rather than restarted.
 

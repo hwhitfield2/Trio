@@ -243,6 +243,26 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
         #expect(try TandemAlertStatusResponse(cargo: other).localizedLoadRelatedNames == nil)
     }
 
+    @Test("Only started-but-unfinished load alerts are cleared") func alertDismissScope() {
+        // The pump refuses to resume delivery over an incomplete-load alert
+        // (seen live: Incomplete Fill Tubing after an interrupted change), so
+        // those are Trio's to clear when the user completes the change...
+        let leftovers = TandemAlertStatusResponse(
+            bitmask: (1 << 13) | (1 << 14) | (1 << 15) | (1 << 49)
+        )
+        #expect(leftovers.incompleteLoadAlertBits == [13, 14, 15, 49])
+
+        // ...but Low Insulin is a warning about the cartridge's contents, not
+        // a leftover, and must never be silenced by the change screen.
+        let lowInsulin = TandemAlertStatusResponse(bitmask: (1 << 0) | (1 << 17))
+        #expect(lowInsulin.incompleteLoadAlertBits.isEmpty)
+        #expect(lowInsulin.localizedLoadRelatedNames == "Low Insulin")
+
+        // Alert dismissal is typed distinctly from alarm dismissal on the wire.
+        let dismiss = TandemDismissNotificationRequest(notificationId: 14, notificationType: .alert)
+        #expect(dismiss.cargo == Data([0x0E, 0x00, 0x00, 0x00, 0x01, 0x00]))
+    }
+
     @Test("Dismissal is signed, explicit, and acknowledge-only") func dismissEncoding() {
         let dismiss = TandemDismissNotificationRequest(notificationId: 8, notificationType: .alarm)
         // uint32 LE id, type byte (alarm = 2), extra-action byte.
@@ -334,6 +354,18 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
         // resumes from the right step instead of re-running the swap.
         let restored = TandemPumpState(rawValue: state.rawValue)
         #expect(restored.cartridgeSession?.stage == .cartridgeLoaded)
+    }
+
+    @Test("The acknowledge button names alarms and leftover alerts together") func combinedNames() {
+        let state = TandemPumpState()
+        state.activeAlarmBits = 1 << 3 // pump reset
+        state.activeAlertBits = 1 << 14 // incomplete fill tubing
+        #expect(state.dismissableCartridgeAlarmNames == "Pump Reset + Incomplete Fill Tubing")
+
+        // A lone non-dismissable alert produces no button.
+        state.activeAlarmBits = 0
+        state.activeAlertBits = 1 << 0 // low insulin
+        #expect(state.dismissableCartridgeAlarmNames == nil)
     }
 
     @Test("A change in progress reads as suspended delivery") func suspendsDelivery() {

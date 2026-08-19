@@ -30,7 +30,7 @@ enum TandemCartridgeError: LocalizedError {
     case bolusInProgress
     case alarmNotCleared(String)
     case noAlarmToAcknowledge
-    case resumeRefused(status: UInt8)
+    case resumeRefused(status: UInt8, detail: String?)
 
     var errorDescription: String? {
         switch self {
@@ -69,11 +69,16 @@ enum TandemCartridgeError: LocalizedError {
         case .bolusInProgress:
             return "A bolus is being delivered. Wait for it to finish, then start the cartridge change."
         case let .alarmNotCleared(names):
-            return "Trio asked the pump to acknowledge the \(names) alarm, but the pump still reports it. Clear the alarm in the pump's own app, then try again."
+            return "Trio asked the pump to acknowledge \(names), but the pump still reports it. Clear it in the pump's own app, then try again."
         case .noAlarmToAcknowledge:
             return "The pump is not reporting an alarm Trio can acknowledge from here."
-        case let .resumeRefused(status):
-            return "The cartridge change is done, but the pump refused to restart insulin (status \(status)). Insulin is still stopped — resume it from the pump settings screen."
+        case let .resumeRefused(status, detail):
+            var text =
+                "The cartridge change is done, but the pump refused to restart insulin (status \(status)). Insulin is still stopped — resume it from the pump settings screen."
+            if let detail = detail {
+                text += " The pump reports: \(detail)."
+            }
+            return text
         }
     }
 }
@@ -390,13 +395,35 @@ extension TandemPumpManager {
                 return
             }
 
+            // A load that was interrupted along the way leaves started-but-
+            // not-finished alerts behind (incomplete fill tubing, incomplete
+            // cartridge change, ...), and the pump will not resume delivery
+            // over them. The user finishing the change IS the completion of
+            // those operations, so clear the leftovers first — and only those;
+            // a Low Insulin alert or any alarm is left standing to speak.
+            if let leftovers = self.readActiveAlerts()?.incompleteLoadAlertBits, !leftovers.isEmpty {
+                self.log.info("Clearing incomplete-load alerts before resuming: bits \(leftovers)")
+                for bit in leftovers {
+                    self.dismissNotification(bit: bit, type: .alert)
+                }
+                if let remaining = self.readActiveAlerts()?.incompleteLoadAlertBits, !remaining.isEmpty {
+                    self.log.error("Incomplete-load alerts still active after dismissal: bits \(remaining)")
+                }
+            }
+            if case let .failure(error) = self.session.refreshTimeSinceReset() {
+                completion(error)
+                return
+            }
+
             switch self.session.send(TandemResumePumpingRequest()) {
             case let .success(response):
                 guard response.status == 0 else {
                     // The load is done either way; what failed is restarting
-                    // insulin, and the user must hear that in those words.
+                    // insulin, and the user must hear that in those words,
+                    // with the pump's own account of why attached.
+                    let detail = self.pumpStateSummary()
                     self.completeCartridgeSession(recordSiteChange: true, resumed: false)
-                    completion(TandemCartridgeError.resumeRefused(status: response.status))
+                    completion(TandemCartridgeError.resumeRefused(status: response.status, detail: detail))
                     return
                 }
                 self.completeCartridgeSession(recordSiteChange: true, resumed: true)
@@ -708,10 +735,34 @@ extension TandemPumpManager {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         switch session.send(TandemAlertStatusRequest()) {
         case let .success(response):
+            state.activeAlertBits = response.bitmask
             return response
         case let .failure(error):
             log.error("AlertStatus failed: \(error.localizedDescription)")
+            state.activeAlertBits = nil
             return nil
+        }
+    }
+
+    /// Dismiss one notification, logging rather than failing on refusal — the
+    /// caller verifies the outcome by re-reading the status bitmask, which is
+    /// the only proof that counts.
+    private func dismissNotification(bit: Int, type: TandemDismissNotificationRequest.NotificationType) {
+        dispatchPrecondition(condition: .onQueue(commandQueue))
+        if case let .failure(error) = session.refreshTimeSinceReset() {
+            log.error("Time refresh before dismissing bit \(bit) failed: \(error.localizedDescription)")
+            return
+        }
+        switch session.send(TandemDismissNotificationRequest(
+            notificationId: UInt32(bit),
+            notificationType: type
+        )) {
+        case let .success(response):
+            if response.status != 0 {
+                log.error("Dismiss of \(type) bit \(bit) returned status \(response.status)")
+            }
+        case let .failure(error):
+            log.error("Dismiss of \(type) bit \(bit) failed: \(error.localizedDescription)")
         }
     }
 
@@ -733,44 +784,32 @@ extension TandemPumpManager {
                 completion(error)
                 return
             }
-            guard let alarms = self.readActiveAlarms() else {
-                completion(TandemCartridgeError.noAlarmToAcknowledge)
-                return
-            }
-            let toDismiss = alarms.cartridgeRelatedBits
-            guard !toDismiss.isEmpty else {
+            let alarmBits = self.readActiveAlarms()?.cartridgeRelatedBits ?? []
+            let alertBits = self.readActiveAlerts()?.incompleteLoadAlertBits ?? []
+            guard !alarmBits.isEmpty || !alertBits.isEmpty else {
                 self.pumpStateSummary()
                 self.notifyStateDidChange()
                 completion(TandemCartridgeError.noAlarmToAcknowledge)
                 return
             }
 
-            self.log.info("Acknowledging pump alarms: bits \(toDismiss)")
-            for bit in toDismiss {
-                if case let .failure(error) = self.session.refreshTimeSinceReset() {
-                    completion(error)
-                    return
-                }
-                switch self.session.send(TandemDismissNotificationRequest(
-                    notificationId: UInt32(bit),
-                    notificationType: .alarm
-                )) {
-                case let .success(response):
-                    if response.status != 0 {
-                        self.log.error("Dismiss of alarm bit \(bit) returned status \(response.status)")
-                    }
-                case let .failure(error):
-                    self.log.error("Dismiss of alarm bit \(bit) failed: \(error.localizedDescription)")
-                }
+            self.log.info("Acknowledging pump notifications: alarm bits \(alarmBits), alert bits \(alertBits)")
+            for bit in alarmBits {
+                self.dismissNotification(bit: bit, type: .alarm)
+            }
+            for bit in alertBits {
+                self.dismissNotification(bit: bit, type: .alert)
             }
 
             // The re-read is the actual verdict.
-            let after = self.readActiveAlarms()
+            let alarmsAfter = self.readActiveAlarms()?.cartridgeRelatedBits ?? []
+            let alertsAfter = self.readActiveAlerts()?.incompleteLoadAlertBits ?? []
             self.pumpStateSummary()
             self.notifyStateDidChange()
-            if let after = after, !after.cartridgeRelatedBits.isEmpty {
+            if !alarmsAfter.isEmpty || !alertsAfter.isEmpty {
                 var seen = Set<String>()
-                let names = after.cartridgeRelatedBits.map(TandemAlarmStatusResponse.name(forBit:))
+                let names = (alarmsAfter.map(TandemAlarmStatusResponse.name(forBit:))
+                    + alertsAfter.compactMap { TandemAlertStatusResponse.loadRelated[$0] })
                     .filter { seen.insert($0).inserted }
                     .joined(separator: " + ")
                 completion(TandemCartridgeError.alarmNotCleared(names))

@@ -166,16 +166,26 @@ final class TandemPumpState: RawRepresentable {
     /// be re-observed after a restart, never inherited.
     var activeAlarmBits: UInt64?
 
-    /// Names of active alarms the cartridge screen may offer to acknowledge
-    /// (the cartridge-change family only), or nil when there are none.
+    /// Active-alert bitmask from the last AlertStatus read. Runtime-only for
+    /// the same reason.
+    var activeAlertBits: UInt64?
+
+    /// Names of active notifications the cartridge screen may offer to
+    /// acknowledge — cartridge-family alarms plus the started-but-unfinished
+    /// load alerts that block resuming — or nil when there are none.
     var dismissableCartridgeAlarmNames: String? {
-        guard let bits = activeAlarmBits, bits != 0 else { return nil }
-        let related = TandemAlarmStatusResponse(bitmask: bits).cartridgeRelatedBits
-        guard !related.isEmpty else { return nil }
+        var names: [String] = []
+        if let bits = activeAlarmBits, bits != 0 {
+            names += TandemAlarmStatusResponse(bitmask: bits).cartridgeRelatedBits
+                .map(TandemAlarmStatusResponse.name(forBit:))
+        }
+        if let bits = activeAlertBits, bits != 0 {
+            names += TandemAlertStatusResponse(bitmask: bits).incompleteLoadAlertBits
+                .compactMap { TandemAlertStatusResponse.loadRelated[$0] }
+        }
+        guard !names.isEmpty else { return nil }
         var seen = Set<String>()
-        return related.map(TandemAlarmStatusResponse.name(forBit:))
-            .filter { seen.insert($0).inserted }
-            .joined(separator: " + ")
+        return names.filter { seen.insert($0).inserted }.joined(separator: " + ")
     }
 
     /// Where the user last said the infusion set is. Runtime-only for the same
