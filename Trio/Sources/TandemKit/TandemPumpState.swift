@@ -170,6 +170,104 @@ final class TandemPumpState: RawRepresentable {
     /// the same reason.
     var activeAlertBits: UInt64?
 
+    /// Runtime-only: the alarm bitmask Trio last raised a phone notification
+    /// for. Re-reading the same alarm must not re-notify, and an alarm that
+    /// clears must retract. Never persisted — an alarm has to be re-observed
+    /// after a restart, not inherited.
+    var notifiedAlarmBits: UInt64 = 0
+
+    /// Runtime-only: the routine poll skips the alarm read until this time, set
+    /// when the pump failed to answer one.
+    ///
+    /// A pump that does not answer would otherwise add a 12-second timeout to
+    /// every loop cycle. The suppression **expires** rather than latching for
+    /// the session: alarms are the one thing a Mobi cannot show its user any
+    /// other way, so a single lost read must never stop Trio reporting them for
+    /// good. A successful read clears it immediately, and so does the pump
+    /// pushing a notification event.
+    var alarmReadSuppressedUntil: Date?
+
+    /// The same, for the advisory alert read. Kept separate on purpose: a pump
+    /// that answers alarms but not alerts must keep having its alarms read.
+    var alertReadSuppressedUntil: Date?
+
+    /// How long the routine poll leaves a notification read alone after the
+    /// pump fails to answer it. Six loop cycles: long enough that a pump which
+    /// truly does not implement it costs one timeout an hour, short enough that
+    /// a passing radio problem does not hide an alarm.
+    static let notificationReadRetryInterval: TimeInterval = .minutes(30)
+
+    var alarmReadSuppressed: Bool {
+        guard let until = alarmReadSuppressedUntil else { return false }
+        return Date.now < until
+    }
+
+    var alertReadSuppressed: Bool {
+        guard let until = alertReadSuppressedUntil else { return false }
+        return Date.now < until
+    }
+
+    /// Percentage the pump last streamed while detecting a newly installed
+    /// cartridge, or nil when it is not detecting one. Runtime-only, like the
+    /// rest of the cartridge progress.
+    var cartridgeDetectionPercent: Int?
+
+    /// Whether the pump's own fill button was down as of the last streamed
+    /// fill-tubing event. On a Mobi the tubing fill runs only while that button
+    /// is held, so this is the one piece of feedback the user has that insulin
+    /// is actually moving. Nil when no fill is running.
+    var fillTubingButtonDown: Bool?
+
+    /// True when the pump is alarming. An alarming Tandem has already stopped
+    /// insulin and refuses new operations until the alarm is acknowledged.
+    var isAlarming: Bool {
+        guard let bits = activeAlarmBits else { return false }
+        return bits != 0
+    }
+
+    /// Every active alarm, named. Unlike `dismissableCartridgeAlarmNames` this
+    /// includes the alarms Trio must not clear: a Mobi has no screen, so an
+    /// alarm Trio cannot act on still has to be visible somewhere.
+    var activeAlarmNames: String? {
+        guard let bits = activeAlarmBits, bits != 0 else { return nil }
+        return TandemAlarmStatusResponse(bitmask: bits).localizedNames
+    }
+
+    /// Active alarms outside the family whose remedy is the cartridge flow.
+    /// These are shown and never dismissed by Trio.
+    var unacknowledgeableAlarmNames: String? {
+        guard let bits = activeAlarmBits, bits != 0 else { return nil }
+        let response = TandemAlarmStatusResponse(bitmask: bits)
+        let acknowledgeable = Set(response.cartridgeRelatedBits)
+        let others = response.activeBits.filter { !acknowledgeable.contains($0) }
+        guard !others.isEmpty else { return nil }
+        var seen = Set<String>()
+        return others.map(TandemAlarmStatusResponse.name(forBit:))
+            .filter { seen.insert($0).inserted }
+            .joined(separator: " + ")
+    }
+
+    /// Active alerts Trio has a name for — the pump's advisory tier, which does
+    /// not stop delivery (Low Insulin, and the leftovers of an interrupted
+    /// load).
+    var activeAlertNames: String? {
+        guard let bits = activeAlertBits, bits != 0 else { return nil }
+        return TandemAlertStatusResponse(bitmask: bits).localizedLoadRelatedNames
+    }
+
+    /// Active alarms whose remedy is the cartridge flow, named — and nothing
+    /// else. This is what the pump screen offers to acknowledge: outside a
+    /// cartridge change there is no reason to clear the pump's record that a
+    /// load was left half-finished, and every reason not to.
+    var acknowledgeableAlarmNames: String? {
+        guard let bits = activeAlarmBits, bits != 0 else { return nil }
+        let names = TandemAlarmStatusResponse(bitmask: bits).cartridgeRelatedBits
+            .map(TandemAlarmStatusResponse.name(forBit:))
+        guard !names.isEmpty else { return nil }
+        var seen = Set<String>()
+        return names.filter { seen.insert($0).inserted }.joined(separator: " + ")
+    }
+
     /// Names of active notifications the cartridge screen may offer to
     /// acknowledge — cartridge-family alarms plus the started-but-unfinished
     /// load alerts that block resuming — or nil when there are none.

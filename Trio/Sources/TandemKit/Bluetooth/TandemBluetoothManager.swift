@@ -72,6 +72,14 @@ final class TandemBluetoothManager: NSObject {
         peripheral?.state == .connected && !characteristics.isEmpty
     }
 
+    /// Whether the radio is available to scan at all. `startScan` silently
+    /// gives up when it is not, which used to leave the pairing screen
+    /// searching forever with nothing to say; the screen asks this so it can
+    /// say what is actually wrong.
+    var isBluetoothPoweredOn: Bool {
+        manager?.state == .poweredOn
+    }
+
     override init() {
         super.init()
         managerQueue.sync {

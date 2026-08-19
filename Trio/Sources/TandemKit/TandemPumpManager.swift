@@ -328,6 +328,81 @@ extension TandemPumpManager {
         }
     }
 
+    /// A pushed pump event lands on top of a status read this recent is ignored:
+    /// the read it would ask for has just happened.
+    static let pushCoalescingInterval: TimeInterval = 10
+
+    /// Identifier of the phone notification Trio raises for a pump alarm.
+    ///
+    /// It contains "ERROR" deliberately: Trio routes an alert whose identifier
+    /// names a fault or error as an error-class notification that deep-links to
+    /// the pump screen, and posts it regardless of the pump-warnings setting.
+    /// An alarming pump has stopped insulin, and on a Mobi — which has no
+    /// display of its own — this notification is the only way the user finds
+    /// out at all.
+    static let alarmAlertIdentifier = "tandemPumpAlarmError"
+
+    /// Raise, update or retract the phone notification for the pump's alarm
+    /// state. Called only after a successful alarm read, so a lost connection
+    /// never reads as "the alarm cleared".
+    ///
+    /// Only alarms notify. Alerts are the pump's advisory tier and do not stop
+    /// delivery; putting Low Insulin on the lock screen every few minutes would
+    /// teach people to ignore the one notification that matters.
+    func updateAlarmNotification() {
+        // With no delegate attached there is nothing to hand the alert to, and
+        // recording it as notified would mean the next poll saw no change and
+        // never tried again. Leave the bits unrecorded instead.
+        guard pumpDelegate.delegate != nil else { return }
+
+        let bits = state.activeAlarmBits ?? 0
+        guard bits != state.notifiedAlarmBits else { return }
+        state.notifiedAlarmBits = bits
+
+        let identifier = Alert.Identifier(
+            managerIdentifier: managerIdentifier,
+            alertIdentifier: Self.alarmAlertIdentifier
+        )
+
+        guard bits != 0, let names = state.activeAlarmNames else {
+            log.info("Pump alarms cleared; retracting the alarm notification")
+            pumpDelegate.notify { delegate in
+                delegate?.retractAlert(identifier: identifier)
+            }
+            return
+        }
+
+        log.info("Pump alarm active: \(names); raising a notification")
+        let content = Alert.Content(
+            title: String(localized: "Pump Alarm"),
+            body: String(
+                localized: "\(names). The pump has stopped insulin and will refuse commands until the alarm is acknowledged."
+            ),
+            acknowledgeActionButtonLabel: String(localized: "OK")
+        )
+        let alert = Alert(
+            identifier: identifier,
+            foregroundContent: content,
+            backgroundContent: content,
+            trigger: .immediate
+        )
+        pumpDelegate.notify { delegate in
+            delegate?.issueAlert(alert)
+        }
+    }
+
+    /// Read the pump now, ignoring the two-minute freshness window.
+    ///
+    /// This is what the pump screen's refresh does. It deliberately does not
+    /// clear `lastSync` first: a refresh that fails would otherwise erase the
+    /// record of the last good read, and the screen would report a pump it has
+    /// been talking to all day as never synced.
+    func refreshPumpData(completion: ((Date?) -> Void)? = nil) {
+        commandQueue.async {
+            self.syncPumpData(completion: completion)
+        }
+    }
+
     /// Full status refresh. Must be called on commandQueue.
     private func syncPumpData(completion: ((Date?) -> Void)?) {
         dispatchPrecondition(condition: .onQueue(commandQueue))
@@ -396,6 +471,22 @@ extension TandemPumpManager {
 
         if state.supportsRemoteBolus {
             reconcileBolusStatus()
+        }
+
+        // A Mobi has no screen, so Trio is the only place its alarms can be
+        // seen or acknowledged — reading them only inside the cartridge flow
+        // meant an alarming pump looked perfectly normal everywhere else. Both
+        // are unsigned current-status queries, ungated and cheap, and they run
+        // last so nothing dosing depends on waits behind them. A read that
+        // times out is left alone for half an hour rather than costing every
+        // loop cycle 12 seconds — and is then tried again, because an alarm a
+        // Mobi cannot display itself must not stay unreported because of one
+        // lost read.
+        if !state.alarmReadSuppressed {
+            _ = readActiveAlarms()
+        }
+        if !state.alertReadSuppressed {
+            _ = readActiveAlerts()
         }
 
         // Drop a temp basal the pump has already finished, so the reported
@@ -986,6 +1077,10 @@ extension TandemPumpManager {
             guard let self = self else { return }
             self.session.insulinDeliveryActionsEnabled = false
             self.bluetooth.disconnect()
+            // A notification about a pump that is no longer paired is worse
+            // than none: nothing on the phone can act on it any more.
+            self.state.activeAlarmBits = nil
+            self.updateAlarmNotification()
             self.pumpDelegate.notify { delegate in
                 delegate?.pumpManagerWillDeactivate(self)
             }
@@ -1081,6 +1176,25 @@ extension TandemPumpManager {
             // a microbolus stream is a double dose. Tear the other one down
             // completely rather than just clearing its flag.
             teardownMicrobolusBasal()
+        } else if state.supportsNativeBasalControl,
+                  let temp = state.activeTempBasal, temp.isActive(),
+                  bluetooth.isConnected
+        {
+            // Forgetting the rate is not the same as cancelling it: the Mobi
+            // would keep delivering a rate Trio commanded with nothing left
+            // managing basal, which is the hazard `deletePump` already guards
+            // against. Stop it on the pump; `stopNativeTempBasal` clears the
+            // record itself. Only worth trying while already connected — waking
+            // the pump would block the queue for the whole connect timeout.
+            commandQueue.async {
+                self.stopNativeTempBasal { error in
+                    if let error = error {
+                        self.log.error(
+                            "Could not stop the temp basal when turning basal control off: \(error.localizedDescription)"
+                        )
+                    }
+                }
+            }
         } else {
             state.activeTempBasal = nil
         }
@@ -1186,9 +1300,35 @@ extension TandemPumpManager: TandemPumpSessionDelegate {
         // basal change...). Refresh soon; force staleness so the poll runs.
         // This delegate fires on the BLE manager queue, so mutate `state` and
         // run the sync on commandQueue to keep all state access on one queue.
-        if !events.isDisjoint(with: [.bolusChange, .basalChange, .pumpSuspend, .pumpResume, .homeScreenChange]) {
+        //
+        // The alarm, alert and malfunction bits are in the set because the poll
+        // now reads the pump's notification bitmasks: this is the pump telling
+        // Trio, the moment it happens, that something the user has to see has
+        // fired. On a Mobi, which has no screen, that push is the difference
+        // between the alarm appearing now and appearing at the next heartbeat.
+        if !events.isDisjoint(with: [
+            .bolusChange,
+            .basalChange,
+            .pumpSuspend,
+            .pumpResume,
+            .homeScreenChange,
+            .alarm,
+            .alert,
+            .malfunction
+        ]) {
+            let notificationEvent = !events.isDisjoint(with: [.alarm, .alert, .malfunction])
             commandQueue.async {
-                self.state.lastSync = .distantPast
+                // The pump often pushes several events at once, and each one
+                // would otherwise queue a full status read ahead of anything
+                // the user asks for. One refresh answers them all.
+                guard Date.now.timeIntervalSince(self.state.lastSync) > Self.pushCoalescingInterval else { return }
+                if notificationEvent {
+                    // The pump is saying a notification fired. A suppression
+                    // left over from an earlier lost read must not be the
+                    // reason Trio does not go and look.
+                    self.state.alarmReadSuppressedUntil = nil
+                    self.state.alertReadSuppressedUntil = nil
+                }
                 self.syncPumpData(completion: nil)
             }
         }

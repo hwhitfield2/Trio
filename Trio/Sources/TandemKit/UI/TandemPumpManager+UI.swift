@@ -59,29 +59,35 @@ extension TandemPumpManager: PumpManagerUI {
         UIImage(systemName: "externaldrive.connected.to.line.below")
     }
 
+    /// What Trio's home screen says about this pump when there is something to
+    /// say.
+    ///
+    /// It comes from the same ranked headline the pump screen shows, so the two
+    /// can never disagree — the home screen used to report a suspend while the
+    /// unacknowledged alarm that caused it was invisible everywhere. An alarm
+    /// reports its own name rather than the word "alarm": in a hundred-point
+    /// column, "Empty Cartridge" is worth more than a severity.
     var pumpStatusHighlight: DeviceStatusHighlight? {
-        if state.pairingCode.isEmpty {
+        let headline = state.headlineStatus
+        let message = state.activeAlarmNames ?? headline.title
+        switch headline.tone {
+        case .critical:
             return PumpStatusHighlight(
-                localizedMessage: String(localized: "Not Paired"),
-                imageName: "exclamationmark.circle.fill",
+                localizedMessage: message,
+                imageName: headline.symbolName,
                 state: .critical
             )
-        }
-        if state.suspended {
+        case .caution:
             return PumpStatusHighlight(
-                localizedMessage: String(localized: "Insulin Suspended"),
-                imageName: "pause.circle.fill",
+                localizedMessage: message,
+                imageName: headline.symbolName,
                 state: .warning
             )
+        case .ok,
+             .info,
+             .idle:
+            return nil
         }
-        if state.lastSync != .distantPast, Date.now.timeIntervalSince(state.lastSync) > .minutes(12) {
-            return PumpStatusHighlight(
-                localizedMessage: String(localized: "Signal Loss"),
-                imageName: "exclamationmark.circle.fill",
-                state: .critical
-            )
-        }
-        return nil
     }
 
     var pumpLifecycleProgress: DeviceLifecycleProgress? { nil }

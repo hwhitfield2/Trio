@@ -653,6 +653,13 @@ extension BaseDeviceDataManager: DeviceManagerDelegate {
 
     func retractAlert(identifier: Alert.Identifier) {
         alertHistoryStorage.removeAlert(identifier: identifier.alertIdentifier)
+        // Removing the stored entry is not enough on its own: the alert has
+        // already been delivered as a notification, and a retracted alert that
+        // leaves "the pump has stopped insulin" sitting on the lock screen is
+        // worse than one that was never raised.
+        broadcaster.notify(pumpNotificationObserver.self, on: processQueue) {
+            $0.pumpRemoveNotification()
+        }
     }
 
     func doesIssuedAlertExist(identifier _: Alert.Identifier, completion _: @escaping (Result<Bool, Error>) -> Void) {

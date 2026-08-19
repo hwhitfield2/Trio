@@ -115,6 +115,8 @@ extension TandemPumpManager {
             state.cartridgeSession = nil
             state.cartridgeDisconnectConfirmedAt = nil
             state.lastCartridgeEventDescription = nil
+            state.cartridgeDetectionPercent = nil
+            state.fillTubingButtonDown = nil
         }
         session.insulinDeliveryActionsEnabled = state.insulinDeliveryActionsAllowed
         notifyStateDidChange()
@@ -126,6 +128,19 @@ extension TandemPumpManager {
     func confirmSetPlacement(_ placement: TandemSetPlacement) {
         state.confirmedSetPlacement = placement
         state.cartridgeDisconnectConfirmedAt = Date.now
+        notifyStateDidChange()
+    }
+
+    /// Take a placement confirmation back.
+    ///
+    /// A confirmation is a safety answer about where the infusion set is, and
+    /// the two steps that need one need opposite answers. Someone who taps "the
+    /// set is off my body" while it is still on their body has to be able to
+    /// say so; before this the answer could only be replaced by its opposite,
+    /// never withdrawn.
+    func clearSetPlacement() {
+        state.confirmedSetPlacement = nil
+        state.cartridgeDisconnectConfirmedAt = nil
         notifyStateDidChange()
     }
 
@@ -524,6 +539,24 @@ extension TandemPumpManager {
             self.log.info("Cartridge progress: \(event.localizedDescription)")
             self.state.lastCartridgeEventDescription = event.localizedDescription
 
+            // Keep the two pieces of progress the screen can actually draw —
+            // the pump streams a real 0-100% while it detects a cartridge, and
+            // reports its own fill button going down and up. Each one ends the
+            // other: detection is over once the fill starts, and a fill has not
+            // begun while the pump is still detecting.
+            switch event {
+            case let .detectingCartridge(percent):
+                self.state.cartridgeDetectionPercent = percent
+                self.state.fillTubingButtonDown = nil
+            case let .fillTubing(buttonDown):
+                self.state.fillTubingButtonDown = buttonDown
+                self.state.cartridgeDetectionPercent = nil
+            case .fillTubingModeExited:
+                self.state.fillTubingButtonDown = nil
+            default:
+                break
+            }
+
             // Two stream events advance Trio's own stage. Detection means the
             // pump has accepted the new cartridge (it streams this the moment
             // change mode is exited), and the cannula-filled confirmation
@@ -717,29 +750,50 @@ extension TandemPumpManager {
     }
 
     /// Read the pump's active-alarm bitmask and remember it, so the cartridge
-    /// screen can offer to acknowledge the ones the change itself addresses.
-    private func readActiveAlarms() -> TandemAlarmStatusResponse? {
+    /// screen can offer to acknowledge the ones the change itself addresses —
+    /// and so the pump screen can show an alarm at all. Not private: the
+    /// routine status poll reads it too, because a Mobi has no display of its
+    /// own and Trio is the only place its alarms can appear.
+    func readActiveAlarms() -> TandemAlarmStatusResponse? {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         switch session.send(TandemAlarmStatusRequest()) {
         case let .success(response):
             state.activeAlarmBits = response.bitmask
+            state.alarmReadSuppressedUntil = nil
+            // Only a successful read may change what is reported: a failed one
+            // is silence, not "no alarm".
+            updateAlarmNotification()
             return response
         case let .failure(error):
             log.error("AlarmStatus failed: \(error.localizedDescription)")
-            state.activeAlarmBits = nil
+            // Deliberately leaves `activeAlarmBits` alone. Clearing it would
+            // take the alarm off every screen while the notification it raised
+            // stayed on the lock screen — the phone contradicting itself about
+            // the one thing a Mobi cannot show any other way. The last known
+            // alarm stands until the pump is actually read again, and the sync
+            // age on the pump screen says how old that reading is.
+            if case .timeout = error {
+                state.alarmReadSuppressedUntil = Date.now
+                    .addingTimeInterval(TandemPumpState.notificationReadRetryInterval)
+            }
             return nil
         }
     }
 
-    private func readActiveAlerts() -> TandemAlertStatusResponse? {
+    func readActiveAlerts() -> TandemAlertStatusResponse? {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         switch session.send(TandemAlertStatusRequest()) {
         case let .success(response):
             state.activeAlertBits = response.bitmask
+            state.alertReadSuppressedUntil = nil
             return response
         case let .failure(error):
             log.error("AlertStatus failed: \(error.localizedDescription)")
-            state.activeAlertBits = nil
+            // Same reasoning as the alarm read: keep the last known alerts.
+            if case .timeout = error {
+                state.alertReadSuppressedUntil = Date.now
+                    .addingTimeInterval(TandemPumpState.notificationReadRetryInterval)
+            }
             return nil
         }
     }
@@ -778,14 +832,27 @@ extension TandemPumpManager {
     /// - verifies by re-reading AlarmStatus, because the dismiss encoding's
     ///   `notificationId` is a reconstruction (pumpX2 never sends it) and the
     ///   reply's status byte alone is not proof.
-    func acknowledgeCartridgeAlarms(completion: @escaping ((any LocalizedError)?) -> Void) {
+    /// - Parameter includingLoadAlerts: whether to clear the
+    ///   started-but-unfinished load alerts alongside the alarms. True inside
+    ///   the cartridge flow, where the user finishing the change *is* the
+    ///   completion of those operations. **False from the pump screen**, where
+    ///   there is no change under way: those alerts are the pump's record that
+    ///   a load was left half-done and its reason for refusing to resume, and
+    ///   clearing them from a screen that is not doing the load would remove a
+    ///   block on delivery with unfilled tubing.
+    func acknowledgeCartridgeAlarms(
+        includingLoadAlerts: Bool = true,
+        completion: @escaping ((any LocalizedError)?) -> Void
+    ) {
         commandQueue.async {
             if let error = self.prepareForCartridgeCommand() {
                 completion(error)
                 return
             }
             let alarmBits = self.readActiveAlarms()?.cartridgeRelatedBits ?? []
-            let alertBits = self.readActiveAlerts()?.incompleteLoadAlertBits ?? []
+            let alertBits = includingLoadAlerts
+                ? (self.readActiveAlerts()?.incompleteLoadAlertBits ?? [])
+                : []
             guard !alarmBits.isEmpty || !alertBits.isEmpty else {
                 self.pumpStateSummary()
                 self.notifyStateDidChange()
@@ -803,7 +870,9 @@ extension TandemPumpManager {
 
             // The re-read is the actual verdict.
             let alarmsAfter = self.readActiveAlarms()?.cartridgeRelatedBits ?? []
-            let alertsAfter = self.readActiveAlerts()?.incompleteLoadAlertBits ?? []
+            let alertsAfter = includingLoadAlerts
+                ? (self.readActiveAlerts()?.incompleteLoadAlertBits ?? [])
+                : []
             self.pumpStateSummary()
             self.notifyStateDidChange()
             if !alarmsAfter.isEmpty || !alertsAfter.isEmpty {
@@ -852,6 +921,8 @@ extension TandemPumpManager {
         state.cartridgeDisconnectConfirmedAt = nil
         state.confirmedSetPlacement = nil
         state.lastCartridgeEventDescription = nil
+        state.cartridgeDetectionPercent = nil
+        state.fillTubingButtonDown = nil
         state.suspended = !resumed
         // The pump's reservoir, basal and suspend state are all stale now;
         // make the next poll a real one.

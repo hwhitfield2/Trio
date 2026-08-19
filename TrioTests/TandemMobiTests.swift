@@ -343,3 +343,181 @@ private extension Data {
         #expect(state.insulinDeliveryActionsAllowed)
     }
 }
+
+@Suite("Tandem pump screen status") struct TandemPumpStatusSummaryTests {
+    private func syncedMobi() -> TandemPumpState {
+        let state = TandemPumpState()
+        state.pumpModel = .mobi
+        state.pairingCodeType = .jpake6
+        state.pairingCode = "246810"
+        state.lastSync = Date.now
+        state.reservoir = 180
+        state.reservoirIsEstimate = false
+        state.batteryPercent = 90
+        return state
+    }
+
+    @Test("The headline ranks worst-first, so an alarm is never hidden by its own consequences")
+    func headlineRanking() {
+        let state = syncedMobi()
+        // Nobody has asked Trio to drive basal, so the pump is simply being
+        // watched — informational, never a warning on the home screen.
+        #expect(state.headlineStatus.tone == .info)
+        #expect(state.headlineStatus.title == "Monitoring")
+
+        // A suspend alone is a caution.
+        state.suspended = true
+        #expect(state.headlineStatus.tone == .caution)
+
+        // An alarm outranks it: the alarm is why insulin stopped, and reporting
+        // the suspend instead is what used to send people looking in the wrong
+        // place. Bit 8 is Empty Cartridge.
+        state.activeAlarmBits = 1 << 8
+        #expect(state.headlineStatus.tone == .critical)
+        #expect(state.activeAlarmNames == "Empty Cartridge")
+
+        // An unpaired pump outranks everything.
+        state.pairingCode = ""
+        #expect(state.headlineStatus.title == "Not Paired")
+    }
+
+    @Test("A pump that cannot loop is never reported as ready") func notLooping() {
+        let state = syncedMobi()
+        state.remoteBasalEnabled = true
+        state.profileBasalRate = 1.0
+
+        #expect(state.basalControlIsReady)
+        #expect(state.headlineStatus.title == "Looping")
+        #expect(state.headlineStatus.tone == .ok)
+
+        // Control-IQ back on is the pump taking basal over again: Trio is not
+        // looping, and the screen must not show a green tick over it.
+        state.controlIQEnabled = true
+        #expect(!state.basalControlIsReady)
+        #expect(state.headlineStatus.title == "Not Looping")
+        #expect(state.headlineStatus.tone == .caution)
+    }
+
+    @Test("A pump Trio has never read is not reported as an empty cartridge") func neverSynced() {
+        let state = TandemPumpState()
+        state.pumpModel = .mobi
+        state.pairingCode = "246810"
+        #expect(!state.hasEverSynced)
+        #expect(state.reservoirFraction == nil)
+        #expect(state.reservoirDescription == "—")
+        #expect(state.headlineStatus.tone == .caution)
+
+        // Once it has been read, zero units really is an emergency.
+        state.lastSync = Date.now
+        state.reservoir = 0
+        #expect(state.headlineStatus.tone == .critical)
+        #expect(state.reservoirFraction == 0)
+    }
+
+    @Test("Reservoir is shown against this model's cartridge size, estimate flag included")
+    func reservoirPresentation() {
+        let state = syncedMobi()
+        #expect(state.reservoirCapacity == 200)
+        #expect(state.reservoirFraction == 0.9)
+        #expect(state.reservoirDescription == "180 U")
+
+        state.reservoirIsEstimate = true
+        #expect(state.reservoirDescription == "180+ U")
+
+        // A t:slim X2 carries 300 U, so the same reading is a different fraction.
+        state.pumpModel = .tslimX2
+        #expect(state.reservoirCapacity == 300)
+        #expect(state.reservoirFraction == 0.6)
+    }
+
+    @Test("Sync freshness escalates rather than jumping straight to signal loss") func syncFreshness() {
+        let state = syncedMobi()
+        #expect(state.syncTone == .ok)
+        #expect(!state.syncIsStale)
+
+        state.lastSync = Date.now.addingTimeInterval(-.minutes(8))
+        #expect(state.syncTone == .caution)
+        #expect(!state.syncIsStale)
+
+        state.lastSync = Date.now.addingTimeInterval(-.minutes(20))
+        #expect(state.syncTone == .critical)
+        #expect(state.syncIsStale)
+        #expect(state.headlineStatus.title == "Signal Loss")
+    }
+
+    @Test("The readiness checklist asks the same questions the driver enforces") func readinessChecks() {
+        let state = syncedMobi()
+        // No mode chosen: nothing to check, and nothing is ready.
+        #expect(state.basalControlChecks.isEmpty)
+        #expect(!state.basalControlIsReady)
+
+        state.remoteBasalEnabled = true
+        state.profileBasalRate = 1.0
+        state.controlIQEnabled = false
+        #expect(state.basalControlMode == .nativeTempRate)
+        #expect(state.basalControlChecks.count == 4)
+        #expect(state.basalControlIsReady)
+        #expect(state.maximumTempRate == 2.5)
+
+        // Control-IQ on is exactly what the driver refuses on, so exactly one
+        // check must fail.
+        state.controlIQEnabled = true
+        #expect(state.basalControlChecks.filter { !$0.isMet }.count == 1)
+        #expect(!state.basalControlIsReady)
+
+        // A status older than the driver's staleness window fails closed here too.
+        state.controlIQEnabled = false
+        state.lastSync = Date.now.addingTimeInterval(-.minutes(11))
+        #expect(!state.basalControlIsReady)
+    }
+
+    @Test("Microbolus mode checks the zeroed profile, not a non-zero one") func microbolusChecks() {
+        let state = syncedMobi()
+        state.microbolusBasalEnabled = true
+        state.profileBasalRate = 1.0
+        #expect(state.basalControlMode == .microbolus)
+        #expect(!state.basalControlIsReady)
+
+        state.profileBasalRate = 0
+        #expect(state.basalControlIsReady)
+    }
+
+    @Test("Only alarms Trio may clear are offered, and the rest are still named") func alarmSplit() {
+        let state = syncedMobi()
+        // Empty Cartridge (8) is in the acknowledgeable family; Temperature (10)
+        // is not, and must still be visible somewhere — a Mobi has no screen.
+        state.activeAlarmBits = (1 << 8) | (1 << 10)
+        #expect(state.isAlarming)
+        #expect(state.activeAlarmNames == "Empty Cartridge + Temperature")
+        #expect(state.dismissableCartridgeAlarmNames == "Empty Cartridge")
+        #expect(state.unacknowledgeableAlarmNames == "Temperature")
+
+        state.activeAlarmBits = 0
+        #expect(!state.isAlarming)
+        #expect(state.activeAlarmNames == nil)
+        #expect(state.unacknowledgeableAlarmNames == nil)
+    }
+
+    @Test("Alarm and cartridge-progress state is never persisted") func runtimeOnlyState() {
+        let state = syncedMobi()
+        state.activeAlarmBits = 1 << 8
+        state.activeAlertBits = 1 << 13
+        state.notifiedAlarmBits = 1 << 8
+        state.cartridgeDetectionPercent = 40
+        state.fillTubingButtonDown = true
+        state.alarmReadSuppressedUntil = Date.now.addingTimeInterval(.minutes(30))
+        state.alertReadSuppressedUntil = Date.now.addingTimeInterval(.minutes(30))
+
+        let restored = TandemPumpState(rawValue: state.rawValue)
+        #expect(restored.activeAlarmBits == nil)
+        #expect(restored.activeAlertBits == nil)
+        #expect(restored.notifiedAlarmBits == 0)
+        #expect(restored.cartridgeDetectionPercent == nil)
+        #expect(restored.fillTubingButtonDown == nil)
+        #expect(restored.alarmReadSuppressedUntil == nil)
+        #expect(restored.alertReadSuppressedUntil == nil)
+        // …and an alarm that is not re-observed reads as no alarm, not as a
+        // remembered one.
+        #expect(!restored.isAlarming)
+    }
+}

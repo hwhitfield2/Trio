@@ -364,10 +364,67 @@ TandemKit/
     TandemPumpSession.swift        Request/response orchestration + authentication
   UI/
     TandemUICoordinator.swift      Setup/settings navigation controller
+    TandemUITheme.swift            Shared visual language: tones, cards, tiles, buttons, haptics
+    TandemPumpStatusSummary.swift  Derived status: headline, reservoir, readiness checks
     TandemPairingView.swift        Scan + pairing-code entry
-    TandemSettingsView.swift       Status, opt-in toggles, minimum-dose test, delete
+    TandemSettingsView.swift       Pump screen: alarms, status, basal control, opt-ins
     TandemCartridgeChangeView.swift Step-by-step cartridge change
 ```
+
+## The pump screen
+
+A Mobi has no display and one button. Everything the pump would otherwise show
+its user — how much insulin is left, whether it is delivering, whether it is
+alarming — exists only on the phone, so these screens are not settings pages
+with a status section bolted on; they are the pump's display.
+
+Three things follow from that, and they are why the UI layer looks the way it
+does:
+
+- **Alarms are read on the heartbeat, not only during a cartridge change.**
+  `AlarmStatus` (70) and `AlertStatus` (68) are unsigned current-status queries,
+  ungated and cheap, and the pump also pushes an `alarm`/`alert` qualifying
+  event the moment one fires, which forces an immediate resync. An active alarm
+  therefore reaches the pump screen, Trio's home screen, and — because the phone
+  may well be in a pocket — a notification. A pump that fails to answer a
+  notification read is left alone for half an hour — the alarm read and the
+  alert read suppress separately, so a pump that answers one and not the other
+  keeps having the one that matters read — rather than adding 12-second timeouts
+  to every loop cycle. The suppression expires on purpose, and a notification
+  event pushed by the pump clears it outright: an alarm a Mobi cannot display
+  itself must never stay unreported because of one lost read. A failed read
+  never clears the last known alarm either; silence is not "no alarm".
+- **`TandemPumpState.headlineStatus` is the single ranked answer** to "what is
+  this pump doing", ordered by what stops insulin first: not paired → alarming →
+  cartridge change open → suspended → never synced → signal loss → empty
+  cartridge → ready. The pump screen's status card and `pumpStatusHighlight`
+  both read it, so the home screen cannot report a suspend while the
+  unacknowledged alarm that caused it stays invisible.
+- **Acknowledging an alarm is not part of the cartridge feature.**
+  `acknowledgeCartridgeAlarms` has no opt-in gate of its own — it only connects,
+  authenticates and refreshes the signing time — so the pump screen offers it
+  directly, and still verifies by re-reading. It takes
+  `includingLoadAlerts:` because the two screens mean different things by it:
+  the cartridge screen clears the started-but-unfinished load alerts alongside
+  the alarms, since the user finishing the change *is* the completion of those
+  operations, while the pump screen clears **alarms only** — outside a change
+  those alerts are the pump's record that a load was left half-done and its
+  reason for refusing to resume, and a screen that is not doing the load has no
+  business removing that block.
+
+The screens present the driver's own preconditions rather than restating them:
+the basal-control section shows each condition the active mode needs as a
+checklist evaluated with the driver's own constants
+(`tempBasalContextMaxStaleness`, `preconditionMaxStaleness`,
+`basalPreconditionEpsilonUnitsPerHour`, `minimumProfileBasalForTempRate`), so
+"Trio is not looping" reads as "Control-IQ is on" instead of as silence.
+
+Two rules the UI must keep. It may never clear `state.lastSync` to force a
+read — `automaticDosingPreconditionFailure` fails closed on `.distantPast`, so
+that would disarm dosing; `refreshPumpData(completion:)` exists for this. And it
+may never pre-answer, cache or persist a set-placement confirmation: the fill
+and the prime need opposite answers, the driver expires them after ten minutes,
+and the screen's job is to make the wrong answer harder to give, not easier.
 
 ## Threading
 
