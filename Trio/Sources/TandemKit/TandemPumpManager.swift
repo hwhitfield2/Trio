@@ -649,6 +649,9 @@ extension TandemPumpManager {
     static func isDefiniteNonDelivery(_ error: TandemSessionError) -> Bool {
         switch error {
         case .insulinDeliveryActionsDisabled,
+             // Key confirmation fails during authentication, before any
+             // delivery command is built or sent.
+             .keyConfirmationFailed,
              .notAuthenticated,
              .pumpRejected,
              .requestInFlight,

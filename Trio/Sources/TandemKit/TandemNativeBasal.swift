@@ -157,7 +157,7 @@ extension TandemPumpManager {
     }
 
     /// Stop a running temp rate, returning the pump to its profile. commandQueue only.
-    func stopNativeTempBasal(completion: @escaping ((any Error)?) -> Void) {
+    func stopNativeTempBasal(completion: @escaping ((any LocalizedError)?) -> Void) {
         dispatchPrecondition(condition: .onQueue(commandQueue))
 
         guard let active = state.activeTempBasal, active.isActive() else {
