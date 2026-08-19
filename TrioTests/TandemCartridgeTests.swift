@@ -200,6 +200,13 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
         // Mixed: only the cartridge subset is eligible.
         let mixed = TandemAlarmStatusResponse(bitmask: (1 << 8) | (1 << 10))
         #expect(mixed.cartridgeRelatedBits == [8])
+
+        // Pump reset is acknowledgeable: a reset pump demands acknowledgment
+        // and a fresh cartridge load before delivering again, which is this
+        // screen. Seen live on a Mobi that reset mid-evening.
+        let reset = TandemAlarmStatusResponse(bitmask: 1 << 3)
+        #expect(reset.cartridgeRelatedBits == [3])
+        #expect(TandemAlarmStatusResponse.name(forBit: 3) == "Pump Reset")
     }
 
     @Test("Alarm status is an unsigned current-status query") func alarmShape() {
@@ -231,7 +238,9 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
         // uint32 LE id, type byte (alarm = 2), extra-action byte.
         #expect(dismiss.cargo == Data([0x08, 0x00, 0x00, 0x00, 0x02, 0x00]))
         #expect(TandemDismissNotificationRequest.opcode == 0xB8)
-        #expect(TandemDismissNotificationResponse.opcode == 0xB7)
+        // 0xB9 = -71, observed from the pump on hardware. Not 0xB7 — a
+        // sign-conversion slip that made a working dismissal report failure.
+        #expect(TandemDismissNotificationResponse.opcode == 0xB9)
         #expect(TandemDismissNotificationRequest.characteristic == .control)
         #expect(TandemDismissNotificationRequest.signed)
         // Acknowledging a notification does not move insulin, so it must not

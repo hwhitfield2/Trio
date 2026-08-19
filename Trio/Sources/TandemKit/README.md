@@ -183,6 +183,18 @@ control). The cartridge screen offers it under deliberate constraints:
   encoding is a reconstruction: the driver re-reads `AlarmStatus` afterwards
   and reports an alarm that did not clear instead of trusting the status byte.
 
+The reconstruction is now **field-confirmed**: on a live Mobi, dismissing
+alarm bit 23 (Resume Pump) by its bit index cleared it — the alarm bitmask
+went `0x800008` → `0x8` on re-read. The same log exposed a sign-conversion
+slip: the pump answers a dismissal with opcode 0xB9 (-71), not 0xB7, so the
+first build reported failure for a dismissal that had in fact worked.
+
+That live pump also demonstrated a Pump Reset alarm (bit 3) blocking the
+change, which is why pump reset is in the acknowledgeable family: a reset
+Tandem requires acknowledgment and a fresh cartridge load before it delivers
+again — precisely this flow. Its warning that pump-side IOB was zeroed does
+not change Trio, which keeps its own insulin records.
+
 A refusal that still happens with no alarm active reports the raw
 `loadActive`/`loadState`/`prime` ids for the next round of diagnosis.
 

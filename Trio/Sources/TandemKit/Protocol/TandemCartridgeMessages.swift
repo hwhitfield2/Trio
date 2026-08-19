@@ -414,16 +414,21 @@ struct TandemAlarmStatusResponse: TandemResponse {
 
     /// Alarms whose documented remedy is the cartridge-change flow itself:
     /// the cartridge-fault family, empty cartridge, cartridge removed,
-    /// occlusion ("check your pump site and tubing"), and the resume-pump
-    /// nag that fires because insulin is off. These are the only alarms the
-    /// cartridge screen offers to acknowledge; anything else stays visible
-    /// but is not Trio's to clear.
+    /// occlusion ("check your pump site and tubing"), the resume-pump nag
+    /// that fires because insulin is off, and pump reset — a reset pump
+    /// requires acknowledgment and a fresh load before it will deliver
+    /// again, which is exactly this screen (its warning that IOB was zeroed
+    /// does not change Trio, which keeps its own insulin records). These
+    /// are the only alarms the cartridge screen offers to acknowledge;
+    /// anything else — temperature, battery, hardware — stays visible but
+    /// is not Trio's to clear.
     static let cartridgeChangeFamily: Set<Int> = [
         0, 1, 5, 6, 9, 16, 20, 29, 30, 31, 34, // cartridge fault
         8, // empty cartridge
         25, // cartridge removed
         2, 26, // occlusion
-        18, 23 // resume pump
+        18, 23, // resume pump
+        3 // pump reset
     ]
 
     var cartridgeRelatedBits: [Int] {
@@ -549,7 +554,10 @@ struct TandemDismissNotificationRequest: TandemRequest {
 }
 
 struct TandemDismissNotificationResponse: TandemResponse {
-    static let opcode: UInt8 = 0xB7
+    /// -71 in pumpX2's signed-byte notation. An earlier build shipped 0xB7 by
+    /// sign-conversion error; the field log showed the pump answering 0xB9
+    /// (185) to a dismissal that did in fact clear the alarm.
+    static let opcode: UInt8 = 0xB9
     static let signed = true
     let status: UInt8
 
