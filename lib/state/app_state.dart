@@ -11,6 +11,7 @@ import '../models/pairing_bundle.dart';
 import '../models/status_snapshot.dart';
 import '../services/command_service.dart';
 import '../services/display_preferences_store.dart';
+import '../services/host_migration_service.dart';
 import '../services/pairing_store.dart';
 import '../services/push_service.dart';
 import '../services/status_service.dart';
@@ -31,6 +32,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   PairingBundle? bundle;
   CommandService? _commandService;
   StatusService? _statusService;
+  HostMigrationService? _hostMigrationService;
 
   bool initialized = false;
 
@@ -382,6 +384,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
+    final hostUpdate = data['encrypted_host_update'];
+    if (hostUpdate is String && hostUpdate.isNotEmpty) {
+      await _handleHostUpdate(hostUpdate);
+      return;
+    }
+
     final encrypted = data['encrypted_status'];
     if (encrypted is! String || encrypted.isEmpty) return;
 
@@ -402,6 +410,37 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       await WidgetBridge.publish(updated, preferences: displayPreferences);
       await _publishLiveActivity(updated);
     }
+  }
+
+  /// The paired host moved Trio to a new phone: point commands at the new
+  /// device's push address. Nothing else about the pairing changes — same
+  /// secret, same credentials, same sequence counter (the new host carried
+  /// this follower's replay state over, so the counter must NOT reset).
+  Future<void> _handleHostUpdate(String encrypted) async {
+    final service = _hostMigrationService;
+    final currentBundle = bundle;
+    if (service == null || currentBundle == null) return;
+
+    final update = await service.handleEncryptedHostUpdate(
+      encrypted,
+      lastApplied: await _store.hostUpdatedAt,
+    );
+    if (update == null) return;
+
+    final newBundle = update.applyTo(currentBundle);
+    await _store.updatePairing(newBundle);
+    await _store.setHostUpdatedAt(update.timestamp);
+    bundle = newBundle;
+    _rebuildServices();
+    statusHint = '${newBundle.hostName} moved Trio to a new phone. '
+        'This follower switched over automatically.';
+    notifyListeners();
+
+    // Tell the new host this device's current push address and version —
+    // the migrated registration may be stale — and refresh the screen from
+    // the new device.
+    await registerPush(force: true);
+    unawaited(requestStatus());
   }
 
   Future<bool> _waitForSnapshotChange({DateTime? since, required Duration timeout}) async {
@@ -597,6 +636,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (currentBundle == null) {
       _commandService = null;
       _statusService = null;
+      _hostMigrationService = null;
       return;
     }
     _commandService = CommandService(
@@ -605,6 +645,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       followerName: currentBundle.followerName,
     );
     _statusService = StatusService(currentBundle.secret);
+    _hostMigrationService = HostMigrationService(currentBundle.secret);
   }
 
   Future<void> _loadHistory() async {
