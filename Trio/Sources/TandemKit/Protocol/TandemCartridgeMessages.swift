@@ -103,6 +103,26 @@ struct TandemLoadStatusResponse: TandemResponse {
         guard isLoadingActive else {
             return String(localized: "the pump is not loading a cartridge")
         }
+        // In the tubing-fill state the detail byte says what the pump is
+        // waiting for, and "waiting for the pump's button" is the single most
+        // useful thing this message can say: on a Mobi the fill is driven by
+        // holding the pump's own button, not by any remote command.
+        if loadState == .primeTubing, let status = primeTubingStatus {
+            switch status {
+            case .stop:
+                return String(localized: "the pump is in tubing fill, not filling")
+            case .start:
+                return String(localized: "the pump is filling the tubing")
+            case .enteredCanExit:
+                return String(localized: "the pump has filled the tubing and can stop")
+            case .enteredCannotExit:
+                return String(localized: "the pump is waiting for its button to be held to fill the tubing")
+            case .suspended:
+                return String(localized: "the pump's tubing fill is paused")
+            case .unknown:
+                break
+            }
+        }
         return String(localized: "the pump is \(loadState.localizedDescription)")
     }
 

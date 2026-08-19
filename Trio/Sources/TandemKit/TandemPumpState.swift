@@ -43,9 +43,15 @@ struct TandemCartridgeSession: Codable, Equatable {
     /// How far through the change we are. The pump drives the real state
     /// machine; this is what Trio has asked for and seen acknowledged.
     enum Stage: String, Codable {
-        /// Pump is in change-cartridge mode; delivery is stopped.
+        /// Pump is in change-cartridge mode; delivery is stopped and the pump
+        /// is waiting for the physical cartridge swap.
         case changeMode
-        /// Fill-tubing mode is active — insulin is moving through the tubing.
+        /// The new cartridge has been inserted and detected. Leaving change
+        /// mode is what triggers detection — on the pump, "exit change mode"
+        /// is the mid-flow "check the new cartridge" step, not the finish.
+        case cartridgeLoaded
+        /// Fill-tubing mode is active. On a Mobi the actual fill is driven by
+        /// holding the pump's own button; Trio only opens the mode.
         case fillingTubing
         /// Tubing fill has been ended.
         case tubingFilled

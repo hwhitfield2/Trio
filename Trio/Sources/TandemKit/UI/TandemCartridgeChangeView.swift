@@ -70,6 +70,7 @@ final class TandemCartridgeChangeViewModel: ObservableObject, PumpManagerStatusO
 
     func begin() { run(pumpManager.beginCartridgeChange) }
     func acknowledgeAlarms() { run(pumpManager.acknowledgeCartridgeAlarms) }
+    func cartridgeInserted() { run(pumpManager.confirmCartridgeInserted) }
     func refreshLoadStatus() { run(pumpManager.refreshLoadStatus) }
     func startFillTubing() { run(pumpManager.startFillTubing) }
     func stopFillTubing() { run(pumpManager.stopFillTubing) }
@@ -200,9 +201,11 @@ struct TandemCartridgeChangeView: View {
     @ViewBuilder private var stepsSection: some View {
         switch viewModel.stage {
         case .changeMode:
+            swapCartridgeSection
+        case .cartridgeLoaded:
             fillTubingSection
         case .fillingTubing:
-            stopFillingSection
+            holdButtonSection
         case .tubingFilled:
             // The tubing fill can be repeated if air is still in the line, so
             // that step stays available alongside priming and finishing.
@@ -218,11 +221,27 @@ struct TandemCartridgeChangeView: View {
         }
     }
 
+    private var swapCartridgeSection: some View {
+        Section(
+            header: Text("Swap the cartridge"),
+            footer: Text(
+                "Insulin is stopped. Remove the old cartridge and attach the new, filled one now. When it is on, continue — the pump will check the new cartridge (you'll see its progress here)."
+            )
+        ) {
+            Button {
+                viewModel.cartridgeInserted()
+            } label: {
+                buttonLabel(String(localized: "The new cartridge is installed"))
+            }
+            .disabled(viewModel.busy)
+        }
+    }
+
     private var fillTubingSection: some View {
         Section(
             header: Text("Fill tubing"),
             footer: Text(
-                "Filling pushes insulin through the tubing. Take the infusion set off your body first — insulin will come out of the end of the line."
+                "Insulin will come out of the end of the line during the fill, so take the infusion set off your body first. Starting the fill only readies the pump — the insulin moves in the next step, while you hold the pump's button."
             )
         ) {
             Toggle(
@@ -241,15 +260,17 @@ struct TandemCartridgeChangeView: View {
         }
     }
 
-    private var stopFillingSection: some View {
+    private var holdButtonSection: some View {
         Section(
-            header: Text("Filling"),
-            footer: Text("Stop as soon as insulin appears at the end of the tubing and no air is left in the line.")
+            header: Text("Hold the button on the pump"),
+            footer: Text(
+                "Trio cannot push the insulin — the pump requires a hand on the device for this step. Press and HOLD the button on the pump itself; insulin moves only while it is held. Release when insulin drips from the end of the tubing and no air is left in the line, then finish the step here. The pump will refuse to stop before any insulin has moved."
+            )
         ) {
-            Button(role: .destructive) {
+            Button {
                 viewModel.stopFillTubing()
             } label: {
-                buttonLabel(String(localized: "Stop filling tubing"))
+                buttonLabel(String(localized: "Done filling — insulin is at the tip"))
             }
             .disabled(viewModel.busy)
         }
@@ -285,12 +306,14 @@ struct TandemCartridgeChangeView: View {
 
     private var finishSection: some View {
         Section(
-            footer: Text("Finishing takes the pump out of cartridge-change mode so it can deliver again.")
+            footer: Text(
+                "Finishing restarts insulin delivery — make sure the infusion set is connected to your body first. The load itself is already complete."
+            )
         ) {
             Button {
                 viewModel.finish()
             } label: {
-                buttonLabel(String(localized: "Finish cartridge change"))
+                buttonLabel(String(localized: "Finish and resume insulin"))
             }
             .disabled(viewModel.busy)
         }
@@ -309,8 +332,9 @@ struct TandemCartridgeChangeView: View {
 
     private func stageTitle(_ stage: TandemCartridgeSession.Stage) -> String {
         switch stage {
-        case .changeMode: return String(localized: "Load the new cartridge")
-        case .fillingTubing: return String(localized: "Filling the tubing")
+        case .changeMode: return String(localized: "Swap the cartridge")
+        case .cartridgeLoaded: return String(localized: "Cartridge loaded")
+        case .fillingTubing: return String(localized: "Hold the pump's button to fill")
         case .tubingFilled: return String(localized: "Tubing filled")
         case .cannulaFilled: return String(localized: "Cannula primed")
         }

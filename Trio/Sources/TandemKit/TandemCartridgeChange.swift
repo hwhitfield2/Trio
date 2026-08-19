@@ -30,6 +30,7 @@ enum TandemCartridgeError: LocalizedError {
     case bolusInProgress
     case alarmNotCleared(String)
     case noAlarmToAcknowledge
+    case resumeRefused(status: UInt8)
 
     var errorDescription: String? {
         switch self {
@@ -71,6 +72,8 @@ enum TandemCartridgeError: LocalizedError {
             return "Trio asked the pump to acknowledge the \(names) alarm, but the pump still reports it. Clear the alarm in the pump's own app, then try again."
         case .noAlarmToAcknowledge:
             return "The pump is not reporting an alarm Trio can acknowledge from here."
+        case let .resumeRefused(status):
+            return "The cartridge change is done, but the pump refused to restart insulin (status \(status)). Insulin is still stopped — resume it from the pump settings screen."
         }
     }
 }
@@ -209,10 +212,52 @@ extension TandemPumpManager {
         }
     }
 
-    /// Step 2: start filling the tubing. **Requires the set to be off the body.**
+    /// Step 2: the user has physically installed the new cartridge. Leaving
+    /// change-cartridge mode is what makes the pump check it — on hardware,
+    /// ExitChangeCartridgeMode immediately produced the detecting-cartridge
+    /// stream (20%…100%), exactly as pumpX2 documents ("called once the new
+    /// cartridge has been inserted"). It is a mid-flow step, not the finish.
+    func confirmCartridgeInserted(completion: @escaping ((any LocalizedError)?) -> Void) {
+        commandQueue.async {
+            if let error = self.requireOpenSession(stages: [.changeMode]) {
+                completion(error)
+                return
+            }
+            if let error = self.prepareForCartridgeCommand() {
+                completion(error)
+                return
+            }
+
+            switch self.session.send(TandemExitChangeCartridgeModeRequest()) {
+            case let .success(response):
+                guard response.status == 0 else {
+                    completion(TandemCartridgeError.rejected(
+                        step: "check the new cartridge",
+                        status: response.status,
+                        detail: self.pumpStateSummary()
+                    ))
+                    return
+                }
+                self.state.cartridgeSession?.stage = .cartridgeLoaded
+                self.playFeedbackTone(.stateChange)
+                self.notifyStateDidChange()
+                completion(nil)
+            case let .failure(error):
+                self.state.lastSync = .distantPast
+                completion(error)
+            }
+        }
+    }
+
+    /// Step 3: open fill-tubing mode. **Requires the set to be off the body.**
+    ///
+    /// Opening the mode is all Trio can do: on a Mobi the fill itself is
+    /// driven by press-and-holding the button on the pump, and the pump
+    /// refuses to leave the mode until some insulin has been pushed
+    /// (prime status "entered, cannot exit"). The screen says so.
     func startFillTubing(completion: @escaping ((any LocalizedError)?) -> Void) {
         commandQueue.async {
-            if let error = self.requireOpenSession(stages: [.changeMode, .tubingFilled]) {
+            if let error = self.requireOpenSession(stages: [.cartridgeLoaded, .tubingFilled]) {
                 completion(error)
                 return
             }
@@ -243,7 +288,7 @@ extension TandemPumpManager {
         }
     }
 
-    /// Step 3: stop filling the tubing.
+    /// Step 4: stop filling the tubing.
     func stopFillTubing(completion: @escaping ((any LocalizedError)?) -> Void) {
         commandQueue.async {
             if let error = self.requireOpenSession(stages: [.fillingTubing]) {
@@ -282,7 +327,7 @@ extension TandemPumpManager {
         }
     }
 
-    /// Step 4 (Mobi only): prime the cannula. **Requires the set to be inserted.**
+    /// Step 5 (Mobi only): prime the cannula. **Requires the set to be inserted.**
     func fillCannula(units: Double, completion: @escaping ((any LocalizedError)?) -> Void) {
         commandQueue.async {
             guard self.state.pumpModel.supportsRemoteCannulaFill else {
@@ -331,11 +376,13 @@ extension TandemPumpManager {
         }
     }
 
-    /// Step 5: leave cartridge-change mode and hand delivery back to the pump.
+    /// Step 6: resume insulin. The pump already left change-cartridge mode
+    /// back when the new cartridge was detected, so there is nothing left to
+    /// exit — finishing means undoing the suspend the change began with.
     func finishCartridgeChange(completion: @escaping ((any LocalizedError)?) -> Void) {
         commandQueue.async {
-            guard self.state.cartridgeSession != nil else {
-                completion(TandemCartridgeError.notInCartridgeChange)
+            if let error = self.requireOpenSession(stages: [.tubingFilled, .cannulaFilled]) {
+                completion(error)
                 return
             }
             if let error = self.prepareForCartridgeCommand() {
@@ -343,16 +390,22 @@ extension TandemPumpManager {
                 return
             }
 
-            switch self.session.send(TandemExitChangeCartridgeModeRequest()) {
+            switch self.session.send(TandemResumePumpingRequest()) {
             case let .success(response):
                 guard response.status == 0 else {
-                    completion(TandemCartridgeError.rejected(step: "finish the cartridge change", status: response.status, detail: self.pumpStateSummary()))
+                    // The load is done either way; what failed is restarting
+                    // insulin, and the user must hear that in those words.
+                    self.completeCartridgeSession(recordSiteChange: true, resumed: false)
+                    completion(TandemCartridgeError.resumeRefused(status: response.status))
                     return
                 }
-                self.completeCartridgeSession(recordSiteChange: true)
+                self.completeCartridgeSession(recordSiteChange: true, resumed: true)
                 completion(nil)
             case let .failure(error):
-                self.state.lastSync = .distantPast
+                // Unknown whether the resume landed. Close the change (the
+                // load itself is complete), assume still suspended so nothing
+                // doses on top of an unknown state, and force a resync.
+                self.completeCartridgeSession(recordSiteChange: true, resumed: false)
                 completion(error)
             }
         }
@@ -372,28 +425,45 @@ extension TandemPumpManager {
             }
             if let error = self.prepareForCartridgeCommand() {
                 // Cannot reach the pump. Still drop our session, but say so.
-                self.completeCartridgeSession(recordSiteChange: false)
+                self.completeCartridgeSession(recordSiteChange: false, resumed: false)
                 completion(error)
                 return
             }
 
             var firstFailure: (any LocalizedError)?
+            let stage = self.state.cartridgeSession?.stage
 
-            if self.state.cartridgeSession?.stage == .fillingTubing {
-                if case let .failure(error) = self.session.send(TandemExitFillTubingModeRequest()) {
+            if stage == .fillingTubing {
+                switch self.session.send(TandemExitFillTubingModeRequest()) {
+                case let .success(response) where response.status != 0:
+                    // Seen live: the pump refuses to leave fill-tubing mode
+                    // before any insulin has moved. It stays in the mode, so
+                    // at least stop the prime, and let the summary tell the
+                    // user the pump is still waiting on its button.
+                    self.log.error("Cancel: pump refused to leave fill-tubing mode (status \(response.status)); sending a prime suspend")
+                    _ = self.session.send(TandemPrimeTubingSuspendRequest())
+                case let .failure(error):
                     self.log.error("Cancel: exiting fill-tubing mode failed: \(error.localizedDescription)")
                     firstFailure = firstFailure ?? error
                     _ = self.session.send(TandemPrimeTubingSuspendRequest())
+                default:
+                    break
                 }
                 _ = self.session.refreshTimeSinceReset()
             }
 
-            if case let .failure(error) = self.session.send(TandemExitChangeCartridgeModeRequest()) {
-                self.log.error("Cancel: exiting change-cartridge mode failed: \(error.localizedDescription)")
-                firstFailure = firstFailure ?? error
+            // Only a pump still in change-cartridge mode has a mode to leave.
+            // From the detection step onwards the pump has already exited it —
+            // sending the exit again would not be a cancel, it would ask the
+            // pump to detect whatever cartridge is in it.
+            if stage == .changeMode {
+                if case let .failure(error) = self.session.send(TandemExitChangeCartridgeModeRequest()) {
+                    self.log.error("Cancel: exiting change-cartridge mode failed: \(error.localizedDescription)")
+                    firstFailure = firstFailure ?? error
+                }
             }
 
-            self.completeCartridgeSession(recordSiteChange: false)
+            self.completeCartridgeSession(recordSiteChange: false, resumed: false)
             if firstFailure != nil {
                 self.state.lastSync = .distantPast
             }
@@ -427,9 +497,16 @@ extension TandemPumpManager {
             self.log.info("Cartridge progress: \(event.localizedDescription)")
             self.state.lastCartridgeEventDescription = event.localizedDescription
 
-            // The pump confirming the cannula is filled is the one stream event
-            // that advances Trio's own stage, so a prime that finished on the
-            // pump is not left looking incomplete.
+            // Two stream events advance Trio's own stage. Detection means the
+            // pump has accepted the new cartridge (it streams this the moment
+            // change mode is exited), and the cannula-filled confirmation
+            // means a prime that finished on the pump is not left looking
+            // incomplete.
+            if case .detectingCartridge = event,
+               self.state.cartridgeSession?.stage == .changeMode
+            {
+                self.state.cartridgeSession?.stage = .cartridgeLoaded
+            }
             if case let .fillCannula(stateId) = event,
                stateId == TandemCartridgeStreamEvent.cannulaFilledStateId,
                self.state.cartridgeSession != nil
@@ -464,11 +541,13 @@ extension TandemPumpManager {
     private func adoptExistingLoad(_ loadStatus: TandemLoadStatusResponse) {
         let stage: TandemCartridgeSession.Stage
         switch loadStatus.loadState {
-        case .changeCartridge,
-             .loadCartridge:
+        case .changeCartridge:
             stage = .changeMode
+        case .loadCartridge:
+            // Past detection: the cartridge is in and the pump has checked it.
+            stage = .cartridgeLoaded
         case .primeTubing:
-            stage = loadStatus.primeTubingStatus == .start ? .fillingTubing : .changeMode
+            stage = .fillingTubing
         case .primeCannula,
              .primeNudge:
             stage = .tubingFilled
@@ -729,14 +808,14 @@ extension TandemPumpManager {
 
     /// Clear the session and, when the change actually completed, tell Trio the
     /// infusion set was replaced so the site tracker restarts its clock.
-    private func completeCartridgeSession(recordSiteChange: Bool) {
+    private func completeCartridgeSession(recordSiteChange: Bool, resumed: Bool) {
         state.cartridgeSession = nil
         state.cartridgeDisconnectConfirmedAt = nil
         state.confirmedSetPlacement = nil
         state.lastCartridgeEventDescription = nil
-        state.suspended = false
-        // The pump is delivering again but its reservoir, basal and suspend
-        // state are all stale now; make the next poll a real one.
+        state.suspended = !resumed
+        // The pump's reservoir, basal and suspend state are all stale now;
+        // make the next poll a real one.
         state.lastSync = .distantPast
 
         if recordSiteChange {

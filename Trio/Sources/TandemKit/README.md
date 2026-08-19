@@ -21,7 +21,7 @@ implements what each pump actually supports:
 | Suspend / resume | ✅ (opt-in) | ❌ | Same |
 | Automatic dosing (SMB) | ✅ with basal control on | ⚠️ only in microbolus-basal mode | Requires Trio to be the pump's only automated dosing authority |
 | Closed loop | ✅ native temp rates **or** microbolus-basal | ⚠️ experimental microbolus-basal only | Mode is a single explicit choice; the two never run together |
-| Cartridge change + fill tubing | ⚠️ opt-in, untested | ⚠️ opt-in, untested | Enter/exit change mode and fill tubing exist on both models |
+| Cartridge change + fill tubing | ⚠️ opt-in, untested | ⚠️ opt-in, field-tested | Sequence verified on a Mobi; the tubing fill runs from the pump's own button |
 | Prime cannula | ⚠️ opt-in, untested | ❌ | `FillCannula` is Mobi-only; prime on the pump itself on a t:slim X2 |
 
 So the two models give Trio genuinely different roles:
@@ -197,6 +197,36 @@ not change Trio, which keeps its own insulin records.
 
 A refusal that still happens with no alarm active reports the raw
 `loadActive`/`loadState`/`prime` ids for the next round of diagnosis.
+
+### The sequence, as the pump actually runs it
+
+The first complete field run corrected the driver's model of the order.
+pumpx2's javadoc says it plainly — `ExitChangeCartridgeModeRequest` is
+"called after EnterChangeCartridgeModeRequest **once the new cartridge has
+been inserted**" — and the pump demonstrated it: the exit immediately
+produced the detecting-cartridge stream (20%…100%). Exit-change-mode is the
+mid-flow "check the new cartridge" step, not the finish. The corrected flow:
+
+1. Acknowledge any blocking alarm; suspend; `EnterChangeCartridgeMode`
+   (stream: "ready to change").
+2. User physically swaps the cartridge.
+3. **"The new cartridge is installed"** → `ExitChangeCartridgeMode` → the
+   pump detects the cartridge (streamed 0–100%).
+4. `EnterFillTubingMode` opens the fill — and that is all it does. **On a
+   Mobi the fill itself runs only while the pump's own physical button is
+   held**; the control stream reports the button state, and the pump refuses
+   `ExitFillTubingMode` until some insulin has moved (prime status "entered,
+   cannot exit" — surfaced as "waiting for its button to be held"). Trio has
+   no command that pushes this insulin, which is the pump requiring a hand
+   on the hardware for the one step that sprays insulin.
+5. `ExitFillTubingMode` once insulin reaches the tip.
+6. Optional cannula prime (`FillCannula`, set inserted and confirmed).
+7. Finish = `ResumePumping` — the pump left change mode back at step 3, so
+   finishing means restarting insulin, and says so on the button.
+
+Cancelling is stage-aware for the same reason: only a pump still in change
+mode has a mode to exit; sending the exit later would not cancel anything,
+it would ask the pump to detect whatever cartridge is present.
 
 Reading the state first also means a load the user started on the pump, or an
 earlier attempt whose reply was lost, is **adopted** rather than restarted.

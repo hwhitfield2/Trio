@@ -136,9 +136,19 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
         #expect(idle.localizedDescription.contains("not loading"))
         #expect(idle.localizedDescription.contains("invalid") == false)
 
-        // While a load IS running, the state is the whole point of the message.
-        let priming = try TandemLoadStatusResponse(cargo: Data([0x01, 0x02, 0x01]))
-        #expect(priming.localizedDescription.contains("priming the tubing"))
+        // While a load IS running, the state is the whole point of the message
+        // — and in tubing fill, the detail byte says what the pump is waiting
+        // for. "Waiting for its button" is the one that matters: a Mobi's fill
+        // runs only while the pump's own button is held, and a user watching a
+        // motionless pump needs the message to say whose move it is.
+        let filling = try TandemLoadStatusResponse(cargo: Data([0x01, 0x02, 0x01]))
+        #expect(filling.localizedDescription.contains("filling the tubing"))
+
+        let waiting = try TandemLoadStatusResponse(cargo: Data([0x01, 0x02, 0x03]))
+        #expect(waiting.localizedDescription.contains("button"))
+
+        let paused = try TandemLoadStatusResponse(cargo: Data([0x01, 0x02, 0x04]))
+        #expect(paused.localizedDescription.contains("paused"))
     }
 
     @Test("A refusal reports what the pump was doing") func diagnosticError() {
@@ -310,6 +320,22 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
 }
 
 @Suite("Tandem cartridge session state") struct TandemCartridgeSessionTests {
+    @Test("The stage order matches the pump's own sequence") func stageSequence() {
+        // Field-observed on a Mobi: exit-change-mode is the mid-flow "check
+        // the new cartridge" step (the pump streams detection the moment it
+        // is sent), the tubing fill happens with the pump's own button, and
+        // by the finish the pump left change mode long ago — so the finish
+        // resumes insulin rather than exiting anything.
+        let state = TandemPumpState()
+        state.cartridgeSession = TandemCartridgeSession(stage: .cartridgeLoaded, startedAt: Date.now)
+        #expect(state.cartridgeChangeInProgress)
+
+        // The new stage survives persistence, so an app restart mid-change
+        // resumes from the right step instead of re-running the swap.
+        let restored = TandemPumpState(rawValue: state.rawValue)
+        #expect(restored.cartridgeSession?.stage == .cartridgeLoaded)
+    }
+
     @Test("A change in progress reads as suspended delivery") func suspendsDelivery() {
         let state = TandemPumpState()
         state.pumpModel = .mobi
