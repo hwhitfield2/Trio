@@ -66,6 +66,23 @@ struct TandemCartridgeSession: Codable, Equatable {
     }
 }
 
+/// How Trio drives basal delivery on the pump.
+///
+/// The two working modes are mutually exclusive and must stay that way: a
+/// pump-side temp rate running at the same time as a stream of basal
+/// microboluses is a straightforward double dose. `TandemPumpState` derives the
+/// mode rather than letting callers read the two opt-in flags independently, and
+/// the manager's setters make sure only one is ever on.
+enum TandemBasalControlMode: Hashable {
+    /// The pump manages basal itself; Trio only monitors and (optionally) boluses.
+    case none
+    /// Trio sets real temp rates with the pump's own command. **Mobi only.**
+    case nativeTempRate
+    /// Trio delivers all basal as a stream of small automatic boluses. Works on
+    /// either model, and is the only way to close the loop on a t:slim X2.
+    case microbolus
+}
+
 /// Persisted state of the Tandem pump driver.
 ///
 /// The pairing code doubles as the message-signing key on legacy-firmware
@@ -238,6 +255,18 @@ final class TandemPumpState: RawRepresentable {
     /// Mobi only; on the t:slim X2 the opcodes are not implemented in firmware.
     var supportsNativeBasalControl: Bool {
         pumpModel.supportsRemoteBasalControl
+    }
+
+    /// How basal is being driven right now.
+    ///
+    /// Microbolus takes precedence if both flags are somehow set, because it is
+    /// the mode that delivers on its own initiative — preferring it means a
+    /// stale `remoteBasalEnabled` can never add a temp rate on top of a
+    /// microbolus stream.
+    var basalControlMode: TandemBasalControlMode {
+        if microbolusBasalEnabled { return .microbolus }
+        if remoteBasalEnabled, supportsNativeBasalControl { return .nativeTempRate }
+        return .none
     }
 
     var basalDeliveryState: PumpManagerStatus.BasalDeliveryState {

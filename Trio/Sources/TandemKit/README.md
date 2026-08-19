@@ -20,7 +20,7 @@ implements what each pump actually supports:
 | Remote temp basal | ✅ (opt-in) | ❌ | The temp-rate/suspend/resume commands are **Mobi-only** in the protocol |
 | Suspend / resume | ✅ (opt-in) | ❌ | Same |
 | Automatic dosing (SMB) | ✅ with basal control on | ⚠️ only in microbolus-basal mode | Requires Trio to be the pump's only automated dosing authority |
-| Closed loop | ✅ natively | ⚠️ experimental microbolus-basal only | |
+| Closed loop | ✅ native temp rates **or** microbolus-basal | ⚠️ experimental microbolus-basal only | Mode is a single explicit choice; the two never run together |
 | Cartridge change + fill tubing | ⚠️ opt-in, untested | ⚠️ opt-in, untested | Enter/exit change mode and fill tubing exist on both models |
 | Prime cannula | ⚠️ opt-in, untested | ❌ | `FillCannula` is Mobi-only; prime on the pump itself on a t:slim X2 |
 
@@ -55,10 +55,16 @@ unsafe, so each command verifies it against a recent status sync and refuses
 otherwise. The whole feature sits behind an explicit opt-in
 (`TandemPumpState.remoteBasalEnabled`) with a confirmation dialog.
 
-### Microbolus-basal mode (t:slim X2, experimental)
+### Microbolus-basal mode (either model, experimental)
 
-An opt-in mode (`TandemMicrobolusBasal.swift`) lets Trio close the loop on a
-t:slim X2 anyway by delivering **all** basal as a stream of small boluses:
+`TandemMicrobolusBasal.swift` delivers **all** basal as a stream of small
+boluses. On a **t:slim X2** it is the only way to close the loop at all. On a
+**Mobi** it is an alternative to native temp rates, and buys finer control: a
+Tandem temp rate is a whole percentage of the pump's profile, capped at 250%
+with a 15-minute minimum, whereas microboluses follow oref's requested rate at
+milliunit resolution with no ceiling beyond Trio's own limits. The trade is that
+it replaces the pump's delivery engine with Trio's, and needs the pump's own
+basal zeroed.
 
 - Each loop cycle, oref's requested basal rate is integrated over the elapsed
   time into an "owed" accumulator; the accrued amount is delivered as one
@@ -88,8 +94,17 @@ automation and substitutes Trio's. It is a significant, genuinely risky,
 off-label configuration gated behind an explicit confirmation, is **unverified
 on hardware**, and must not be relied on without real-pump testing.
 
-The mode is offered only on the t:slim X2. On a Mobi there is no reason to
-emulate basal with boluses when the pump accepts real temp rates.
+### Choosing between them
+
+`TandemBasalControlMode` makes the choice explicit — `none`, `nativeTempRate`
+(Mobi only) or `microbolus` (either model) — rather than leaving two independent
+opt-in flags to be read separately. The two working modes **must never both be
+live**: a pump-side temp rate delivering underneath a microbolus stream is a
+straightforward double dose. So the mode is derived, microbolus wins if both
+flags are somehow set (it is the mode that delivers on its own initiative), the
+settings screen offers one picker rather than two toggles, and switching to
+microbolus stops any temp rate still running on the pump instead of merely
+clearing the flag.
 
 ## Cartridge changes
 

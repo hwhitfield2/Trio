@@ -147,7 +147,9 @@ final class TandemSettingsViewModel: ObservableObject {
 
     func confirmRemoteBasalEnable() {
         remoteBasalEnabled = true
+        microbolusBasalEnabled = false
         pumpManager.setRemoteBasalEnabled(true)
+        objectWillChange.send()
     }
 
     func cancelRemoteBasalEnable() {
@@ -174,6 +176,47 @@ final class TandemSettingsViewModel: ObservableObject {
 
     var cartridgeChangeInProgress: Bool { state.cartridgeChangeInProgress }
 
+    var basalControlMode: TandemBasalControlMode { state.basalControlMode }
+
+    /// Modes this pump can actually offer. Only the Mobi has native temp rates,
+    /// and microbolus-basal needs remote bolus, which older t:slim X2 software
+    /// does not have.
+    var availableBasalModes: [TandemBasalControlMode] {
+        var modes: [TandemBasalControlMode] = [.none]
+        if supportsNativeBasal {
+            modes.append(.nativeTempRate)
+        }
+        if state.supportsRemoteBolus || state.apiVersionMajor == 0 {
+            modes.append(.microbolus)
+        }
+        return modes
+    }
+
+    func basalModeTitle(_ mode: TandemBasalControlMode) -> String {
+        switch mode {
+        case .none: return String(localized: "Pump manages basal")
+        case .nativeTempRate: return String(localized: "Trio sets temp rates")
+        case .microbolus: return String(localized: "Trio delivers basal as microboluses")
+        }
+    }
+
+    /// Applying a mode goes through the manager so the two opt-ins can never
+    /// both end up on, and so a temp rate left running gets stopped.
+    func requestBasalMode(_ mode: TandemBasalControlMode) {
+        switch mode {
+        case .none:
+            pumpManager.setMicrobolusBasalEnabled(false)
+            pumpManager.setRemoteBasalEnabled(false)
+            remoteBasalEnabled = false
+            microbolusBasalEnabled = false
+        case .nativeTempRate:
+            showRemoteBasalWarning = true
+        case .microbolus:
+            showMicrobolusWarning = true
+        }
+        objectWillChange.send()
+    }
+
     /// Created once and reused, so presenting the sheet does not spawn a new
     /// view model (and a new status observer) on every redraw.
     lazy var cartridgeViewModel = TandemCartridgeChangeViewModel(pumpManager: pumpManager)
@@ -190,7 +233,9 @@ final class TandemSettingsViewModel: ObservableObject {
     func confirmMicrobolusEnable() {
         microbolusBasalEnabled = true
         remoteBolusEnabled = true
+        remoteBasalEnabled = false
         pumpManager.setMicrobolusBasalEnabled(true)
+        objectWillChange.send()
     }
 
     func cancelMicrobolusEnable() {
@@ -287,11 +332,7 @@ struct TandemSettingsView: View {
             if viewModel.remoteBolusEnabled {
                 testDoseSection
             }
-            if viewModel.supportsNativeBasal {
-                remoteBasalSection
-            } else {
-                microbolusBasalSection
-            }
+            basalModeSection
             cartridgeSection
             soundsSection
             aboutSection
@@ -462,6 +503,59 @@ struct TandemSettingsView: View {
         }
     }
 
+    /// One place to choose how basal is driven, so the two modes cannot be
+    /// switched on independently.
+    private var basalModeSection: some View {
+        Group {
+            Section(
+                header: Text("Basal control"),
+                footer: Text(basalModeFooter)
+            ) {
+                Picker(
+                    String(localized: "Basal is driven by"),
+                    selection: Binding(
+                        get: { viewModel.basalControlMode },
+                        set: { viewModel.requestBasalMode($0) }
+                    )
+                ) {
+                    ForEach(viewModel.availableBasalModes, id: \.self) { mode in
+                        Text(viewModel.basalModeTitle(mode)).tag(mode)
+                    }
+                }
+                .pickerStyle(.inline)
+            }
+            switch viewModel.basalControlMode {
+            case .nativeTempRate:
+                remoteBasalSection
+            case .microbolus:
+                microbolusBasalSection
+            case .none:
+                EmptyView()
+            }
+        }
+    }
+
+    private var basalModeFooter: String {
+        switch viewModel.basalControlMode {
+        case .none:
+            return viewModel.supportsNativeBasal
+                ? String(
+                    localized: "The pump is managing basal on its own, so Trio cannot close the loop. Pick a mode to let it."
+                )
+                : String(
+                    localized: "The pump is managing basal on its own. The t:slim X2 has no remote temp-rate command, so microbolus-basal is the only way Trio can close the loop."
+                )
+        case .nativeTempRate:
+            return String(
+                localized: "Trio sets real temp rates on the pump. Rates are a whole percentage of the pump's own basal profile, capped at 250%, so the profile must stay non-zero."
+            )
+        case .microbolus:
+            return String(
+                localized: "Trio delivers all basal as small automatic boluses, following the requested rate at milliunit resolution with no 250% ceiling. The pump's own basal profile must be 0 U/hr."
+            )
+        }
+    }
+
     private var remoteBasalSection: some View {
         Section(
             header: Text("Closed loop"),
@@ -469,14 +563,6 @@ struct TandemSettingsView: View {
                 "Lets Trio set temp basal rates and suspend or resume delivery on the Mobi — the pump commands Trio needs to close the loop. Requires the pump's Control-IQ to be off and a non-zero basal profile, since Tandem temp rates are a percentage (0-250%) of the profile rate."
             )
         ) {
-            Toggle(
-                String(localized: "Let Trio control basal"),
-                isOn: Binding(
-                    get: { viewModel.remoteBasalEnabled },
-                    set: { viewModel.requestRemoteBasalChange($0) }
-                )
-            )
-
             if viewModel.remoteBasalEnabled {
                 let ready = !viewModel.state.controlIQEnabled
                     && viewModel.state.profileBasalRate >= TandemPumpManager.minimumProfileBasalForTempRate
@@ -555,18 +641,9 @@ struct TandemSettingsView: View {
         Section(
             header: Text("Microbolus-basal (experimental)"),
             footer: Text(
-                "Delivers all basal as automatic microboluses so Trio can close the loop on the t:slim X2. Requires the pump's basal profile set to 0 U/hr and Control-IQ off. Disables the pump's own safety automation. Unverified on hardware — use at your own risk."
+                "Delivers all basal as automatic microboluses, following the requested rate at milliunit resolution. Requires the pump's basal profile set to 0 U/hr and Control-IQ off. Disables the pump's own safety automation. Unverified on hardware — use at your own risk."
             )
         ) {
-            Toggle(
-                String(localized: "Loop via microbolus-basal"),
-                isOn: Binding(
-                    get: { viewModel.microbolusBasalEnabled },
-                    set: { viewModel.requestMicrobolusChange($0) }
-                )
-            )
-            .disabled(!viewModel.state.supportsRemoteBolus && viewModel.state.apiVersionMajor > 0)
-
             if viewModel.microbolusBasalEnabled {
                 HStack(alignment: .top) {
                     Image(

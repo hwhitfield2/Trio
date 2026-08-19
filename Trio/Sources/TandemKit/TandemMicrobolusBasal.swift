@@ -3,8 +3,16 @@ import LoopKit
 
 /// The microbolus-basal engine.
 ///
-/// The t:slim X2 has no remote temp-basal command, but it can bolus. When the
-/// user opts into microbolus-basal mode (and has set the pump's own basal
+/// Both models can bolus, so both can run basal this way. On a **t:slim X2** it
+/// is the only way to close the loop at all, since that firmware has no remote
+/// temp-rate command. On a **Mobi** it is an alternative to native temp rates,
+/// and buys finer control: a Tandem temp rate is a whole percentage of the
+/// pump's profile, capped at 250% and a 15-minute minimum, whereas microboluses
+/// follow oref's requested rate at milliunit resolution with no ceiling beyond
+/// Trio's own limits. The trade is that it replaces the pump's delivery engine
+/// with Trio's.
+///
+/// When the user selects microbolus-basal mode (and has set the pump's own basal
 /// profile to 0 U/hr with Control-IQ off), Trio drives ALL basal delivery by
 /// converting oref's requested basal rate into a stream of small boluses.
 ///
@@ -19,6 +27,9 @@ import LoopKit
 /// bolus and temp-basal contribute identically to IOB, and recording as bolus
 /// avoids Trio's `maxBasal` temp-basal filter, which would otherwise drop a
 /// high-reconstructed-rate pulse and cause an IOB undercount → over-delivery.
+///
+/// This mode and native temp rates are mutually exclusive — see
+/// `TandemBasalControlMode`.
 extension TandemPumpManager {
     /// Never deliver more than this in a single basal pulse (safety backstop).
     static let maxSingleMicrobolusUnits: Double = 2.0

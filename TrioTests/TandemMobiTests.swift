@@ -76,6 +76,73 @@ private extension Data {
     }
 }
 
+@Suite("Tandem basal control mode") struct TandemBasalControlModeTests {
+    private func state(model: TandemPumpModel) -> TandemPumpState {
+        let state = TandemPumpState()
+        state.pumpModel = model
+        state.apiVersionMajor = model == .mobi ? 3 : 2
+        state.apiVersionMinor = 5
+        return state
+    }
+
+    @Test("Nothing drives basal until a mode is chosen") func defaultsToNone() {
+        #expect(state(model: .mobi).basalControlMode == .none)
+        #expect(state(model: .tslimX2).basalControlMode == .none)
+    }
+
+    @Test("Microbolus-basal is available on the Mobi too") func microbolusOnMobi() {
+        // The whole point of this mode is that it only needs the ability to
+        // bolus, which both models have — so selecting it on a Mobi must route
+        // to the microbolus engine rather than falling back to temp rates.
+        let mobi = state(model: .mobi)
+        mobi.microbolusBasalEnabled = true
+        #expect(mobi.basalControlMode == .microbolus)
+
+        let tslim = state(model: .tslimX2)
+        tslim.microbolusBasalEnabled = true
+        #expect(tslim.basalControlMode == .microbolus)
+    }
+
+    @Test("Native temp rates stay Mobi-only") func nativeIsMobiOnly() {
+        let mobi = state(model: .mobi)
+        mobi.remoteBasalEnabled = true
+        #expect(mobi.basalControlMode == .nativeTempRate)
+
+        // A t:slim X2 cannot honour temp rates even if the flag is somehow set,
+        // so the mode must not resolve to one.
+        let tslim = state(model: .tslimX2)
+        tslim.remoteBasalEnabled = true
+        #expect(tslim.basalControlMode == .none)
+    }
+
+    @Test("Microbolus wins if both flags are set") func modesNeverOverlap() {
+        // Both live at once would mean a pump-side temp rate delivering
+        // underneath a microbolus stream: a double dose. Resolving to the
+        // self-delivering mode is the safe direction.
+        let mobi = state(model: .mobi)
+        mobi.remoteBasalEnabled = true
+        mobi.microbolusBasalEnabled = true
+        #expect(mobi.basalControlMode == .microbolus)
+    }
+
+    @Test("Any mode permits automatic dosing; no mode does not") func automaticDosingGate() {
+        let mobi = state(model: .mobi)
+        #expect(mobi.basalControlMode == .none)
+        mobi.microbolusBasalEnabled = true
+        #expect(mobi.basalControlMode != .none)
+        mobi.microbolusBasalEnabled = false
+        mobi.remoteBasalEnabled = true
+        #expect(mobi.basalControlMode != .none)
+    }
+
+    @Test("Mode survives the raw-state round trip") func persistence() {
+        let mobi = state(model: .mobi)
+        mobi.microbolusBasalEnabled = true
+        let restored = TandemPumpState(rawValue: mobi.rawValue)
+        #expect(restored.basalControlMode == .microbolus)
+    }
+}
+
 @Suite("Tandem Mobi control messages") struct TandemMobiControlMessageTests {
     @Test("Encodes a temp rate as milliseconds and percent") func setTempRateCargo() {
         // 30 minutes at 150% of profile: duration is carried in milliseconds,

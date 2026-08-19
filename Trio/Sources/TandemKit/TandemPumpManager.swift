@@ -619,17 +619,17 @@ extension TandemPumpManager {
     }
 
     /// True when Trio is the pump's only autonomous dosing authority, which is
-    /// what makes an oref SMB safe to deliver.
+    /// what makes an oref SMB safe to deliver. Either basal control mode
+    /// qualifies — both require the pump's own automation to be off.
     var automaticDosingAllowed: Bool {
-        if state.supportsNativeBasalControl { return state.remoteBasalEnabled }
-        return state.microbolusBasalEnabled
+        state.basalControlMode != .none
     }
 
     /// Nil when an automatic dose may proceed right now; otherwise the reason it
     /// may not. Must be called on commandQueue, since it reads sync state.
     private func automaticDosingPreconditionFailure() -> TandemUnsupportedError? {
-        if state.supportsNativeBasalControl {
-            guard state.remoteBasalEnabled else { return .remoteBasalDisabled }
+        switch state.basalControlMode {
+        case .nativeTempRate:
             // Fail closed on stale status: Control-IQ could have been switched
             // on since the last poll, which would make Trio a second dosing
             // authority.
@@ -639,11 +639,16 @@ extension TandemPumpManager {
             guard !state.controlIQEnabled else { return .controlIQActive }
             guard !state.suspended else { return .microbolusBasalPreconditionFailed }
             return nil
+        case .microbolus:
+            // The stricter set: the pump's own basal must also be zeroed, or the
+            // SMB would stack on top of what the pump is already delivering.
+            guard microbolusBasalPreconditionsMet(), !state.microbolusSuspended else {
+                return .microbolusBasalPreconditionFailed
+            }
+            return nil
+        case .none:
+            return .basalControlNotConfigured
         }
-        guard microbolusBasalPreconditionsMet(), !state.microbolusSuspended else {
-            return .microbolusBasalPreconditionFailed
-        }
-        return nil
     }
 
     /// True when a send failure provably occurred before the pump could have
@@ -846,24 +851,18 @@ extension TandemPumpManager {
             completion(.deviceState(TandemUnsupportedError.cartridgeChangeInProgress))
             return
         }
-        if state.supportsNativeBasalControl, state.remoteBasalEnabled {
+        switch state.basalControlMode {
+        case .nativeTempRate:
             commandQueue.async {
                 self.enactNativeTempBasal(unitsPerHour: unitsPerHour, duration: duration, completion: completion)
             }
-            return
-        }
-        if state.supportsNativeBasalControl {
-            log.error("Temp basal requested but remote basal control is not enabled for this Mobi")
-            completion(.configuration(TandemUnsupportedError.remoteBasalDisabled))
-            return
-        }
-        guard state.microbolusBasalEnabled else {
-            log.error("Temp basal requested but microbolus-basal mode is off; the t:slim X2 has no remote basal control")
-            completion(.configuration(TandemUnsupportedError.basalControlUnsupported))
-            return
-        }
-        commandQueue.async {
-            self.enactMicrobolusBasal(unitsPerHour: unitsPerHour, duration: duration, completion: completion)
+        case .microbolus:
+            commandQueue.async {
+                self.enactMicrobolusBasal(unitsPerHour: unitsPerHour, duration: duration, completion: completion)
+            }
+        case .none:
+            log.error("Temp basal requested but no basal control mode is enabled")
+            completion(.configuration(TandemUnsupportedError.basalControlNotConfigured))
         }
     }
 
@@ -873,22 +872,17 @@ extension TandemPumpManager {
             completion(nil)
             return
         }
-        if state.supportsNativeBasalControl, state.remoteBasalEnabled {
+        switch state.basalControlMode {
+        case .nativeTempRate:
             commandQueue.async {
                 self.suspendNativeDelivery(completion: completion)
             }
-            return
-        }
-        if state.supportsNativeBasalControl {
-            completion(TandemUnsupportedError.remoteBasalDisabled)
-            return
-        }
-        guard state.microbolusBasalEnabled else {
-            completion(TandemUnsupportedError.basalControlUnsupported)
-            return
-        }
-        commandQueue.async {
-            self.suspendMicrobolusBasal(completion: completion)
+        case .microbolus:
+            commandQueue.async {
+                self.suspendMicrobolusBasal(completion: completion)
+            }
+        case .none:
+            completion(TandemUnsupportedError.basalControlNotConfigured)
         }
     }
 
@@ -897,22 +891,17 @@ extension TandemPumpManager {
             completion(TandemUnsupportedError.cartridgeChangeInProgress)
             return
         }
-        if state.supportsNativeBasalControl, state.remoteBasalEnabled {
+        switch state.basalControlMode {
+        case .nativeTempRate:
             commandQueue.async {
                 self.resumeNativeDelivery(completion: completion)
             }
-            return
-        }
-        if state.supportsNativeBasalControl {
-            completion(TandemUnsupportedError.remoteBasalDisabled)
-            return
-        }
-        guard state.microbolusBasalEnabled else {
-            completion(TandemUnsupportedError.basalControlUnsupported)
-            return
-        }
-        commandQueue.async {
-            self.resumeMicrobolusBasal(completion: completion)
+        case .microbolus:
+            commandQueue.async {
+                self.resumeMicrobolusBasal(completion: completion)
+            }
+        case .none:
+            completion(TandemUnsupportedError.basalControlNotConfigured)
         }
     }
 
@@ -1087,7 +1076,12 @@ extension TandemPumpManager {
             return
         }
         state.remoteBasalEnabled = enabled
-        if !enabled {
+        if enabled {
+            // The two modes must never both be live: a pump-side temp rate plus
+            // a microbolus stream is a double dose. Tear the other one down
+            // completely rather than just clearing its flag.
+            teardownMicrobolusBasal()
+        } else {
             state.activeTempBasal = nil
         }
         session.insulinDeliveryActionsEnabled = state.insulinDeliveryActionsAllowed
@@ -1101,11 +1095,38 @@ extension TandemPumpManager {
             state.microbolusBasalEnabled = true
             state.microbolusSuspended = false
             state.remoteBolusEnabled = true
+            // Leaving native temp-rate control behind: a rate already running on
+            // the pump would keep delivering underneath the microbolus stream,
+            // so stop it on the pump before switching, not just in our state.
+            if state.remoteBasalEnabled {
+                state.remoteBasalEnabled = false
+                stopRunningTempRateForModeSwitch()
+            }
         } else {
             teardownMicrobolusBasal()
         }
         session.insulinDeliveryActionsEnabled = state.insulinDeliveryActionsAllowed
         notifyStateDidChange()
+    }
+
+    /// Best-effort stop of a temp rate left running when the user switches away
+    /// from native basal control. Runs asynchronously so the settings toggle
+    /// stays responsive; a failure is logged and the next status sync catches it.
+    private func stopRunningTempRateForModeSwitch() {
+        guard let temp = state.activeTempBasal, temp.isActive() else {
+            state.activeTempBasal = nil
+            return
+        }
+        commandQueue.async {
+            self.stopNativeTempBasal { error in
+                if let error = error {
+                    self.log.error(
+                        "Could not stop the running temp basal while switching to microbolus-basal: \(error.localizedDescription)"
+                    )
+                    self.state.lastSync = .distantPast
+                }
+            }
+        }
     }
 
     /// Fully disable the microbolus-basal mode and clear all of its transient
@@ -1204,11 +1225,12 @@ enum TandemUnsupportedError: LocalizedError {
     case suspendRejected(UInt8)
     case resumeRejected(UInt8)
     case cartridgeChangeInProgress
+    case basalControlNotConfigured
 
     var errorDescription: String? {
         switch self {
         case .basalControlUnsupported:
-            return "The t:slim X2 does not accept remote basal commands. Control-IQ manages automated delivery on the pump itself, so Trio cannot run a closed loop with this pump."
+            return "This pump does not accept remote basal commands, so Trio cannot drive basal on it directly."
         case .remoteBasalDisabled:
             return "Remote basal control is disabled. Enable it in the pump settings to let Trio set temp basals on this pump."
         case .basalContextStale:
@@ -1225,6 +1247,8 @@ enum TandemUnsupportedError: LocalizedError {
             return "The pump refused to resume delivery (status \(status))."
         case .cartridgeChangeInProgress:
             return "A cartridge change is in progress. Finish or cancel it before Trio delivers insulin again."
+        case .basalControlNotConfigured:
+            return "Trio is not set up to control basal on this pump. Choose how basal should be driven in the pump settings: a Tandem Mobi can use its own temp rates or microbolus-basal, and a t:slim X2 can only use microbolus-basal."
         case .microbolusBasalPreconditionFailed:
             return "Microbolus-basal is on but the pump is still delivering its own basal or Control-IQ. Set the pump's basal profile to 0 U/hr and turn Control-IQ off, or Trio would stack insulin on top of the pump."
         case .remoteBolusDisabled:
