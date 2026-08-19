@@ -109,26 +109,42 @@ extension TandemPumpManager {
         case failed(TandemSessionError)
     }
 
-    private func sendOnePulse() -> PulseOutcome {
+    /// One attempt, with every stage written down.
+    ///
+    /// The stages share failure strings — a connect timeout, a time-refresh
+    /// timeout and a PlaySound timeout all say "timed out" — so without naming
+    /// the stage, a field report cannot be diagnosed. The notes are the actual
+    /// deliverable of the test button; the alarm path sends them to the log.
+    private func sendOnePulse(_ label: String, notes: inout [String]) -> PulseOutcome {
+        let wasConnected = bluetooth.isConnected
         if let error = ensureConnectedAndAuthenticated() {
+            notes.append("\(label): could not connect and authenticate — \(error.localizedDescription)")
             return .failed(error)
         }
+        notes.append(wasConnected
+            ? "\(label): link was already up and authenticated"
+            : "\(label): connected and authenticated")
         if case let .failure(error) = session.refreshTimeSinceReset() {
+            notes.append("\(label): pump time refresh failed — \(error.localizedDescription)")
             return .failed(error)
         }
         switch session.send(TandemPlaySoundRequest()) {
         case let .success(response):
             if response.status != 0 {
+                notes.append("\(label): PlaySound refused, status \(Int(response.status))")
                 return .refused(String(localized: "status \(Int(response.status))"))
             }
             // Status 0 is pumpX2's documented success. It says the pump ACCEPTED
             // the command, not that anything was audible: PlaySound has no
             // volume of its own and follows the pump's Sound settings.
+            notes.append("\(label): PlaySound ACCEPTED (status 0)")
             return .accepted
         case let .failure(error):
             if case let .pumpRejected(refusal) = error {
+                notes.append("\(label): PlaySound refused — \(refusal.localizedDescription)")
                 return .refused(refusal.localizedDescription)
             }
+            notes.append("\(label): PlaySound got no answer — \(error.localizedDescription)")
             return .failed(error)
         }
     }
@@ -140,22 +156,43 @@ extension TandemPumpManager {
     /// pump does not accept — and a JPAKE signing key is only valid on the
     /// link whose nonce produced it. Reconnecting re-runs the key exchange, so
     /// a refusal caused by a stale key is cured by exactly this.
-    private func reauthenticateOverFreshLink() -> TandemSessionError? {
+    ///
+    /// A pump that was just dropped on purpose can be slow to take the next
+    /// connection, so the reconnect gets a second attempt before giving up —
+    /// the first field run of this path ended in a bare connect timeout that
+    /// swallowed the far more informative refusal before it.
+    private func reauthenticateOverFreshLink(notes: inout [String]) -> TandemSessionError? {
         dispatchPrecondition(condition: .onQueue(commandQueue))
-        log.info("Re-keying: dropping the link to force a fresh handshake")
+        let started = Date.now
         bluetooth.disconnect()
         var waited: TimeInterval = 0
-        while bluetooth.isConnected, waited < 5 {
+        while bluetooth.isConnected, waited < 10 {
             Thread.sleep(forTimeInterval: 0.2)
             waited += 0.2
         }
-        if let error = ensureConnectedAndAuthenticated() {
-            return error
+        notes.append(bluetooth.isConnected
+            ? "re-key: link did NOT drop within 10s of disconnecting"
+            : String(format: "re-key: link dropped after %.1fs", waited))
+
+        var lastError: TandemSessionError = .notConnected
+        for attempt in 1 ... 2 {
+            if let error = ensureConnectedAndAuthenticated() {
+                notes.append("re-key: reconnect attempt \(attempt) failed — \(error.localizedDescription)")
+                lastError = error
+                continue
+            }
+            if case let .failure(error) = session.refreshTimeSinceReset() {
+                notes.append("re-key: time refresh after reconnect failed — \(error.localizedDescription)")
+                lastError = error
+                continue
+            }
+            notes.append(String(
+                format: "re-key: reconnected and re-keyed, %.1fs total",
+                Date.now.timeIntervalSince(started)
+            ))
+            return nil
         }
-        if case let .failure(error) = session.refreshTimeSinceReset() {
-            return error
-        }
-        return nil
+        return lastError
     }
 
     /// What the pump says about itself right after a refusal, for the log and
@@ -193,7 +230,11 @@ extension TandemPumpManager {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         guard remaining > 0 else { return }
 
-        switch sendOnePulse() {
+        var notes: [String] = []
+        defer {
+            for note in notes { log.info("Annunciation \(note)") }
+        }
+        switch sendOnePulse("pulse", notes: &notes) {
         case .accepted:
             break
         case let .refused(reason):
@@ -201,15 +242,12 @@ extension TandemPumpManager {
                 suppressAnnunciations(reason: reason)
                 return
             }
-            log.error("PlaySound refused (\(reason)); retrying once over a fresh handshake")
-            if let error = reauthenticateOverFreshLink() {
-                log.error("Annunciation stopped: re-key failed (\(error.localizedDescription))")
+            if reauthenticateOverFreshLink(notes: &notes) != nil {
                 return
             }
             playAnnunciationPulse(remaining: remaining, gap: gap, canRekey: false)
             return
-        case let .failed(error):
-            log.error("Annunciation stopped: \(error.localizedDescription)")
+        case .failed:
             return
         }
 
@@ -222,11 +260,16 @@ extension TandemPumpManager {
     /// Play a pattern from the settings screen so the user can hear (or feel)
     /// the difference between the two before relying on it.
     ///
-    /// Unlike the real thing this ignores the rate limit — the user is standing
-    /// there asking for it — but it connects the same way, retries over a fresh
-    /// handshake the same way, and on a second refusal reports everything there
-    /// is to know: the pump's named reason and what the pump said about its own
-    /// state, so the answer can be diagnosed rather than shrugged at.
+    /// This is a PROBE, not just a button: it records every stage with a
+    /// timestamp — connect, authenticate, time refresh, the command, the
+    /// re-key, the second attempt — and hands the whole transcript back on any
+    /// failure. The command is unverified against real hardware, so the
+    /// transcript IS the finding; a bare "timed out" from an unknown stage is
+    /// what this replaces.
+    ///
+    /// Any first-attempt failure gets one retry over a torn-down, re-keyed
+    /// link: a refusal because that cures a stale signing key, a timeout
+    /// because the link may be dead in a way `isConnected` has not noticed yet.
     func testAnnunciation(_ kind: TandemGlucoseAlarmKind, completion: @escaping ((any LocalizedError)?) -> Void) {
         guard state.glucoseAnnunciationEnabled else {
             completion(TandemAnnunciationError.notEnabled)
@@ -238,15 +281,33 @@ extension TandemPumpManager {
         commandQueue.async { [weak self] in
             guard let self = self else { return }
             let pattern = TandemAnnunciationPattern.pattern(for: kind)
+            let started = Date.now
+            var notes: [String] = []
 
-            var outcome = self.sendOnePulse()
-            if case let .refused(reason) = outcome {
-                self.log.error("PlaySound refused (\(reason)); test retrying once over a fresh handshake")
-                if let error = self.reauthenticateOverFreshLink() {
-                    completion(error)
+            func finish(_ error: TandemAnnunciationError?) {
+                let stamp = String(format: "%.1fs", Date.now.timeIntervalSince(started))
+                notes.append("done at \(stamp)")
+                for note in notes { self.log.info("Annunciation test \(note)") }
+                completion(error)
+            }
+
+            var outcome = self.sendOnePulse("attempt 1", notes: &notes)
+
+            if case .accepted = outcome {} else {
+                // Whatever went wrong, note what the pump says about itself
+                // while we are still on the original link — unsigned reads
+                // work even when signing is what broke.
+                if case .refused = outcome {
+                    notes.append("pump state: \(self.annunciationPumpContext())")
+                }
+                if let error = self.reauthenticateOverFreshLink(notes: &notes) {
+                    finish(TandemAnnunciationError.probeFailed(
+                        transcript: notes.joined(separator: "\n"),
+                        finalProblem: error.localizedDescription
+                    ))
                     return
                 }
-                outcome = self.sendOnePulse()
+                outcome = self.sendOnePulse("attempt 2", notes: &notes)
             }
 
             switch outcome {
@@ -259,13 +320,19 @@ extension TandemPumpManager {
                         self?.playAnnunciationPulse(remaining: pattern.pulses - 1, gap: pattern.gap, canRekey: false)
                     }
                 }
-                completion(nil)
+                finish(nil)
             case let .refused(reason):
-                let context = self.annunciationPumpContext()
+                notes.append("pump state: \(self.annunciationPumpContext())")
                 self.suppressAnnunciations(reason: reason)
-                completion(TandemAnnunciationError.refusedTwice(reason: reason, context: context))
+                finish(TandemAnnunciationError.probeFailed(
+                    transcript: notes.joined(separator: "\n"),
+                    finalProblem: reason
+                ))
             case let .failed(error):
-                completion(error)
+                finish(TandemAnnunciationError.probeFailed(
+                    transcript: notes.joined(separator: "\n"),
+                    finalProblem: error.localizedDescription
+                ))
             }
         }
     }
@@ -273,19 +340,19 @@ extension TandemPumpManager {
 
 enum TandemAnnunciationError: LocalizedError {
     case notEnabled
-    /// The pump said no twice — once on the standing link and once more after a
-    /// full reconnect and key exchange. That rules out the stale-signing-key
-    /// failure, so what remains is the pump itself: its named reason and its
-    /// own state at that moment are the whole finding.
-    case refusedTwice(reason: String, context: String)
+    /// The probe did not end in an accepted pulse. The transcript names every
+    /// stage with its outcome and timing — which is the point: a connect
+    /// timeout, a time-refresh timeout and an unanswered PlaySound all used to
+    /// collapse into one indistinguishable "timed out".
+    case probeFailed(transcript: String, finalProblem: String)
 
     var errorDescription: String? {
         switch self {
         case .notEnabled:
             return String(localized: "Buzzing the pump for glucose alarms is turned off.")
-        case let .refusedTwice(reason, context):
+        case let .probeFailed(transcript, finalProblem):
             return String(
-                localized: "The pump refused to play the sound twice — once more after reconnecting with a fresh key — answering: \(reason). The pump reported: \(context). Trio will not ask again for an hour; a test button asks immediately."
+                localized: "The test did not get a sound out of the pump: \(finalProblem)\n\nWhat happened, step by step:\n\(transcript)"
             )
         }
     }
