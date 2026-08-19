@@ -103,8 +103,8 @@ private extension Data {
         #expect(try TandemResumePumpingResponse(cargo: Data([0x01])).status == 1)
 
         // Short cargo is rejected rather than silently misread.
-        #expect(throws: (any Error).self) { try TandemSetTempRateResponse(cargo: Data([0x00])) }
-        #expect(throws: (any Error).self) { try TandemSuspendPumpingResponse(cargo: Data()) }
+        #expect(throws: TandemMessageError.self) { try TandemSetTempRateResponse(cargo: Data([0x00])) }
+        #expect(throws: TandemMessageError.self) { try TandemSuspendPumpingResponse(cargo: Data()) }
     }
 
     @Test("Mobi basal opcodes match the reverse-engineered protocol") func opcodes() {
@@ -146,7 +146,7 @@ private extension Data {
         let response2 = try TandemJpake2Response(cargo: Data([0x00, 0x00]) + full)
         #expect(response2.challengeHash.count == 168)
 
-        #expect(throws: (any Error).self) { try TandemJpake2Response(cargo: Data([0x00, 0x00]) + half) }
+        #expect(throws: TandemMessageError.self) { try TandemJpake2Response(cargo: Data([0x00, 0x00]) + half) }
     }
 
     @Test("Encodes and parses the session key and confirmation exchange") func keyConfirmation() throws {
@@ -178,7 +178,7 @@ private extension Data {
         #expect(confirmResponse.nonce == nonce)
         #expect(confirmResponse.hashDigest == digest)
 
-        #expect(throws: (any Error).self) { try TandemJpake4KeyConfirmationResponse(cargo: Data([0x00, 0x00])) }
+        #expect(throws: TandemMessageError.self) { try TandemJpake4KeyConfirmationResponse(cargo: Data([0x00, 0x00])) }
     }
 }
 

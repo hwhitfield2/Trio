@@ -329,7 +329,7 @@ private extension Data {
         var forged = Data(hexString: TandemTestVectors.allZeroServerRound1)!
         // Corrupt the last byte of the first proof's response scalar.
         forged[164] = forged[164] ^ 0xFF
-        #expect(throws: (any Error).self) { try client.readRound1(forged) }
+        #expect(throws: TandemJpakeError.self) { try client.readRound1(forged) }
     }
 
     @Test("Refuses to run rounds out of order") func stateMachine() throws {
