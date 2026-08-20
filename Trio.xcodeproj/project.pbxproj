@@ -834,6 +834,7 @@
 		DDE179712C910127003CDDB7 /* OverrideStored+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179512C910127003CDDB7 /* OverrideStored+CoreDataProperties.swift */; };
 		DDEBB05C2D89E9050032305D /* TimeInRangeType.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDEBB05B2D89E9050032305D /* TimeInRangeType.swift */; };
 		DDF68FFC2D9ECF7F008BF16C /* OnboardingStateModel+Nightscout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF68FFB2D9ECF77008BF16C /* OnboardingStateModel+Nightscout.swift */; };
+		FA0000000000000000000022 /* OnboardingStateModel+DeviceSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000021 /* OnboardingStateModel+DeviceSetup.swift */; };
 		DDF6902C2DA028D3008BF16C /* DiagnosticsStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF6902B2DA028D3008BF16C /* DiagnosticsStepView.swift */; };
 		DDF6905C2DA0AFC5008BF16C /* WelcomeStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF6905B2DA0AFC5008BF16C /* WelcomeStepView.swift */; };
 		DDF691012DA2CA11008BF16C /* AppDiagnosticsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF691002DA2CA0B008BF16C /* AppDiagnosticsDataFlow.swift */; };
@@ -1879,6 +1880,7 @@
 		DDE179512C910127003CDDB7 /* OverrideStored+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OverrideStored+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		DDEBB05B2D89E9050032305D /* TimeInRangeType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeInRangeType.swift; sourceTree = "<group>"; };
 		DDF68FFB2D9ECF77008BF16C /* OnboardingStateModel+Nightscout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OnboardingStateModel+Nightscout.swift"; sourceTree = "<group>"; };
+		FA0000000000000000000021 /* OnboardingStateModel+DeviceSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OnboardingStateModel+DeviceSetup.swift"; sourceTree = "<group>"; };
 		DDF6902B2DA028D3008BF16C /* DiagnosticsStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsStepView.swift; sourceTree = "<group>"; };
 		DDF6905B2DA0AFC5008BF16C /* WelcomeStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeStepView.swift; sourceTree = "<group>"; };
 		DDF691002DA2CA0B008BF16C /* AppDiagnosticsDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiagnosticsDataFlow.swift; sourceTree = "<group>"; };
@@ -3716,6 +3718,7 @@
 				BD8E6B202D9036CA00ABF8FA /* OnboardingProvider.swift */,
 				BD47FD1A2D88AB4A0043966B /* OnboardingStateModel.swift */,
 				DDF68FFB2D9ECF77008BF16C /* OnboardingStateModel+Nightscout.swift */,
+				FA0000000000000000000021 /* OnboardingStateModel+DeviceSetup.swift */,
 				BD47FD152D88AAD80043966B /* View */,
 			);
 			path = Onboarding;
@@ -5312,6 +5315,7 @@
 				19D466A529AA2BD4004D5F33 /* MealSettingsProvider.swift in Sources */,
 				DD5DC9F72CF3DA9300AB8703 /* TargetPicker.swift in Sources */,
 				DDF68FFC2D9ECF7F008BF16C /* OnboardingStateModel+Nightscout.swift in Sources */,
+				FA0000000000000000000022 /* OnboardingStateModel+DeviceSetup.swift in Sources */,
 				383948D625CD4D8900E91849 /* FileStorage.swift in Sources */,
 				CEE9A6572BBB418300EB5194 /* CalibrationsChart.swift in Sources */,
 				3811DE4125C9D4A100A708ED /* SettingsRootView.swift in Sources */,

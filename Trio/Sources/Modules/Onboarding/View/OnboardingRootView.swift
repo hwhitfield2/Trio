@@ -55,6 +55,15 @@ extension Onboarding {
         @State private var animationOpacity: Double = 0
         @State private var isAnimating = false
 
+        // Restore from another device (device-setup QR transfer)
+        @State private var showDeviceSetupScanner = false
+        @State private var pendingTransfer: DeviceSetupTransfer?
+        @State private var showTransferConfirmation = false
+        @State private var deviceSetupErrorMessage = ""
+        @State private var showDeviceSetupError = false
+        @State private var deviceSetupSuccessMessage = ""
+        @State private var showDeviceSetupSuccess = false
+
         // Conditional button states for Nightscout substeps
         private var didSelectNightscoutSetupOption: Bool {
             currentNightscoutSubstep == .setupSelection && state
@@ -137,7 +146,8 @@ extension Onboarding {
                             currentSMBSubstep: $currentSMBSubstep,
                             currentTargetBehaviorSubstep: $currentTargetBehaviorSubstep,
                             state: state,
-                            navigationDirection: navigationDirection
+                            navigationDirection: navigationDirection,
+                            onScanSetupCode: { showDeviceSetupScanner = true }
                         )
 
                         Spacer()
@@ -158,6 +168,13 @@ extension Onboarding {
                             shouldDisableNextButton: shouldDisableNextButton,
                             navigationDirectionChanged: { navigationDirection = $0 }
                         )
+                    }
+
+                    if state.isApplyingDeviceSetup {
+                        Color.black.opacity(0.4).ignoresSafeArea()
+                        ProgressView("Setting up from the other device…")
+                            .padding(24)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
                 .navigationBarHidden(true)
@@ -180,6 +197,74 @@ extension Onboarding {
                 updateCurrentChapter()
             }
             .onAppear(perform: configureView)
+            .sheet(isPresented: $showDeviceSetupScanner) {
+                DeviceSetupScannerView(
+                    onTransfer: { transfer in
+                        showDeviceSetupScanner = false
+                        // The scanner sheet is still dismissing; an alert presented
+                        // during the dismissal is silently dropped.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            if let validationError = state.validateScannedDeviceSetup(transfer) {
+                                deviceSetupErrorMessage = validationError
+                                showDeviceSetupError = true
+                            } else {
+                                pendingTransfer = transfer
+                                showTransferConfirmation = true
+                            }
+                        }
+                    },
+                    onCancel: { showDeviceSetupScanner = false }
+                )
+            }
+            .alert(
+                "Set Up From Another Device?",
+                isPresented: $showTransferConfirmation,
+                presenting: pendingTransfer
+            ) { transfer in
+                Button("Cancel", role: .cancel) { pendingTransfer = nil }
+                Button("Set Up") {
+                    pendingTransfer = nil
+                    Task { await applyScannedTransfer(transfer) }
+                }
+            } message: { transfer in
+                Text(state.scannedDeviceSetupDescription(transfer))
+            }
+            .alert("Device Set Up", isPresented: $showDeviceSetupSuccess) {
+                Button("Continue") {
+                    // Everything a transfer can carry is applied; what remains
+                    // is personal to this phone: the diagnostics consent, then
+                    // the notification and Bluetooth permissions. The therapy
+                    // and algorithm chapters are skipped from here on.
+                    navigationDirection = .forward
+                    withAnimation {
+                        currentStep = .diagnostics
+                    }
+                }
+            } message: {
+                Text(deviceSetupSuccessMessage)
+            }
+            .alert("Setup Failed", isPresented: $showDeviceSetupError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deviceSetupErrorMessage)
+            }
+        }
+
+        private func applyScannedTransfer(_ transfer: DeviceSetupTransfer) async {
+            // Give the confirmation alert time to finish dismissing — presenting
+            // the result alert while it is still animating away silently drops it.
+            try? await Task.sleep(nanoseconds: 600_000_000)
+
+            switch await state.applyScannedDeviceSetup(transfer) {
+            case let .success(summary):
+                deviceSetupSuccessMessage = summary + "\n\n" + String(
+                    localized: "A few steps remain that are personal to this phone: diagnostics sharing and the notification and Bluetooth permissions. Pair your pump and CGM afterwards."
+                )
+                showDeviceSetupSuccess = true
+            case let .failure(error):
+                deviceSetupErrorMessage = error.localizedDescription
+                showDeviceSetupError = true
+            }
         }
     }
 }
@@ -296,6 +381,7 @@ struct OnboardingStepContent: View {
     @Binding var currentTargetBehaviorSubstep: TargetBehaviorSubstep
     @Bindable var state: Onboarding.StateModel
     var navigationDirection: OnboardingNavigationDirection
+    var onScanSetupCode: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     private var transition: AnyTransition {
@@ -326,7 +412,7 @@ struct OnboardingStepContent: View {
                         Group {
                             switch currentStep {
                             case .welcome:
-                                WelcomeStepView()
+                                WelcomeStepView(onScanSetupCode: onScanSetupCode)
                             case .startupInfo:
                                 switch currentStartupSubstep {
                                 case .startupGuide:
@@ -624,6 +710,14 @@ struct OnboardingNavigationButtons: View {
             }
 
         case .notifications:
+            // On the device-setup import path the wizard jumped here straight
+            // from diagnostics; going back must not land in the skipped
+            // therapy/algorithm chapters.
+            if state.didImportDeviceSetup {
+                currentStep = .diagnostics
+                return
+            }
+
             currentTargetBehaviorSubstep = .halfBasalTarget
 
             if let previous = currentStep.previous {
@@ -655,6 +749,12 @@ struct OnboardingNavigationButtons: View {
         }
 
         switch currentStep {
+        case .diagnostics where state.didImportDeviceSetup:
+            // A device-setup transfer already brought every therapy and
+            // algorithm setting; the only chapters left are the ones a
+            // transfer cannot answer for this phone: its permissions.
+            currentStep = .notifications
+
         case .startupInfo:
             let nextSubstepRaw = currentStartupSubstep.rawValue + 1
 
@@ -781,7 +881,15 @@ struct OnboardingNavigationButtons: View {
             }
 
         case .completed:
-            state.saveOnboardingData()
+            if state.didImportDeviceSetup {
+                // Everything therapy- and algorithm-related came from the
+                // scanned transfer; running the full save here would overwrite
+                // it all with the wizard's untouched defaults. Only the
+                // diagnostics consent made on this phone is persisted.
+                state.applyDiagnostics()
+            } else {
+                state.saveOnboardingData()
+            }
             onboardingManager.completeOnboarding()
             Foundation.NotificationCenter.default.post(name: .onboardingCompleted, object: nil)
 

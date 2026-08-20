@@ -247,7 +247,10 @@ either sends neither, and the follower falls back to its own defaults.
 ## Host device migration
 
 When the host user moves Trio to a new phone with the device-setup QR
-transfer (Settings → Export & Import Settings → **Set Up New Device**), the
+transfer (Settings → Export & Import Settings → **Set Up New Device**; the
+new phone scans either from that same screen or from **Set Up From Another
+Device** on the onboarding welcome screen, which then skips the guided
+setup's therapy and algorithm chapters), the
 new device receives the complete settings backup *and* the remote-control
 identity: every `PairedFollower` record (secret, `lastSequence`, push
 registration, alert profile), the APNS/FCM credentials and the remote-control

@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Welcome step view shown at the beginning of onboarding.
 struct WelcomeStepView: View {
+    /// Opens the device-setup scanner; nil hides the shortcut (previews).
+    var onScanSetupCode: (() -> Void)?
+
     var body: some View {
         VStack(alignment: .center, spacing: 20) {
             PulsingLogoAnimation()
@@ -33,6 +36,29 @@ struct WelcomeStepView: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let onScanSetupCode {
+                VStack(spacing: 12) {
+                    Text("Already running Trio on another phone?")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Button(action: onScanSetupCode) {
+                        Label("Set Up From Another Device", systemImage: "qrcode.viewfinder")
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 16)
+                            .background(Capsule().stroke(Color.blue, lineWidth: 1.5))
+                    }
+
+                    Text(
+                        "On the old phone, open Settings → Export & Import Settings → Show Setup Code, then scan it here to copy everything over and skip the guided setup."
+                    )
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal)
+            }
         }
         .padding()
         .frame(maxWidth: .infinity)

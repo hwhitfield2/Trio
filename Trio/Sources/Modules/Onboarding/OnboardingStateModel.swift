@@ -52,6 +52,15 @@ extension Onboarding {
             PropertyPersistentFlags.shared.telemetryConsentDecisionMade = true
         }
 
+        // MARK: - Restore from another device
+
+        /// Set once a device-setup QR transfer has been applied. The wizard's
+        /// therapy and algorithm chapters are skipped from then on, and the
+        /// final step must NOT call `saveOnboardingData()` — the wizard's
+        /// untouched defaults would overwrite everything just imported.
+        var didImportDeviceSetup: Bool = false
+        var isApplyingDeviceSetup: Bool = false
+
         // MARK: - Determine Initial Build State
 
         /// Determines whether the app is in a fresh install state for Trio (new vs. returning/updating user).
