@@ -8,6 +8,39 @@ import LoopKit
 /// note on `TandemPumpManager.runPumpDiagnostics(completion:)`.
 enum TandemDiagnostics {}
 
+/// A request that only **reads** pump state.
+///
+/// This is a *positive opt-in*, and it is the load-bearing safety mechanism of
+/// the diagnostics tool. `probe(_:_:_:)` requires it, so a signed or
+/// delivery-modifying command cannot even be written into the diagnostics
+/// sweep — it would fail to compile, not merely be refused at runtime. And it
+/// is a marker a request must adopt deliberately, rather than being inferred
+/// from the *absence* of the signed/delivery flags: an unsigned `currentStatus`
+/// *write* (the protocol has them, e.g. `CreateHistoryLog`) does not become
+/// read-only just by leaving those flags unset, so it is not one of these.
+///
+/// Only conform a type here after confirming it is an unsigned `currentStatus`
+/// status query. `TandemDiagnosticsTests` enumerates the conformers and asserts
+/// exactly that.
+protocol TandemReadOnlyStatusRequest: TandemRequest {}
+
+// The curated read-only set. Each is a genuine unsigned currentStatus status
+// query; the conformance is what lets it into the diagnostics sweep.
+extension TandemPumpVersionRequest: TandemReadOnlyStatusRequest {}
+extension TandemApiVersionRequest: TandemReadOnlyStatusRequest {}
+extension TandemPumpGlobalsRequest: TandemReadOnlyStatusRequest {}
+extension TandemCurrentBatteryV2Request: TandemReadOnlyStatusRequest {}
+extension TandemInsulinStatusRequest: TandemReadOnlyStatusRequest {}
+extension TandemCurrentBasalStatusRequest: TandemReadOnlyStatusRequest {}
+extension TandemControlIQInfoV1Request: TandemReadOnlyStatusRequest {}
+extension TandemHomeScreenMirrorRequest: TandemReadOnlyStatusRequest {}
+extension TandemTimeSinceResetRequest: TandemReadOnlyStatusRequest {}
+extension TandemCurrentEGVGuiDataRequest: TandemReadOnlyStatusRequest {}
+extension TandemLoadStatusRequest: TandemReadOnlyStatusRequest {}
+extension TandemAlarmStatusRequest: TandemReadOnlyStatusRequest {}
+extension TandemAlertStatusRequest: TandemReadOnlyStatusRequest {}
+extension TandemLastBolusStatusV2Request: TandemReadOnlyStatusRequest {}
+
 /// One line of the report: a single query and its result.
 struct TandemDiagnosticProbe: Equatable {
     let name: String
@@ -71,6 +104,28 @@ extension Data {
 extension TandemPumpManager {
     // MARK: - Read-only pump diagnostics
 
+    /// The read-only status queries the diagnostics sweep uses, as types, so a
+    /// test can enumerate the *real* curated set and assert every one is an
+    /// unsigned currentStatus query. The element type is the read-only marker,
+    /// so a delivery command cannot even appear in this list — it would not
+    /// compile. Kept in lockstep with `diagnosticProbeList()` below.
+    static let diagnosticReadOnlyTypes: [any TandemReadOnlyStatusRequest.Type] = [
+        TandemPumpVersionRequest.self,
+        TandemApiVersionRequest.self,
+        TandemPumpGlobalsRequest.self,
+        TandemCurrentBatteryV2Request.self,
+        TandemInsulinStatusRequest.self,
+        TandemCurrentBasalStatusRequest.self,
+        TandemControlIQInfoV1Request.self,
+        TandemHomeScreenMirrorRequest.self,
+        TandemTimeSinceResetRequest.self,
+        TandemCurrentEGVGuiDataRequest.self,
+        TandemLoadStatusRequest.self,
+        TandemAlarmStatusRequest.self,
+        TandemAlertStatusRequest.self,
+        TandemLastBolusStatusV2Request.self,
+    ]
+
     /// Ask the pump everything it will tell us about itself, and hand back a
     /// report. This is the in-app equivalent of "connect and extract data".
     ///
@@ -78,14 +133,16 @@ extension TandemPumpManager {
     /// the last device you want a diagnostics tool to misfire against, so the
     /// guarantees here are structural:
     ///
-    /// 1. **It can only ever read.** Every query goes through `probe(_:_:_:)`,
-    ///    which refuses — *before sending anything* — any request that is
-    ///    signed, marked `modifiesInsulinDelivery`, or not on the unsigned
-    ///    `currentStatus` characteristic. Every insulin-moving command in the
-    ///    protocol is signed and lives on the `control` characteristic, so this
-    ///    positive allowlist makes moving insulin impossible even if the probe
-    ///    list below is edited carelessly later. The guard is per-send, so no
-    ///    single point of failure gates it.
+    /// 1. **It can only send a read-only status query — enforced by the
+    ///    compiler.** `probe(_:_:_:)` accepts only a `TandemReadOnlyStatusRequest`,
+    ///    a marker a request must positively opt into. A signed or
+    ///    delivery-modifying command cannot be written into the sweep at all:
+    ///    it would not conform, so it would not compile. As belt-and-suspenders,
+    ///    `probe` *also* re-checks at runtime that the request is unsigned,
+    ///    non-delivery, and on the `currentStatus` characteristic, and refuses
+    ///    before sending if not — catching even a mistaken conformance. Every
+    ///    insulin-moving command is signed and on `control`, so moving insulin
+    ///    from here is doubly impossible.
     /// 2. **It never delays a dose.** Each probe is its own `commandQueue`
     ///    item, so a real therapy command enqueued mid-report waits at most one
     ///    probe's round trip, not the whole report — the same discipline the
@@ -161,8 +218,9 @@ extension TandemPumpManager {
     }
 
     /// Send one already-modeled, read-only status request and summarise the
-    /// reply. Refuses anything that is not an unsigned `currentStatus` query.
-    private func probe<R: TandemRequest>(
+    /// reply. The `TandemReadOnlyStatusRequest` bound means only a read-only
+    /// query even type-checks here; the runtime guard below is a second line.
+    private func probe<R: TandemReadOnlyStatusRequest>(
         _ name: String,
         _ request: R,
         _ summarize: (R.Response) -> String
@@ -170,11 +228,11 @@ extension TandemPumpManager {
         dispatchPrecondition(condition: .onQueue(commandQueue))
         let query = "\(Self.characteristicName(R.characteristic)) op \(R.opcode)"
 
-        // The load-bearing safety guard. Diagnostics may send ONLY an unsigned,
-        // non-delivery status query on the currentStatus characteristic. Every
-        // insulin-moving command is signed and on `control`, so this refusal
-        // makes delivery structurally unreachable from here — regardless of
-        // what request type a future edit puts in the list.
+        // Belt-and-suspenders behind the compile-time bound: even a request that
+        // wrongly claimed the read-only marker is refused here if it is signed,
+        // delivery-modifying, or off the currentStatus characteristic. Every
+        // insulin-moving command is signed and on `control`, so this makes
+        // delivery structurally unreachable from diagnostics.
         guard R.characteristic == .currentStatus, !R.signed, !R.modifiesInsulinDelivery else {
             log.error("Diagnostics refused an unsafe probe \(name) (\(query)); not sent")
             return TandemDiagnosticProbe(

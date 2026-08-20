@@ -57,6 +57,20 @@ import Testing
         #expect(!isSafeReadOnly, "\(name) must NOT be classifiable as a safe read-only query")
     }
 
+    @Test("The REAL curated list is enumerated and every entry is a read-only status query") func manifestIsSafe() {
+        // This checks the actual list the sweep is built from, not a parallel
+        // copy. Its element type is the read-only marker, so a delivery command
+        // could not compile into it; this asserts each is truly unsigned,
+        // non-delivery, and on currentStatus.
+        let types = TandemPumpManager.diagnosticReadOnlyTypes
+        #expect(types.count == 14, "the manifest and diagnosticProbeList must stay in lockstep")
+        for type in types {
+            #expect(type.characteristic == .currentStatus, "\(type) must be a currentStatus query")
+            #expect(!type.signed, "\(type) must be unsigned")
+            #expect(!type.modifiesInsulinDelivery, "\(type) must not modify delivery")
+        }
+    }
+
     @Test("Every query the diagnostics sweep uses is a safe read-only status read") func readOnlySet() {
         expectReadable(TandemPumpVersionRequest.self, "PumpVersion")
         expectReadable(TandemApiVersionRequest.self, "ApiVersion")

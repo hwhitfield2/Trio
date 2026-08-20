@@ -556,15 +556,19 @@ shown, copyable, and written to the app log.
 It is the safest possible way to talk to the pump, **by construction, not by
 care**:
 
-- Every query goes through one generic `probe(...)` that refuses — before
-  sending anything — any request that is signed, `modifiesInsulinDelivery`, or
-  not on the unsigned `currentStatus` characteristic. Every insulin-moving
-  command in the protocol is signed and lives on `control`, so this positive
-  allowlist makes delivery structurally unreachable from diagnostics even if the
-  probe list is edited carelessly later. `TandemDiagnosticsTests` pins that
-  classification against the real message types (including the opcode-collision
-  trap where `0xA4` is a harmless read on `currentStatus` but `SetTempRate` on
-  `control` — told apart by characteristic, never by opcode).
+- The generic `probe(...)` accepts **only a `TandemReadOnlyStatusRequest`** — a
+  marker a request must positively opt into after being confirmed an unsigned
+  `currentStatus` query. A signed or delivery-modifying command cannot be
+  written into the sweep at all: it does not conform, so it would not *compile*.
+  As belt-and-suspenders, `probe` also re-checks at runtime that the request is
+  unsigned, non-delivery, and on `currentStatus`, refusing before sending if
+  not. Every insulin-moving command is signed and on `control`, so delivery is
+  doubly unreachable from diagnostics. `TandemDiagnosticsTests` enumerates the
+  real curated manifest (`diagnosticReadOnlyTypes`, whose element type forbids a
+  delivery command at compile time) and asserts each entry's classification —
+  including the opcode-collision trap where `0xA4` is a harmless read on
+  `currentStatus` but `SetTempRate` on `control`, told apart by characteristic,
+  never by opcode.
 - Each probe is its own `commandQueue` item, so a real therapy command enqueued
   mid-report waits at most one 6 s probe, never the whole sweep; and it does not
   run at all while a bolus or cartridge change is active.
