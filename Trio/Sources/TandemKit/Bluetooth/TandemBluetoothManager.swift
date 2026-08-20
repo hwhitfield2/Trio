@@ -148,6 +148,16 @@ final class TandemBluetoothManager: NSObject {
                 self.connectTimeoutWorkItem?.cancel()
                 self.connectTimeoutWorkItem = nil
                 self.connectCompletion = nil
+                // The last-resort path below may still be scanning for the
+                // pump when the attempt fails or times out; the scan must not
+                // be left running forever with a completion nothing will ever
+                // clear. (On the found-the-pump path it is already stopped.)
+                if error != nil, self.scanCompletion != nil {
+                    if self.manager.isScanning {
+                        self.manager.stopScan()
+                    }
+                    self.scanCompletion = nil
+                }
                 completion(error)
             }
 

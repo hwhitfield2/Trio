@@ -337,6 +337,24 @@ extension TandemPumpSession: TandemBluetoothManagerDelegate {
             return
         }
 
+        // A packet that STARTS a message under a transaction id other than the
+        // pending request's is the answer to an earlier request that already
+        // timed out — the pump replies slowly, not out of order. Failing the
+        // current request over it turned one slow answer into a cascade: every
+        // request died on its predecessor's late response, the link stayed
+        // "connected", and the status sync aged into signal loss. Drop the
+        // leftover and keep waiting for the real response. A mismatch in the
+        // MIDDLE of a message is still corruption, and the accumulator's own
+        // validation below fails the request for it.
+        if Self.isStaleLeftoverPacket(
+            packet,
+            pendingTxId: request.txId,
+            midMessage: accumulators[characteristic]?.isMidMessage ?? false
+        ) {
+            log.info("Dropping a late packet from an earlier exchange (waiting on txId \(request.txId))")
+            return
+        }
+
         let signingKey = authenticationKey
         do {
             guard let frame = try accumulators[characteristic]?.accumulate(
@@ -371,6 +389,16 @@ extension TandemPumpSession: TandemBluetoothManagerDelegate {
 
     func bluetoothManager(_: TandemBluetoothManager, didReceiveQualifyingEvents events: TandemQualifyingEvents) {
         delegate?.session(self, didReceiveQualifyingEvents: events)
+    }
+
+    /// True when an inbound packet would start a new message whose transaction
+    /// id is not the pending request's — the shape of a late answer to a
+    /// request that has already timed out. Wire layout: every packet is
+    /// `[packetsRemaining, txId, chunk...]`, so the id is the second byte.
+    /// Static and argument-driven so the decision is testable without a radio.
+    static func isStaleLeftoverPacket(_ packet: Data, pendingTxId: UInt8, midMessage: Bool) -> Bool {
+        guard !midMessage, packet.count >= 2 else { return false }
+        return packet[packet.startIndex + 1] != pendingTxId
     }
 
     /// Reassemble one control-stream packet. Caller must hold `lock`.

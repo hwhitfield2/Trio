@@ -141,6 +141,12 @@ final class TandemResponseAccumulator {
     private var packetsRemaining: UInt8?
     private var expectedTxId: UInt8?
 
+    /// True while a partially reassembled message is buffered, i.e. the next
+    /// packet must be its continuation. Between messages this is false, and a
+    /// packet carrying an unexpected transaction id there is a leftover of an
+    /// earlier exchange rather than corruption of the current one.
+    var isMidMessage: Bool { !buffer.isEmpty }
+
     func reset() {
         buffer.removeAll()
         packetsRemaining = nil

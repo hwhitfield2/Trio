@@ -663,3 +663,79 @@ private extension Data {
         #expect(throws: TandemMessageError.self) { try TandemPumpGlobalsResponse(cargo: Data(count: 13)) }
     }
 }
+
+@Suite("Tandem sync recovery") struct TandemSyncRecoveryTests {
+    @Test("A packet starting a message under an old transaction id is a stale leftover") func staleLeftoverDetection() {
+        // First packet of a response to txId 5 arriving while txId 6 is
+        // pending: the late answer to a request that already timed out. This
+        // must be dropped, not treated as a failure of the current request —
+        // failing it is what turned one slow response into a cascade.
+        let stale = Data([0, 5, 0xAA, 0xBB, 0xCC])
+        #expect(TandemPumpSession.isStaleLeftoverPacket(stale, pendingTxId: 6, midMessage: false))
+
+        // Mid-message, the same bytes are corruption of the current exchange:
+        // the accumulator's own validation decides, and fails the request.
+        #expect(!TandemPumpSession.isStaleLeftoverPacket(stale, pendingTxId: 6, midMessage: true))
+
+        // The pending request's own packets always pass through.
+        #expect(!TandemPumpSession.isStaleLeftoverPacket(Data([0, 6, 0x01]), pendingTxId: 6, midMessage: false))
+
+        // Too short to carry a transaction id: let the accumulator report it.
+        #expect(!TandemPumpSession.isStaleLeftoverPacket(Data([0]), pendingTxId: 6, midMessage: false))
+    }
+
+    @Test("The accumulator reports mid-message state and reassembles across it") func midMessageFlag() throws {
+        // A cargo long enough to need two packets at the currentStatus chunk
+        // size (frame = 3-byte header + cargo + 2-byte CRC).
+        let cargo = Data(repeating: 7, count: 30)
+        let packets = try TandemPacketize.packetize(
+            opcode: 0x25,
+            cargo: cargo,
+            txId: 9,
+            signed: false,
+            authenticationKey: nil,
+            timeSinceReset: nil,
+            maxChunkSize: TandemPacketize.defaultMaxChunkSize
+        )
+        #expect(packets.count > 1)
+
+        let accumulator = TandemResponseAccumulator()
+        #expect(!accumulator.isMidMessage)
+
+        var frame: TandemMessageFrame?
+        for (index, packet) in packets.enumerated() {
+            frame = try accumulator.accumulate(
+                packet: packet,
+                expectedTxId: 9,
+                signed: false,
+                authenticationKey: nil
+            )
+            // Between the first and last packet the accumulator is mid-message,
+            // which is exactly when stale-leftover dropping must NOT apply.
+            #expect(accumulator.isMidMessage == (index < packets.count - 1))
+        }
+        #expect(frame?.opcode == 0x25)
+        #expect(frame?.txId == 9)
+        #expect(frame?.cargo == cargo)
+        #expect(!accumulator.isMidMessage)
+    }
+
+    @Test("Only link failures trigger the reconnect-and-retry") func linkShapedFailures() {
+        // A link that stopped carrying answers: a fresh connection can cure it.
+        #expect(TandemPumpManager.isLinkShapedFailure(.timeout))
+        #expect(TandemPumpManager.isLinkShapedFailure(.notConnected))
+        #expect(TandemPumpManager.isLinkShapedFailure(.transport(TandemConnectionError.timeout)))
+        #expect(TandemPumpManager.isLinkShapedFailure(
+            .invalidResponse(TandemResponseAccumulator.ParseError.invalidCRC)
+        ))
+
+        // The pump answered, or the driver refused locally: reconnecting would
+        // change nothing, so these must not cost a teardown per poll.
+        #expect(!TandemPumpManager.isLinkShapedFailure(.notAuthenticated))
+        #expect(!TandemPumpManager.isLinkShapedFailure(.staleTimeSinceReset))
+        #expect(!TandemPumpManager.isLinkShapedFailure(.requestInFlight))
+        #expect(!TandemPumpManager.isLinkShapedFailure(.insulinDeliveryActionsDisabled))
+        #expect(!TandemPumpManager.isLinkShapedFailure(.keyConfirmationFailed))
+        #expect(!TandemPumpManager.isLinkShapedFailure(.pairingFailed("wrong code")))
+    }
+}

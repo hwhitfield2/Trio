@@ -159,52 +159,6 @@ extension TandemPumpManager {
         }
     }
 
-    /// Tear the link down and bring it back with a fresh handshake.
-    ///
-    /// This exists because the one refusal seen from a real Mobi matched what
-    /// pumpX2's field notes document for a signed command whose signature the
-    /// pump does not accept — and a JPAKE signing key is only valid on the
-    /// link whose nonce produced it. Reconnecting re-runs the key exchange, so
-    /// a refusal caused by a stale key is cured by exactly this.
-    ///
-    /// A pump that was just dropped on purpose can be slow to take the next
-    /// connection, so the reconnect gets a second attempt before giving up —
-    /// the first field run of this path ended in a bare connect timeout that
-    /// swallowed the far more informative refusal before it.
-    private func reauthenticateOverFreshLink(notes: inout [String]) -> TandemSessionError? {
-        dispatchPrecondition(condition: .onQueue(commandQueue))
-        let started = Date.now
-        bluetooth.disconnect()
-        var waited: TimeInterval = 0
-        while bluetooth.isConnected, waited < 10 {
-            Thread.sleep(forTimeInterval: 0.2)
-            waited += 0.2
-        }
-        notes.append(bluetooth.isConnected
-            ? "re-key: link did NOT drop within 10s of disconnecting"
-            : String(format: "re-key: link dropped after %.1fs", waited))
-
-        var lastError: TandemSessionError = .notConnected
-        for attempt in 1 ... 2 {
-            if let error = ensureConnectedAndAuthenticated() {
-                notes.append("re-key: reconnect attempt \(attempt) failed — \(error.localizedDescription)")
-                lastError = error
-                continue
-            }
-            if case let .failure(error) = session.refreshTimeSinceReset() {
-                notes.append("re-key: time refresh after reconnect failed — \(error.localizedDescription)")
-                lastError = error
-                continue
-            }
-            notes.append(String(
-                format: "re-key: reconnected and re-keyed, %.1fs total",
-                Date.now.timeIntervalSince(started)
-            ))
-            return nil
-        }
-        return lastError
-    }
-
     /// What the pump says about itself right after a refusal, for the log and
     /// for the test button's result. One line, cheap unsigned reads only.
     ///

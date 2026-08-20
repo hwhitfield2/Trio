@@ -532,6 +532,43 @@ may never pre-answer, cache or persist a set-placement confirmation: the fill
 and the prime need opposite answers, the driver expires them after ten minutes,
 and the screen's job is to make the wrong answer harder to give, not easier.
 
+## Status sync resilience
+
+The status poll is the read everything else stands on: the dosing
+preconditions fail closed on a stale `lastSync`, so a pump that stops syncing
+is a pump Trio stops dosing. Two failure modes can hold the sync stale for
+hours while the link still reports **Connected**, and each has a specific
+countermeasure:
+
+- **A late answer must not poison the next exchange.** `send()` gives the
+  pump 12 seconds; a response that arrives later lands while the *next*
+  request is pending, and failing that request over the old transaction id
+  turned one slow answer into a cascade — every request died on its
+  predecessor's late response, sweep after sweep, and "Connected / not
+  synced for an hour" is what that looks like on the pump screen. The
+  session now drops a packet that would *start* a message under a stale
+  transaction id and keeps waiting for the real response. A transaction-id
+  mismatch in the middle of a message is still treated as corruption and
+  fails the exchange.
+- **A wedged link gets recycled, not retried into.** CoreBluetooth will hold
+  a connection to a pump that has stopped answering indefinitely, and every
+  poll over such a link just spends its timeouts. When a sync sweep fails
+  with a failure only the link can explain (timeout, disconnect, transport
+  error, unparseable reply) *and* the link was already up, the driver tears
+  the connection down, reconnects with a fresh handshake — the same
+  tear-down-and-re-key the glucose annunciation retry uses, now shared —
+  and runs the sweep once more. A sweep failure the pump answered for (a
+  refusal) is not retried this way: the link is fine, and the refusal has
+  its own meaning. The sweep also abandons its remaining core reads after
+  the first link-shaped failure rather than spending a timeout per read on
+  a link already proven silent; the tolerated reads (Control-IQ on old
+  firmware, the suppressed alarm/alert reads) keep their existing
+  allowances.
+
+Out-of-range stays cheap: the recycle only runs when the link *was* up, so a
+pump that is simply away costs one failed connect per poll, exactly as
+before.
+
 ## Threading
 
 Control-stream progress is the one inbound path with no request behind it: the

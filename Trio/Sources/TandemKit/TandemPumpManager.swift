@@ -247,6 +247,57 @@ extension TandemPumpManager {
         return nil
     }
 
+    /// Tear the link down and bring it back with a fresh handshake.
+    ///
+    /// Two failure modes end here, and a fresh link cures both. A **stale
+    /// signing key**: a JPAKE key is only valid on the link whose nonce
+    /// produced it, so a key carried across a silent CoreBluetooth reconnect
+    /// gets every signed command refused (this is what the annunciation
+    /// retry recovers from). And a **wedged link**: a connection CoreBluetooth
+    /// still reports as up but that has stopped carrying answers, which the
+    /// status sync recovers from — over such a link every read times out
+    /// forever while the pump screen says "Connected".
+    ///
+    /// A pump that was just dropped on purpose can be slow to take the next
+    /// connection, so the reconnect gets a second attempt before giving up —
+    /// the first field run of this path ended in a bare connect timeout that
+    /// swallowed the far more informative refusal before it.
+    ///
+    /// Must be called on commandQueue.
+    func reauthenticateOverFreshLink(notes: inout [String]) -> TandemSessionError? {
+        dispatchPrecondition(condition: .onQueue(commandQueue))
+        let started = Date.now
+        bluetooth.disconnect()
+        var waited: TimeInterval = 0
+        while bluetooth.isConnected, waited < 10 {
+            Thread.sleep(forTimeInterval: 0.2)
+            waited += 0.2
+        }
+        notes.append(bluetooth.isConnected
+            ? "re-key: link did NOT drop within 10s of disconnecting"
+            : String(format: "re-key: link dropped after %.1fs", waited))
+
+        var lastError: TandemSessionError = .notConnected
+        for attempt in 1 ... 2 {
+            if let error = ensureConnectedAndAuthenticated() {
+                notes.append("re-key: reconnect attempt \(attempt) failed — \(error.localizedDescription)")
+                lastError = error
+                continue
+            }
+            if case let .failure(error) = session.refreshTimeSinceReset() {
+                notes.append("re-key: time refresh after reconnect failed — \(error.localizedDescription)")
+                lastError = error
+                continue
+            }
+            notes.append(String(
+                format: "re-key: reconnected and re-keyed, %.1fs total",
+                Date.now.timeIntervalSince(started)
+            ))
+            return nil
+        }
+        return lastError
+    }
+
     /// Run whichever pairing handshake this pump uses.
     ///
     /// JPAKE pumps re-key on every connection: the signing key is derived from
@@ -412,16 +463,76 @@ extension TandemPumpManager {
     }
 
     /// Full status refresh. Must be called on commandQueue.
+    ///
+    /// One sweep of reads — and, when the sweep fails in a way only the link
+    /// can explain, one retry over a deliberately torn-down and re-keyed
+    /// connection. CoreBluetooth happily holds a connection to a pump that has
+    /// stopped answering, so without the retry every poll spent its timeouts
+    /// on the same wedged link: the pump screen said "Connected" while the
+    /// sync aged into signal loss, and the dosing freshness gates failed
+    /// closed on the stale sync. Same cure the annunciation path already uses,
+    /// applied to the read everything else depends on.
     private func syncPumpData(completion: ((Date?) -> Void)?) {
         dispatchPrecondition(condition: .onQueue(commandQueue))
 
+        // Only a link that was already up is worth recycling: when the pump is
+        // simply out of range the connect attempt itself just failed, and a
+        // second attempt right now would spend another timeout saying so.
+        let linkWasUp = bluetooth.isConnected
+        var outcome = runSyncSweep()
+
+        if !outcome.succeeded, outcome.linkShapedFailure, linkWasUp {
+            var notes: [String] = []
+            if let error = reauthenticateOverFreshLink(notes: &notes) {
+                log.error(
+                    "Recycling the silent link failed: \(error.localizedDescription) (\(notes.joined(separator: "; ")))"
+                )
+            } else {
+                log.info("Recycled a silent link; retrying the status read (\(notes.joined(separator: "; ")))")
+                outcome = runSyncSweep()
+            }
+        }
+
+        notifyStateDidChange()
+        completion?(outcome.succeeded ? state.lastSync : nil)
+    }
+
+    /// Outcome of one sweep of status reads.
+    private struct SyncSweepOutcome {
+        var succeeded = false
+        /// A failure only the link can explain — timeout, disconnect,
+        /// transport error, unparseable reply — as opposed to the pump
+        /// answering and refusing. Only these are worth a reconnect.
+        var linkShapedFailure = false
+    }
+
+    /// One pass of the status reads. Must be called on commandQueue.
+    private func runSyncSweep() -> SyncSweepOutcome {
+        dispatchPrecondition(condition: .onQueue(commandQueue))
+        var outcome = SyncSweepOutcome()
+
         if let error = ensureConnectedAndAuthenticated() {
             log.error("Sync failed to connect: \(error.localizedDescription)")
-            completion?(nil)
-            return
+            outcome.linkShapedFailure = Self.isLinkShapedFailure(error)
+            return outcome
         }
 
         var encounteredError = false
+
+        // A failed core read fails the sweep. When the failure is link-shaped
+        // the rest of the sweep is abandoned too: each remaining read would
+        // spend its own 12-second timeout on a link that has already proven
+        // silent, and the caller is about to recycle it anyway. A pump that
+        // answers with a refusal keeps the sweep going — the link is fine.
+        func coreReadFailed(_ name: String, _ error: TandemSessionError) -> Bool {
+            encounteredError = true
+            log.error("\(name) failed: \(error.localizedDescription)")
+            if Self.isLinkShapedFailure(error) {
+                outcome.linkShapedFailure = true
+                return true
+            }
+            return false
+        }
 
         switch session.send(TandemInsulinStatusRequest()) {
         case let .success(response):
@@ -431,8 +542,7 @@ extension TandemPumpManager {
                 delegate?.pumpManager(self, didReadReservoirValue: self.state.reservoir, at: Date.now) { _ in }
             }
         case let .failure(error):
-            encounteredError = true
-            log.error("InsulinStatus failed: \(error.localizedDescription)")
+            if coreReadFailed("InsulinStatus", error) { return outcome }
         }
 
         let batteryResult: Result<Int, TandemSessionError>
@@ -445,8 +555,7 @@ extension TandemPumpManager {
         case let .success(percent):
             state.batteryPercent = percent
         case let .failure(error):
-            encounteredError = true
-            log.error("CurrentBattery failed: \(error.localizedDescription)")
+            if coreReadFailed("CurrentBattery", error) { return outcome }
         }
 
         switch session.send(TandemCurrentBasalStatusRequest()) {
@@ -454,8 +563,7 @@ extension TandemPumpManager {
             state.profileBasalRate = Double(response.profileBasalRate) / 1000
             state.currentBasalRate = Double(response.currentBasalRate) / 1000
         case let .failure(error):
-            encounteredError = true
-            log.error("CurrentBasalStatus failed: \(error.localizedDescription)")
+            if coreReadFailed("CurrentBasalStatus", error) { return outcome }
         }
 
         switch session.send(TandemControlIQInfoV1Request()) {
@@ -506,9 +614,32 @@ extension TandemPumpManager {
 
         if !encounteredError {
             state.lastSync = Date.now
+            outcome.succeeded = true
         }
-        notifyStateDidChange()
-        completion?(encounteredError ? nil : state.lastSync)
+        return outcome
+    }
+
+    /// True when a failure is one a fresh connection can cure — the link went
+    /// silent or produced garbage — rather than the pump answering and
+    /// refusing. Reconnecting over a refusal would change nothing, but a link
+    /// that stops carrying answers stays "connected" in CoreBluetooth's eyes
+    /// indefinitely, so tearing it down is the only recovery there is.
+    static func isLinkShapedFailure(_ error: TandemSessionError) -> Bool {
+        switch error {
+        case .invalidResponse,
+             .notConnected,
+             .timeout,
+             .transport:
+            return true
+        case .insulinDeliveryActionsDisabled,
+             .keyConfirmationFailed,
+             .notAuthenticated,
+             .pairingFailed,
+             .pumpRejected,
+             .requestInFlight,
+             .staleTimeSinceReset:
+            return false
+        }
     }
 
     /// Grace period after which an active bolus the pump shows no trace of is
