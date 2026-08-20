@@ -24,7 +24,7 @@ enum TandemSessionError: LocalizedError {
         case .notAuthenticated: return "Not paired with the pump."
         case .staleTimeSinceReset: return "Pump time reference is stale; cannot sign the request safely."
         case .insulinDeliveryActionsDisabled:
-            return "Remote insulin delivery actions are disabled. Enable them in the pump settings to allow this."
+            return "Remote insulin delivery actions are disabled. Enable them in Trio's pump settings to allow this."
         case let .pumpRejected(error):
             return "The pump rejected the request: \(error.localizedDescription)."
         case let .transport(error): return error.localizedDescription
@@ -264,7 +264,7 @@ final class TandemPumpSession {
         switch send(pumpChallenge) {
         case let .success(response):
             guard response.success else {
-                return .failure(.pairingFailed("The pump did not accept the pairing code. Check the code on the pump screen."))
+                return .failure(.pairingFailed("The pump did not accept the pairing code. Check the code and try again — on a Mobi it comes from the Tandem Mobi app, on a t:slim X2 from the pump screen."))
             }
             setAuthenticationKey(codeData)
             log.info("Authentication succeeded")

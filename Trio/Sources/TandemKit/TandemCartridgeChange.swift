@@ -65,16 +65,22 @@ enum TandemCartridgeError: LocalizedError {
         case .deliveryMustBeStoppedOnPump:
             return "The pump will not start a cartridge change while it is delivering insulin. Stop insulin on the pump first, then try again."
         case .suspendDidNotTake:
-            return "Trio asked the pump to stop insulin and the pump accepted, but it is still delivering. Stop insulin on the pump itself, then try again."
+            // Only reached on a pump with a remote suspend (the Mobi), which
+            // has no screen — so there is nowhere else to stop insulin. This is
+            // the pump not acting on a stop it accepted; retrying is the move.
+            return "Trio told the pump to stop insulin and it accepted, but the pump still shows delivery. That is the pump not acting on the stop, not something to fix elsewhere. Try again."
         case .bolusInProgress:
             return "A bolus is being delivered. Wait for it to finish, then start the cartridge change."
         case let .alarmNotCleared(names):
-            return "Trio asked the pump to acknowledge \(names), but the pump still reports it. Clear it in the pump's own app, then try again."
+            return "Trio asked the pump to acknowledge \(names), but the pump still reports it. Try again — and if it persists, the condition behind the alarm may still be present."
         case .noAlarmToAcknowledge:
             return "The pump is not reporting an alarm Trio can acknowledge from here."
         case let .resumeRefused(status, detail):
+            // The load is done; only the resume failed. Trio owns the remote
+            // resume, so the fix is to try again in Trio — there is no pump
+            // screen to fall back to.
             var text =
-                "The cartridge change is done, but the pump refused to restart insulin (status \(status)). Insulin is still stopped — resume it from the pump settings screen."
+                "The cartridge change is done, but the pump refused to restart insulin (status \(status)). Insulin is still stopped — tap Finish again to have Trio retry the resume."
             if let detail = detail {
                 text += " The pump reports: \(detail)."
             }

@@ -334,3 +334,67 @@ struct TandemPlaySoundResponse: TandemResponse {
         status = first
     }
 }
+
+/// Set the pump's per-category sound level. This is the only way to change how
+/// audible the pump is from Trio — which on a Mobi is the only way at all,
+/// since a Mobi has no screen and cannot run the Tandem app while Trio is its
+/// controller.
+///
+/// The 9-byte cargo carries a level for each category and a `changeBitmask`
+/// that says which categories this request actually changes; categories left
+/// out of the mask keep their current setting. So Trio can raise just the
+/// alarm/alert/reminder levels without disturbing the rest.
+///
+/// Signed, on control, but NOT `modifiesInsulinDelivery` — it moves no insulin,
+/// so like `PlaySound` it sits outside the delivery opt-in. The encoding is
+/// transcribed from pumpX2 and backed by its real-app capture test vectors, but
+/// is unverified against a real pump from Trio.
+struct TandemSetPumpSoundsRequest: TandemRequest {
+    typealias Response = TandemSetPumpSoundsResponse
+    /// pumpX2 `opCode = -28`.
+    static let opcode: UInt8 = 0xE4
+    static let characteristic: TandemCharacteristic = .control
+    static let signed = true
+
+    /// Which categories a request changes. Values are the pumpX2 bit ids.
+    struct Categories: OptionSet {
+        let rawValue: UInt8
+        static let quickBolus = Categories(rawValue: 2)
+        static let general = Categories(rawValue: 4)
+        static let reminder = Categories(rawValue: 8)
+        static let alert = Categories(rawValue: 16)
+        static let alarm = Categories(rawValue: 32)
+        static let cgmAlert = Categories(rawValue: 64)
+    }
+
+    /// Per-category levels, byte order as the pump expects.
+    let quickBolus: UInt8
+    let general: UInt8
+    let reminder: UInt8
+    let alert: UInt8
+    let alarm: UInt8
+    /// CGM alert is a two-byte pair in the protocol; Trio does not change it, so
+    /// it is left at (0, 0) and kept out of `changeBitmask`.
+    let cgmAlertA: UInt8
+    let cgmAlertB: UInt8
+    let changeBitmask: UInt8
+
+    var cargo: Data {
+        // byte 0 is an unknown field, always 0 in real-app captures.
+        Data([0, quickBolus, general, reminder, alert, alarm, cgmAlertA, cgmAlertB, changeBitmask])
+    }
+}
+
+struct TandemSetPumpSoundsResponse: TandemResponse {
+    /// pumpX2 `opCode = -27`.
+    static let opcode: UInt8 = 0xE5
+    static let signed = true
+    let status: UInt8
+
+    init(cargo: Data) throws {
+        guard let first = cargo.first else {
+            throw TandemMessageError.unexpectedCargoSize(message: "SetPumpSoundsResponse", expected: 1, actual: 0)
+        }
+        status = first
+    }
+}

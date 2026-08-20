@@ -305,6 +305,25 @@ for this handshake — never for long-lived key material. Peer points are
 validated against the curve equation on decode, which is what blocks an
 invalid-curve attack.
 
+## The Mobi has no screen
+
+A **Tandem Mobi has no display and no on-pump UI**, and it cannot run the Tandem
+Mobi app while Trio is its paired BLE controller. So for a Mobi there is **no
+"do it on the pump" and no "do it in the other app"** — Trio is the only
+interface. Every user-facing string and recovery path is written with that in
+mind: on a Mobi, resuming insulin, acknowledging a clearable alarm, finishing or
+recovering a cartridge change, and setting the pump's sound level are all Trio
+actions, never a referral elsewhere. The pump fallback wording that remains is
+gated behind `isMobi ? … : …` and appears only for the **t:slim X2**, which does
+have a screen. The one unavoidable exception is first-time pairing, where the
+Tandem app is used once to authorise a new controller — the pump physically
+requires it — and the copy says so explicitly.
+
+The genuinely physical steps that no software can remove (holding the pump's
+button during a tubing fill; a safety alarm like temperature or low battery that
+clears only when its condition resolves) are described as what they are, not as
+a referral to a screen that does not exist.
+
 ## Safety model
 
 Insulin-affecting commands are guarded by two independent gates:
@@ -610,12 +629,17 @@ The parameterization we want lives elsewhere, and there are three honest tiers:
    "words" — burst counts, groupings, gaps — composed from the fixed burst, as
    `TandemGlucoseAnnunciation` already does (2 bursts = low, 3 = high). No new
    protocol, bounded by the 5-minute annunciation rate limit.
-2. **`SetPumpSounds` tier-raising (decodable, but rewrites global state).**
-   Opcode `0xE4`, encoding known and backed by real-app capture vectors, not yet
-   modeled in Trio. It could momentarily raise a category to `audioHigh` before
-   annunciating and restore it after — making the fixed burst loud on a quiet
-   pump. It changes a *global user preference*, so it needs snapshot/restore and
-   an explicit opt-in; this is a product decision, not just an implementation.
+2. **`SetPumpSounds` — now a Trio control (Pump sounds, in settings).**
+   Opcode `0xE4`, encoding backed by pumpx2's real-app capture vectors.
+   `TandemPumpSounds.swift` sets the pump's **alarm, alert and reminder** sound
+   level (loud / medium / quiet / vibrate) from Trio. It reads the current
+   config first so the categories it does not touch (quick-bolus, CGM alert)
+   keep their values, changes only the targeted ones via the `changeBitmask`,
+   and confirms by reading `PumpGlobals` back — a change the pump accepts but
+   does not apply is reported, not assumed. On a **Mobi this is the only way to
+   change the pump's sound level at all**, since the pump has no screen and the
+   Tandem app cannot run while Trio is the paired controller. Signed but
+   non-delivery, so it needs no bolus opt-in — the same footing as `PlaySound`.
 3. **Speculative axes (bench-only).** The `SetPumpSounds` CGM-alert field has a
    repeat/escalation variant `PlaySound` cannot express, an always-zero unknown
    byte that may unlock more categories, and `DismissNotification`'s

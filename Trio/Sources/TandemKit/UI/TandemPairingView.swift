@@ -43,7 +43,8 @@ final class TandemPairingViewModel: ObservableObject {
         selectedPump?.model
     }
 
-    /// A Mobi only ever shows a 6-digit code, so its entry field can be
+    /// A Mobi always uses a 6-digit code (it has no screen of its own; the code
+    /// comes from the Tandem Mobi app during pairing), so its entry field can be
     /// numeric-only and its instructions specific.
     var expectsSixDigitCode: Bool {
         selectedModel == .mobi
@@ -69,7 +70,7 @@ final class TandemPairingViewModel: ObservableObject {
             )
         case .none:
             return String(
-                localized: "Enter the code the pump is showing: 6 digits on a Tandem Mobi and on t:slim X2 software 7.7 and newer, or 16 characters on t:slim X2 software 7.1–7.6."
+                localized: "Enter the pairing code: 6 digits from the Tandem Mobi app on a Mobi, 6 digits on t:slim X2 software 7.7 and newer, or 16 characters shown on a t:slim X2 running 7.1–7.6."
             )
         }
     }

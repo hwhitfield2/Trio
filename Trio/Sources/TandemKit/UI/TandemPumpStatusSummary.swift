@@ -316,7 +316,7 @@ extension TandemPumpState {
             return TandemHeadlineStatus(
                 title: String(localized: "Insulin Suspended"),
                 detail: pumpModel == .mobi
-                    ? String(localized: "The pump is not delivering. Restart it in the Tandem Mobi app.")
+                    ? String(localized: "The pump is not delivering. Resume it in Trio.")
                     : String(localized: "The pump is not delivering. Restart it on the pump."),
                 tone: .caution,
                 symbolName: "pause.circle.fill"

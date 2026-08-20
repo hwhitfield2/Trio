@@ -34,6 +34,9 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     @Published var annunciationResult: (success: Bool, message: String)?
     @Published var diagnosticsInProgress = false
     @Published var diagnosticsReport: String?
+    @Published var pumpSoundSelection: TandemAnnunciationMode = .audioHigh
+    @Published var settingPumpSound = false
+    @Published var pumpSoundResult: (success: Bool, message: String)?
 
     let pumpManager: TandemPumpManager
 
@@ -69,11 +72,6 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
 
     var isMobi: Bool { model == .mobi }
 
-    /// Where the user can look when Trio is not the right place. A Mobi has no
-    /// screen, so "on the pump itself" is not somewhere they can go.
-    var elsewhereName: String {
-        isMobi ? String(localized: "the Tandem Mobi app") : String(localized: "the pump itself")
-    }
 
     /// True while the phone actually has a Bluetooth link to the pump. Both
     /// gaining and losing the link end in `notifyStateDidChange`, so this
@@ -168,7 +166,7 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                 : String(localized: "\(opening) You can clear it here or on the pump itself.")
         }
         return isMobi
-            ? String(localized: "\(opening) This one is not Trio's to clear — use the Tandem Mobi app.")
+            ? String(localized: "\(opening) This one is not Trio's to clear — it is a safety alarm that clears itself once the condition behind it (like temperature or charge) is resolved.")
             : String(localized: "\(opening) This one is not Trio's to clear — use the pump itself.")
     }
 
@@ -376,8 +374,11 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     static let testDoseOptions: [Double] = [0.05, 0.051, 0.055, 0.06, 0.1]
 
     var testDoseFooterText: String {
-        String(
-            localized: "The pump's remote-bolus minimum is 0.05 U; smaller doses are rejected. Use this to verify 0.05 U works on your pump, and to probe whether milliunit amounts above the floor (like 0.051 U) are accepted and delivered exactly — check the bolus history in \(elsewhereName) for the delivered amount. A rejection is harmless."
+        let confirm = isMobi
+            ? String(localized: "Trio records what the pump reports it delivered; a Mobi has no screen to confirm the amount independently")
+            : String(localized: "check the bolus history on the pump itself for the delivered amount")
+        return String(
+            localized: "The pump's remote-bolus minimum is 0.05 U; smaller doses are rejected. Use this to verify 0.05 U works on your pump, and to probe whether milliunit amounts above the floor (like 0.051 U) are accepted and delivered exactly — \(confirm). A rejection is harmless."
         )
     }
 
@@ -409,10 +410,13 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                         // Not a rejection: communication dropped mid-command, so
                         // the pump may or may not have delivered. Says nothing
                         // about whether doses this small are accepted.
+                        let where1 = self.isMobi
+                            ? String(localized: "Trio will reconcile it from the pump's own bolus record on the next sync")
+                            : String(localized: "Check the bolus history on the pump itself")
                         self.testDoseResult = (
                             success: false,
                             message: String(
-                                localized: "Communication was lost mid-command, so it is unknown whether the \(amountText) U test bolus was delivered — this does not tell us whether the pump accepts it. Check the bolus history in \(self.elsewhereName), then try again."
+                                localized: "Communication was lost mid-command, so it is unknown whether the \(amountText) U test bolus was delivered — this does not tell us whether the pump accepts it. \(where1), then try again."
                             )
                         )
                     } else {
@@ -425,10 +429,13 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                     }
                 } else {
                     TandemHaptics.success()
+                    let confirm = self.isMobi
+                        ? String(localized: "Trio records the delivered amount from the pump's own bolus status; a Mobi has no screen to confirm it independently")
+                        : String(localized: "confirm on the pump itself that \(amountText) U was actually delivered")
                     self.testDoseResult = (
                         success: true,
                         message: String(
-                            localized: "The pump accepted the \(amountText) U test bolus. It is recorded in Trio's treatment log — confirm in \(self.elsewhereName) that \(amountText) U was actually delivered."
+                            localized: "The pump accepted the \(amountText) U test bolus. It is recorded in Trio's treatment log — \(confirm)."
                         )
                     )
                     // A tiny bolus completes almost instantly; refresh shortly
@@ -493,10 +500,13 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                     // audible — PlaySound has no volume of its own — and
                     // reporting success for a silent pump is how someone ends
                     // up trusting an alarm that never reaches them.
+                    let soundWhere = self.isMobi
+                        ? String(localized: "set the pump's sound level under Pump sounds below")
+                        : String(localized: "check the pump's own Sound setting")
                     self.annunciationResult = (
                         true,
                         String(
-                            localized: "The pump accepted the command and should be playing the \(kind.localizedTitle.lowercased()) pattern: \(self.describePattern(kind)). If you felt and heard nothing, the pump decided that, not Trio — this command has no volume of its own and follows the pump's own Sound setting. Check it in \(self.elsewhereName)."
+                            localized: "The pump accepted the command and should be playing the \(kind.localizedTitle.lowercased()) pattern: \(self.describePattern(kind)). If you felt and heard nothing, the pump decided that, not Trio — this command has no volume of its own and follows the pump's own Sound setting. To make it audible, \(soundWhere)."
                         )
                     )
                 }
@@ -524,6 +534,29 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
         UIPasteboard.general.string = report
         TandemHaptics.success()
     }
+
+    /// Set the pump's alarm/alert/reminder sound level. The completion arrives
+    /// on the main queue from the driver.
+    func setPumpSound() {
+        let mode = pumpSoundSelection
+        settingPumpSound = true
+        pumpSoundResult = nil
+        pumpManager.setPumpSoundMode(mode) { [weak self] error in
+            guard let self else { return }
+            self.settingPumpSound = false
+            if let error {
+                TandemHaptics.failure()
+                self.pumpSoundResult = (false, error.localizedDescription)
+            } else {
+                TandemHaptics.success()
+                self.pumpSoundResult = (
+                    true,
+                    String(localized: "The pump's alarm, alert and reminder sounds are now set to \(mode.localizedDescription).")
+                )
+            }
+            self.objectWillChange.send()
+        }
+    }
 }
 
 struct TandemSettingsView: View {
@@ -549,6 +582,7 @@ struct TandemSettingsView: View {
                 cartridgeSection
                 glucoseAlarmSection
                 soundsSection
+                pumpSoundSection
                 // A section that pushes real insulin belongs with the
                 // diagnostics, not above the settings that decide how the pump
                 // loops.
@@ -622,7 +656,9 @@ struct TandemSettingsView: View {
             Button(String(localized: "I understand, enable"), role: .destructive) { viewModel.confirmCartridgeChangeEnable() }
         } message: {
             Text(
-                "Trio will be able to put the pump into cartridge-change mode, fill the tubing and prime the cannula. Filling and priming push real insulin, and Trio cannot see whether your infusion set is on your body — it can only ask you. Get that wrong and insulin goes somewhere it should not. This flow has not been tested against a real pump. Doing the change the usual way, in \(viewModel.elsewhereName), is always the safer option."
+                viewModel.isMobi
+                    ? "Trio will be able to put the pump into cartridge-change mode, fill the tubing and prime the cannula. Filling and priming push real insulin, and Trio cannot see whether your infusion set is on your body — it can only ask you. Get that wrong and insulin goes somewhere it should not. This flow has not been tested against a real pump. On a Mobi there is no pump screen, so Trio is the only way to change a cartridge — leave this off only if you will not change cartridges from the phone at all."
+                    : "Trio will be able to put the pump into cartridge-change mode, fill the tubing and prime the cannula. Filling and priming push real insulin, and Trio cannot see whether your infusion set is on your body — it can only ask you. Get that wrong and insulin goes somewhere it should not. This flow has not been tested against a real pump. Doing the change the usual way, on the pump itself, is always the safer option."
             )
         }
         .alert(String(localized: "Enable microbolus-basal looping?"), isPresented: $viewModel.showMicrobolusWarning) {
@@ -1202,6 +1238,44 @@ struct TandemSettingsView: View {
         } footer: {
             Text(
                 "Tandem pumps cannot beep on command like an Omnipod, so Trio plays the confirmation sound on this phone instead: one tone when insulin delivery is accepted, another on cancel, suspend, or resume. Automatic doses (SMBs and basal microboluses) are silent unless enabled — with microbolus-basal looping on, they sound every loop cycle."
+            )
+        }
+        .tandemRowBackground()
+    }
+
+    private var pumpSoundSection: some View {
+        Section {
+            Picker(String(localized: "Pump sound level"), selection: $viewModel.pumpSoundSelection) {
+                ForEach([TandemAnnunciationMode.audioHigh, .audioMedium, .audioLow, .vibrate], id: \.self) { mode in
+                    Text(mode.localizedDescription.capitalized).tag(mode)
+                }
+            }
+            .disabled(viewModel.settingPumpSound)
+
+            TandemActionButton(
+                title: String(localized: "Set pump sound level"),
+                systemImage: "speaker.wave.2.fill",
+                emphasis: .bordered,
+                isBusy: viewModel.settingPumpSound,
+                busyTitle: String(localized: "Setting the pump…")
+            ) {
+                viewModel.setPumpSound()
+            }
+
+            if let result = viewModel.pumpSoundResult {
+                TandemCallout(
+                    title: result.success
+                        ? String(localized: "Sound level set")
+                        : String(localized: "Could not set the sound level"),
+                    message: result.message,
+                    tone: result.success ? .ok : .critical
+                )
+            }
+        } header: {
+            Text("Pump sounds").glassCaption()
+        } footer: {
+            Text(
+                "Sets how loud the pump's alarms, alerts and reminders are — and with them Trio's glucose annunciations, which have no volume of their own. On a Mobi this is the only place to change it, since the pump has no screen. Quick-bolus and CGM-alert sounds are left as they are."
             )
         }
         .tandemRowBackground()

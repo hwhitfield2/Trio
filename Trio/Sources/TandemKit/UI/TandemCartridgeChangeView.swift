@@ -209,13 +209,6 @@ final class TandemCartridgeChangeViewModel: ObservableObject, PumpManagerStatusO
             )
     }
 
-    // MARK: - Copy that depends on the pump
-
-    /// A Mobi has no screen, so "do it on the pump itself" is not advice that
-    /// can be followed there — the Tandem Mobi app is.
-    var elsewhereName: String {
-        isMobi ? String(localized: "the Tandem Mobi app") : String(localized: "the pump itself")
-    }
 
     var alarmNames: String? { state.dismissableCartridgeAlarmNames }
 
@@ -314,7 +307,9 @@ struct TandemCartridgeChangeView: View {
             Button(String(localized: "Cancel change"), role: .destructive) { viewModel.cancel() }
         } message: {
             Text(
-                "Trio will try to take the pump out of cartridge-change mode. Check the pump afterwards: if it is still in a change, finish it in \(viewModel.elsewhereName) before delivery can resume."
+                viewModel.isMobi
+                    ? String(localized: "Trio will try to take the pump out of cartridge-change mode. If it is still in a change afterwards, reopen Change Cartridge here and finish it — that is what restarts insulin. A Mobi has no screen, so Trio is the only place to do this.")
+                    : String(localized: "Trio will try to take the pump out of cartridge-change mode. Check the pump afterwards: if it is still in a change, finish it on the pump itself before delivery can resume.")
             )
         }
     }
@@ -394,7 +389,7 @@ struct TandemCartridgeChangeView: View {
             TandemCallout(
                 title: viewModel.alarmNames ?? String(localized: "Pump alarm"),
                 message: String(
-                    localized: "The pump blocks operations while these stand — an alarm stops a change from starting, and a leftover \"incomplete\" alert from an interrupted load stops insulin from resuming. Acknowledging clears them, the same as answering them in \(viewModel.elsewhereName). Nothing else on the pump changes; warnings like Low Insulin are never cleared by Trio."
+                    localized: "The pump blocks operations while these stand — an alarm stops a change from starting, and a leftover \"incomplete\" alert from an interrupted load stops insulin from resuming. Acknowledging clears them from Trio. Nothing else on the pump changes; warnings like Low Insulin are never cleared by Trio."
                 ),
                 tone: .critical,
                 symbolName: "bell.badge.fill"
