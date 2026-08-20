@@ -124,18 +124,34 @@ import Testing
         #expect(retrieved == dummy)
     }
 
-    @Test("Can parse mmol/L settings to mg/dL") func testParseSettingsToMgdL() {
-        // Given
-        var preferences = Preferences()
-        preferences.threshold_setting = 5.5 // mmol/L
-        storage.save(preferences, as: OpenAPS.Settings.preferences)
+    @Test("Can parse mmol/L settings to mg/dL") func testParseSettingsToMgdL() async throws {
+        // This test round-trips through the app's REAL preferences file, and
+        // the test host is the full Trio app: during its first seconds of boot
+        // APSManager, DeviceDataManager and SettingsManager may all write that
+        // same file, clobbering the value planted here (CI once read back the
+        // plain Preferences() default this way). Those writers fire once and
+        // settle, so retry briefly instead of racing them on the first try.
+        var parsedThreshold: Decimal?
+        for attempt in 0 ..< 5 {
+            if attempt > 0 {
+                try await Task.sleep(nanoseconds: 500_000_000)
+            }
 
-        // When
-        let wasParsed = storage.parseOnFileSettingsToMgdL()
+            // Given
+            var preferences = Preferences()
+            preferences.threshold_setting = 5.5 // mmol/L
+            storage.save(preferences, as: OpenAPS.Settings.preferences)
 
-        // Then
-        #expect(wasParsed == true)
-        let parsed = storage.retrieve(OpenAPS.Settings.preferences, as: Preferences.self)
-        #expect(parsed?.threshold_setting == 100) // default mg/dL value
+            // When
+            let wasParsed = storage.parseOnFileSettingsToMgdL()
+
+            // Then
+            let parsed = storage.retrieve(OpenAPS.Settings.preferences, as: Preferences.self)
+            parsedThreshold = parsed?.threshold_setting
+            if wasParsed, parsedThreshold == 100 {
+                break
+            }
+        }
+        #expect(parsedThreshold == 100) // 5.5 mmol/L converted to mg/dL
     }
 }

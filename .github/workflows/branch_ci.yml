@@ -71,12 +71,17 @@ jobs:
         if: always()
         run: |
           if [ -f xcodebuild.log ]; then
-            if grep -q "Failing tests:" xcodebuild.log; then
+            # XCTest failures print "Failing tests:"; Swift Testing failures
+            # print "✘ Test ..." lines instead — check for both, or a failed
+            # run gets summarized as "all tests passed".
+            if grep -q "Failing tests:" xcodebuild.log || grep -q "✘ Test " xcodebuild.log; then
               echo "::error title=Unit Tests Failed::Some tests failed"
               echo "## ❌ Some tests failed:" >> $GITHUB_STEP_SUMMARY
               grep -A 20 "Failing tests:" xcodebuild.log | \
                 grep -E '^\s+[A-Za-z0-9]+\..+\(\)' | \
-                sed 's/^/  - /' >> $GITHUB_STEP_SUMMARY
+                sed 's/^/  - /' >> $GITHUB_STEP_SUMMARY || true
+              grep -E '✘ Test .* failed after' xcodebuild.log | \
+                sed 's/^/  - /' | sort -u >> $GITHUB_STEP_SUMMARY || true
             else
               echo "::notice title=Unit Tests Passed::✅ All tests passed"
               echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
