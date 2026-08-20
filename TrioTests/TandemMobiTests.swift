@@ -562,6 +562,20 @@ private extension Data {
         #expect(high.worstCaseDuration < .minutes(2))
     }
 
+    @Test("The audition palette is distinct burst counts, small enough to count") func palette() {
+        // Distinct cues can only be distinct COUNTS (the tone is fixed), so the
+        // palette is 1..4 — 1 through 4 bursts, each its own entry id.
+        let ids = TandemAnnunciationPattern.palette.map(\.id)
+        #expect(ids == [1, 2, 3, 4])
+        for entry in TandemAnnunciationPattern.palette {
+            #expect(entry.pattern.bursts == entry.id)
+            // Nothing in the palette runs long enough to overlap the next
+            // reading, even spending every retry.
+            #expect(entry.pattern.worstCaseDuration < .minutes(3))
+            #expect(!entry.name.isEmpty)
+        }
+    }
+
     @Test("Busy pacing is bounded") func busyPacingBounds() {
         // The pump refuses a request while a burst is still playing; the retry
         // budget must outlast one burst comfortably without hammering the pump.

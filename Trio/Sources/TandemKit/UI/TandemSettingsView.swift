@@ -31,6 +31,7 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     @Published var alarmErrorMessage: String?
     @Published var glucoseAnnunciationEnabled: Bool
     @Published var testingAnnunciation: TandemGlucoseAlarmKind?
+    @Published var testingPatternId: Int?
     @Published var annunciationResult: (success: Bool, message: String)?
     @Published var diagnosticsInProgress = false
     @Published var diagnosticsReport: String?
@@ -513,6 +514,32 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                         true,
                         String(
                             localized: "The pump accepted the command and should be playing the \(kind.localizedTitle.lowercased()) pattern: \(self.describePattern(kind)). If you felt and heard nothing, the pump decided that, not Trio — this command has no volume of its own and follows the pump's own Sound setting. To make it audible, \(soundWhere)."
+                        )
+                    )
+                }
+                self.objectWillChange.send()
+            }
+        }
+    }
+
+    /// Audition one palette pattern so the user can hear the distinct cues and
+    /// decide which belongs to which scenario.
+    func testPattern(_ entry: TandemAnnunciationPattern.PaletteEntry) {
+        testingPatternId = entry.id
+        annunciationResult = nil
+        pumpManager.testAnnunciationPattern(entry.pattern) { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.testingPatternId = nil
+                if let error {
+                    TandemHaptics.failure()
+                    self.annunciationResult = (false, error.localizedDescription)
+                } else {
+                    TandemHaptics.success()
+                    self.annunciationResult = (
+                        true,
+                        String(
+                            localized: "The pump accepted a \(entry.name.lowercased()) burst (\(entry.id)×). It plays one fixed tone, so tell the patterns apart by how many bursts you hear — the count is the only cue there is. If you heard nothing, raise the pump's sound level under Pump sounds."
                         )
                     )
                 }
@@ -1204,7 +1231,7 @@ struct TandemSettingsView: View {
                 ) {
                     viewModel.testAnnunciation(.low)
                 }
-                .disabled(viewModel.testingAnnunciation != nil)
+                .disabled(viewModel.testingAnnunciation != nil || viewModel.testingPatternId != nil)
 
                 TandemActionButton(
                     title: String(localized: "Test the high pattern"),
@@ -1215,13 +1242,30 @@ struct TandemSettingsView: View {
                 ) {
                     viewModel.testAnnunciation(.high)
                 }
-                .disabled(viewModel.testingAnnunciation != nil)
+                .disabled(viewModel.testingAnnunciation != nil || viewModel.testingPatternId != nil)
+
+                // Audition palette: the pump has no command to play a specific
+                // category tone, so distinct cues are distinct burst counts.
+                // Hear them here, then we can assign one per scenario.
+                Text("Audition cues").glassCaption()
+                ForEach(TandemAnnunciationPattern.palette) { entry in
+                    TandemActionButton(
+                        title: String(localized: "Play \(entry.name.lowercased()) — \(entry.id)×"),
+                        systemImage: "speaker.wave.2",
+                        emphasis: .bordered,
+                        isBusy: viewModel.testingPatternId == entry.id,
+                        busyTitle: String(localized: "Buzzing…")
+                    ) {
+                        viewModel.testPattern(entry)
+                    }
+                    .disabled(viewModel.testingPatternId != nil || viewModel.testingAnnunciation != nil)
+                }
 
                 if viewModel.annunciationRefused, viewModel.annunciationResult == nil {
                     TandemCallout(
                         title: String(localized: "The pump refused the last buzz"),
                         message: String(
-                            localized: "It refused even after Trio reconnected with a fresh key, so Trio is leaving it alone for an hour rather than waking it to be refused again. The phone alert is unaffected. Two things worth trying: check the pump's sound setting in the Tandem Mobi app (a pump set to vibrate may decline to play a tone), and try that app's own Find My Pump — if the official feature cannot make your pump sound either, no command from Trio will. A test button here asks again immediately."
+                            localized: "It refused even after Trio reconnected with a fresh key, so Trio is leaving it alone for an hour rather than waking it to be refused again. The phone alert is unaffected. Worth trying: raise the pump's sound level under Pump sounds below — a pump set to vibrate may decline to play a tone. A test button here asks again immediately."
                         ),
                         tone: .caution
                     )

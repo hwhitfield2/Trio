@@ -663,9 +663,15 @@ the pump's own Sound configuration, which the diagnostics dump now surfaces
 The parameterization we want lives elsewhere, and there are three honest tiers:
 
 1. **Phone-side burst vocabulary (safe, available now).** More distinguishable
-   "words" — burst counts, groupings, gaps — composed from the fixed burst, as
-   `TandemGlucoseAnnunciation` already does (2 bursts = low, 3 = high). No new
-   protocol, bounded by the 5-minute annunciation rate limit.
+   "words" — composed from the fixed burst, as `TandemGlucoseAnnunciation` does
+   (2 bursts = low, 3 = high). Burst *count* is the only audible axis: the pump
+   plays one fixed tone and swallows gaps shorter than a burst, so there is no
+   controllable rhythm or timbre. The settings screen exposes an **audition
+   palette** (`TandemAnnunciationPattern.palette`, 1–4 bursts) so a user can
+   hear the distinct counts and pick which cue maps to which scenario — the
+   pump has **no** command to play a specific *category* tone (bolus, alarm,
+   …); those fire only on their real events, so distinct cues can only be
+   distinct counts. Bounded by the 5-minute annunciation rate limit.
 2. **`SetPumpSounds` — a per-category Trio control (Pump sounds, in settings).**
    Opcode `0xE4`, encoding backed by pumpx2's real-app capture vectors.
    `TandemPumpSounds.swift` sets **each writable category** — bolus, reminder,

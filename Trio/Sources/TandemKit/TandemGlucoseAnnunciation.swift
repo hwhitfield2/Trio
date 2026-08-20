@@ -39,6 +39,24 @@ struct TandemAnnunciationPattern: Equatable {
         }
     }
 
+    /// The distinct cues that can be told apart by ear on a pump in a pocket.
+    /// Burst *count* is the only audible axis — the pump plays one fixed tone
+    /// and swallows gaps shorter than a burst — so the palette is 1 through 4
+    /// bursts. Beyond four the count blurs and each burst adds ~4s, so it stops
+    /// being useful as a distinguishable cue.
+    struct PaletteEntry: Identifiable {
+        let id: Int
+        let name: String
+        var pattern: TandemAnnunciationPattern { TandemAnnunciationPattern(bursts: id) }
+    }
+
+    static let palette: [PaletteEntry] = [
+        PaletteEntry(id: 1, name: String(localized: "Single")),
+        PaletteEntry(id: 2, name: String(localized: "Double")),
+        PaletteEntry(id: 3, name: String(localized: "Triple")),
+        PaletteEntry(id: 4, name: String(localized: "Quadruple")),
+    ]
+
     /// Pause after an accepted burst before asking for the next one.
     static let interBurstDelay: TimeInterval = 4
 
@@ -270,6 +288,17 @@ extension TandemPumpManager {
     /// real. Success completes once the FIRST burst is accepted; the rest of
     /// the pattern plays on behind it, paced by the pump's own busy answers.
     func testAnnunciation(_ kind: TandemGlucoseAlarmKind, completion: @escaping ((any LocalizedError)?) -> Void) {
+        testAnnunciationPattern(TandemAnnunciationPattern.pattern(for: kind), completion: completion)
+    }
+
+    /// Play one chosen burst pattern on demand so the user can audition it and
+    /// decide which cue belongs to which scenario. The pump has no command to
+    /// play a specific category tone, so distinct cues are distinct *rhythms* —
+    /// this is the only axis there is.
+    func testAnnunciationPattern(
+        _ pattern: TandemAnnunciationPattern,
+        completion: @escaping ((any LocalizedError)?) -> Void
+    ) {
         guard state.glucoseAnnunciationEnabled else {
             completion(TandemAnnunciationError.notEnabled)
             return
@@ -279,7 +308,6 @@ extension TandemPumpManager {
         state.annunciationRefusedUntil = nil
         commandQueue.async { [weak self] in
             guard let self = self else { return }
-            let pattern = TandemAnnunciationPattern.pattern(for: kind)
             let started = Date.now
             var notes: [String] = []
 
