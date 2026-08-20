@@ -282,17 +282,23 @@ private extension Data {
         let client = TandemEcJpake(role: .client, secret: secret)
         let server = TandemEcJpake(role: .server, secret: secret)
 
+        // Message lengths: scalars ride the wire in BouncyCastle's MINIMAL
+        // big-endian form (the length prefix tells the reader), so a random
+        // ZKP response whose top byte happens to be zero legitimately
+        // shortens a message by a byte — about one exchange in 256 per
+        // scalar. Assert the structural bounds, not the single most likely
+        // length, or this test fails on real, valid exchanges.
         let clientRound1 = try client.round1()
         let serverRound1 = try server.round1()
-        #expect(clientRound1.count == 330)
+        #expect((326 ... 330).contains(clientRound1.count))
         try client.readRound1(serverRound1)
         try server.readRound1(clientRound1)
 
         let clientRound2 = try client.round2()
         let serverRound2 = try server.round2()
         // The client sends no curve id; the server prefixes one.
-        #expect(clientRound2.count == 165)
-        #expect(serverRound2.count == 168)
+        #expect((161 ... 165).contains(clientRound2.count))
+        #expect((164 ... 168).contains(serverRound2.count))
         try client.readRound2(serverRound2)
         try server.readRound2(clientRound2)
 
