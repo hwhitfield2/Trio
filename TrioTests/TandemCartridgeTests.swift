@@ -167,8 +167,13 @@ private func streamFrame(opcode: UInt8, cargo: [UInt8]) -> TandemMessageFrame {
         #expect(TandemCartridgeError.deliveryMustBeStoppedOnPump.errorDescription?.contains("Stop insulin") == true)
         #expect(TandemCartridgeError.bolusInProgress.errorDescription?.contains("bolus") == true)
         // A suspend the pump accepted but did not act on is a different problem
-        // from one it refused, and needs a different instruction.
-        #expect(TandemCartridgeError.suspendDidNotTake.errorDescription?.contains("still delivering") == true)
+        // from one it refused, and needs a different instruction. On a Mobi
+        // (the only model that reaches this) there is no pump screen, so the
+        // message must say "try again" here, never route the user elsewhere.
+        let suspend = TandemCartridgeError.suspendDidNotTake.errorDescription
+        #expect(suspend?.contains("still shows delivery") == true)
+        #expect(suspend?.contains("Try again") == true)
+        #expect(suspend?.contains("on the pump itself") == false)
     }
 }
 
