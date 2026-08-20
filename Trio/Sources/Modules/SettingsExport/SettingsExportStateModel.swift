@@ -1955,12 +1955,22 @@ extension SettingsExport.StateModel {
         }
     }
 
-    // MARK: - Device setup transfer (QR code sequence)
+    // MARK: - Device setup transfer (dense matrix + QR frame fallback)
 
-    /// Builds the QR frame strings that set up a new device exactly like this
-    /// one: the full settings backup plus the remote-control identity —
-    /// paired followers, their secrets and the push credentials.
-    func makeDeviceSetupFrames() async -> Result<[String], ExportError> {
+    /// Everything the presenter needs: the single dense setup matrix, and the
+    /// legacy QR frame sequence for scanning with an older Trio build (or in
+    /// the rare case the configuration outgrows a single matrix).
+    struct DeviceSetupCode {
+        /// One static symbol carrying the whole transfer; nil only when the
+        /// payload exceeds the largest matrix size.
+        let matrixImage: UIImage?
+        let frames: [String]
+    }
+
+    /// Builds the setup code that makes a new device exactly like this one:
+    /// the full settings backup plus the remote-control identity — paired
+    /// followers, their secrets and the push credentials.
+    func makeDeviceSetupCode() async -> Result<DeviceSetupCode, ExportError> {
         var transfer = DeviceSetupTransfer()
         transfer.createdAt = Date()
         transfer.hostName = await MainActor.run { UIDevice.current.name }
@@ -1973,7 +1983,12 @@ extension SettingsExport.StateModel {
         transfer.remoteControl = FollowerPairingManager.shared.makeRemoteControlTransfer()
 
         do {
-            return try .success(DeviceSetupQRCodec.encode(transfer))
+            let frames = try DeviceSetupQRCodec.encode(transfer)
+            let payload = try DeviceSetupPayloadCoder.compress(transfer)
+            let matrixImage = (try? DenseMatrixCode.encode(payload: payload))
+                .flatMap { DenseMatrixCode.render($0) }
+                .map { UIImage(cgImage: $0) }
+            return .success(DeviceSetupCode(matrixImage: matrixImage, frames: frames))
         } catch {
             return .failure(.unknown(error.localizedDescription))
         }

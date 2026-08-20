@@ -123,6 +123,41 @@ struct DeviceSetupFrame: Equatable {
     }
 }
 
+/// Shared payload coding for both symbol formats: compact JSON (dates and
+/// keys deterministic), zlib. The dense matrix carries the compressed bytes
+/// raw; the QR frames carry them base64-encoded.
+enum DeviceSetupPayloadCoder {
+    /// Compact on purpose — the pretty-printed `JSONCoding.encoder` would
+    /// waste a third of the symbol on indentation. Decoding accepts either.
+    private static var compactEncoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .customISO8601
+        return encoder
+    }
+
+    static func compress(_ transfer: DeviceSetupTransfer) throws -> Data {
+        let json = try compactEncoder.encode(transfer)
+        guard let compressed = try? (json as NSData).compressed(using: .zlib) as Data else {
+            throw DeviceSetupCodecError.encodingFailed
+        }
+        return compressed
+    }
+
+    static func decompress(_ compressed: Data) throws -> DeviceSetupTransfer {
+        guard let json = try? (compressed as NSData).decompressed(using: .zlib) as Data,
+              let transfer = try? JSONCoding.decoder.decode(DeviceSetupTransfer.self, from: json),
+              transfer.type == DeviceSetupTransfer.transferType
+        else {
+            throw DeviceSetupCodecError.corruptPayload
+        }
+        guard transfer.schemaVersion <= DeviceSetupTransfer.currentSchemaVersion else {
+            throw DeviceSetupCodecError.unsupportedVersion(transfer.schemaVersion)
+        }
+        return transfer
+    }
+}
+
 /// Encodes a transfer into QR frame strings and back. The payload is JSON,
 /// zlib-compressed and base64-encoded, then split into chunks small enough
 /// that each QR stays comfortably scannable from another phone's screen.
@@ -133,11 +168,7 @@ enum DeviceSetupQRCodec {
     static let maxChunkLength = 700
 
     static func encode(_ transfer: DeviceSetupTransfer, chunkLength: Int = maxChunkLength) throws -> [String] {
-        let json = try JSONCoding.encoder.encode(transfer)
-        guard let compressed = try? (json as NSData).compressed(using: .zlib) as Data else {
-            throw DeviceSetupCodecError.encodingFailed
-        }
-        let base64 = compressed.base64EncodedString()
+        let base64 = try DeviceSetupPayloadCoder.compress(transfer).base64EncodedString()
         let transferId = Self.transferId(forBase64Payload: base64)
 
         var chunks: [String] = []
@@ -159,17 +190,11 @@ enum DeviceSetupQRCodec {
 
     static func decode(base64: String, expectedTransferId: String) throws -> DeviceSetupTransfer {
         guard transferId(forBase64Payload: base64) == expectedTransferId,
-              let compressed = Data(base64Encoded: base64),
-              let json = try? (compressed as NSData).decompressed(using: .zlib) as Data,
-              let transfer = try? JSONCoding.decoder.decode(DeviceSetupTransfer.self, from: json),
-              transfer.type == DeviceSetupTransfer.transferType
+              let compressed = Data(base64Encoded: base64)
         else {
             throw DeviceSetupCodecError.corruptPayload
         }
-        guard transfer.schemaVersion <= DeviceSetupTransfer.currentSchemaVersion else {
-            throw DeviceSetupCodecError.unsupportedVersion(transfer.schemaVersion)
-        }
-        return transfer
+        return try DeviceSetupPayloadCoder.decompress(compressed)
     }
 
     static func transferId(forBase64Payload base64: String) -> String {

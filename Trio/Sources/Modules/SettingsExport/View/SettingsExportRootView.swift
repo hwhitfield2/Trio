@@ -20,8 +20,8 @@ extension SettingsExport {
         @State private var showImportSuccess = false
         @State private var importSuccessMessage = ""
 
-        // Device setup transfer (QR code sequence between two phones)
-        @State private var deviceSetupFrames: [String] = []
+        // Device setup transfer (dense matrix / QR sequence between two phones)
+        @State private var deviceSetupCode: StateModel.DeviceSetupCode?
         @State private var showDeviceSetupPresenter = false
         @State private var isPreparingSetupCode = false
         @State private var showDeviceSetupScanner = false
@@ -247,11 +247,13 @@ extension SettingsExport {
                 }
             }
             .sheet(isPresented: $showDeviceSetupPresenter) {
-                DeviceSetupPresenterView(frames: deviceSetupFrames) {
-                    showDeviceSetupPresenter = false
-                    deviceSetupFrames = []
+                if let deviceSetupCode {
+                    DeviceSetupPresenterView(code: deviceSetupCode) {
+                        showDeviceSetupPresenter = false
+                        self.deviceSetupCode = nil
+                    }
+                    .interactiveDismissDisabled()
                 }
-                .interactiveDismissDisabled()
             }
             .sheet(isPresented: $showDeviceSetupScanner) {
                 DeviceSetupScannerView(
@@ -377,9 +379,9 @@ extension SettingsExport {
             isPreparingSetupCode = true
             defer { isPreparingSetupCode = false }
 
-            switch await state.makeDeviceSetupFrames() {
-            case let .success(frames):
-                deviceSetupFrames = frames
+            switch await state.makeDeviceSetupCode() {
+            case let .success(code):
+                deviceSetupCode = code
                 showDeviceSetupPresenter = true
             case let .failure(error):
                 exportErrorMessage = error.localizedDescription

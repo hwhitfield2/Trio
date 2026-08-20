@@ -1,12 +1,16 @@
 import SwiftUI
 
-/// Sheet shown on the old device while setting up a new one: cycles through
-/// the QR frames of the device-setup transfer so the new device can scan
-/// them one after another, in any order.
+/// Sheet shown on the old device while setting up a new one. By default it
+/// presents the whole transfer as ONE static dense matrix — the new device
+/// reads it across many camera frames, so nothing has to animate or be
+/// scanned in parts. The looping QR frame sequence remains available as a
+/// fallback for older Trio builds (and for the rare configuration too large
+/// for a single matrix).
 struct DeviceSetupPresenterView: View {
-    let frames: [String]
+    let code: SettingsExport.StateModel.DeviceSetupCode
     let onDone: () -> Void
 
+    @State private var showQRFrames = false
     @State private var currentFrame = 0
     @Environment(\.scenePhase) private var scenePhase
 
@@ -15,15 +19,32 @@ struct DeviceSetupPresenterView: View {
     /// camera frames.
     private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
 
+    private var showingMatrix: Bool { code.matrixImage != nil && !showQRFrames }
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    Text("On the new phone, open Trio and go to Settings → Export & Import Settings → Scan Setup Code, then point its camera at this screen until all parts are received.")
+                    Text("On the new phone, open Trio and choose Set Up From Another Device (or Settings → Export & Import Settings → Scan Setup Code), then point its camera at this screen.")
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
 
-                    if let qrImage = FollowerPairingView.qrCodeImage(for: frames[currentFrame]) {
+                    if showingMatrix, let matrixImage = code.matrixImage {
+                        Image(uiImage: matrixImage)
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 340, maxHeight: 340)
+                            .padding(10)
+                            .background(Color.white)
+                            .cornerRadius(12)
+
+                        Text("Hold the phones steady about 15–25 cm apart; the new phone reads the code within a few seconds. Keep this screen at full brightness.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    } else if let qrImage = FollowerPairingView.qrCodeImage(for: code.frames[currentFrame]) {
                         Image(uiImage: qrImage)
                             .interpolation(.none)
                             .resizable()
@@ -32,29 +53,38 @@ struct DeviceSetupPresenterView: View {
                             .padding(12)
                             .background(Color.white)
                             .cornerRadius(12)
+
+                        Text("Part \(currentFrame + 1) of \(code.frames.count)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+
+                        Text("The codes repeat until every part has been scanned; the order does not matter.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     } else {
-                        Text("Failed to generate the QR code.")
+                        Text("Failed to generate the setup code.")
                             .foregroundColor(.red)
                     }
 
-                    Text("Part \(currentFrame + 1) of \(frames.count)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .monospacedDigit()
-
                     Label(
-                        "These codes contain everything about this Trio — including all follower secrets and push keys. Do not screenshot, record or share them.",
+                        "This code contains everything about this Trio — including all follower secrets and push keys. Do not screenshot, record or share it.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .font(.footnote)
                     .foregroundColor(.orange)
                     .padding(.horizontal)
 
-                    Text("The codes repeat until every part has been scanned; the order does not matter. Keep both phones still and close together.")
+                    if code.matrixImage != nil {
+                        Button(showQRFrames
+                            ? String(localized: "Show as a single code")
+                            : String(localized: "Trouble scanning? Show as QR codes")) {
+                                showQRFrames.toggle()
+                        }
                         .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                    }
                 }
                 .padding(.vertical)
             }
@@ -67,8 +97,8 @@ struct DeviceSetupPresenterView: View {
             }
         }
         .onReceive(timer) { _ in
-            guard scenePhase == .active, frames.count > 1 else { return }
-            currentFrame = (currentFrame + 1) % frames.count
+            guard !showingMatrix, scenePhase == .active, code.frames.count > 1 else { return }
+            currentFrame = (currentFrame + 1) % code.frames.count
         }
     }
 }

@@ -264,21 +264,44 @@ toggles. Followers do not re-pair — but their pairing bundle still names the
 | Transfer payload & QR framing | `Trio/Sources/Services/RemoteControl/DeviceSetupTransfer.swift` | n/a (device-to-device only) |
 | Host update push | `Trio/Sources/Services/RemoteControl/FollowerHostMigration.swift` | `FollowerApp/lib/services/host_migration_service.dart` |
 
-### Device-setup QR framing
+### Device-setup symbol: one dense matrix (TDM1)
 
-The transfer is JSON, zlib-compressed, base64-encoded and split into frames:
+The transfer is compact JSON, zlib-compressed, and rendered by default as a
+SINGLE static dense matrix (`DenseMatrixCode.swift` — a custom format only
+Trio reads, so it spends its area on data and error correction instead of
+third-party decodability):
+
+- a 2-module black frame with a 1-module white gap bounds the symbol; the
+  scanner detects the white card by Vision rectangle detection,
+  perspective-corrects it, and locks onto this frame;
+- grid sizes 121–281 modules (≈1.6–9.2 KB capacity), chosen per payload;
+- a 16-byte header under RS(48,16) — magic `TDM`, version, grid size,
+  payload length, SHA-256 prefix — decodes first and confirms the scanner's
+  grid-size/rotation hypothesis cheaply;
+- the payload rides interleaved RS(255,191) Reed-Solomon blocks (any 32 bad
+  bytes per block recover; interleaving spreads local damage), everything
+  XOR-scrambled so the symbol has no large uniform areas;
+- because the symbol is static, the scanner folds every camera frame into a
+  per-cell moving average before deciding — that multi-frame vote is what
+  makes a symbol of this density readable screen-to-screen.
+
+### Fallback: QR frame sequence
+
+For older Trio builds (or a payload beyond the largest matrix) the presenter
+can instead loop base64 chunks as ordinary QR codes:
 
 ```
 TRIODS<version>:<transferId>:<index>:<count>:<chunk>
 ```
 
-The old device cycles the frames on screen; the new device scans them in any
-order until all are seen. `transferId` is the first 8 hex characters of
-SHA-256 over the complete base64 payload — it keys frames to one session and
-is verified on assembly, so a frame from a restarted session or a corrupted
-chunk can never produce a silently wrong transfer. The frames carry every
-follower secret and the APNS key: they are the same security boundary as the
-pairing QR, rendered only on the host screen and never persisted.
+Frames are scanned in any order; `transferId` (first 8 hex characters of
+SHA-256 over the complete base64 payload) keys frames to one session and is
+verified on assembly. The scanner accepts both formats through the same
+camera session.
+
+Either way the symbol carries every follower secret and the APNS key: the
+same security boundary as the pairing QR, rendered only on the host screen
+and never persisted.
 
 ### Host update push (host → follower)
 
