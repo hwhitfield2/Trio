@@ -264,17 +264,27 @@ toggles. Followers do not re-pair — but their pairing bundle still names the
 | Transfer payload & QR framing | `Trio/Sources/Services/RemoteControl/DeviceSetupTransfer.swift` | n/a (device-to-device only) |
 | Host update push | `Trio/Sources/Services/RemoteControl/FollowerHostMigration.swift` | `FollowerApp/lib/services/host_migration_service.dart` |
 
-### Device-setup symbol: one dense matrix (TDM1)
+### Device-setup symbol: one dense orb (TDM1)
 
 The transfer is compact JSON, zlib-compressed, and rendered by default as a
-SINGLE static dense matrix (`DenseMatrixCode.swift` — a custom format only
-Trio reads, so it spends its area on data and error correction instead of
-third-party decodability):
+SINGLE static circular "orb" — luminous particles on a dark card inside a
+glowing ring, in the spirit of Apple's device-transfer cloud
+(`DenseMatrixCode.swift` — a custom format only Trio reads, so it spends
+its area on data and error correction instead of third-party decodability):
 
-- a 2-module black frame with a 1-module white gap bounds the symbol; the
-  scanner detects the white card by Vision rectangle detection,
-  perspective-corrects it, and locks onto this frame;
-- grid sizes 121–281 modules (≈1.6–9.2 KB capacity), chosen per payload;
+- the square cell lattice is masked to a disk (integer-exact, so the cell
+  set is precisely 90°-rotation-symmetric and the rotation trials still
+  work); a 2-module bright ring bounds it, a small central disk is reserved
+  for the glow core, and bright means bit 1;
+- all color is decoration: the decoder samples luminance only, and the
+  threshold is computed over data cells alone, so the ring, core glow and
+  the white-to-cyan particle tint cannot skew it;
+- the scanner finds the dark card by its thin bright border (Vision
+  rectangle detection), perspective-corrects it, and probes for the ring;
+  the earlier square-frame symbol and the QR frames below all still decode
+  through the same session;
+- grid sizes 121–281 modules (orb payload capacity ≈0.9–5.4 KB, chosen per
+  payload; a larger transfer falls back to the QR sequence);
 - a 16-byte header under RS(48,16) — magic `TDM`, version, grid size,
   payload length, SHA-256 prefix — decodes first and confirms the scanner's
   grid-size/rotation hypothesis cheaply;

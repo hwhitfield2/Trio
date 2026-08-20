@@ -222,6 +222,88 @@ private struct XorshiftRNG {
         #expect(DenseMatrixCode.decode(interiorLuminances: flat, size: n) == nil)
     }
 
+    // MARK: - Orb shape
+
+    /// Full-grid luminances a perfect camera would sample from an orb: data
+    /// dots bright, everything else — background, ring, gap, glowing core —
+    /// set to mid-gray noise, proving the decoder's data-cell mask ignores
+    /// the decorative parts entirely.
+    private func orbGridLuminances(of symbol: DenseMatrixCode.Symbol) -> [Float] {
+        let n = symbol.size
+        var grid = [Float](repeating: 128, count: n * n)
+        for index in DenseMatrixCode.orbCellsBySize[n] ?? [] {
+            grid[index] = symbol.modules[index] ? 255 : 0
+        }
+        return grid
+    }
+
+    @Test("Orb cell sets are exactly 90°-rotation symmetric") func orbSymmetry() {
+        for n in DenseMatrixCode.sizes {
+            let cells = Set(DenseMatrixCode.orbCellsBySize[n] ?? [])
+            let rotated = Set(cells.map { index -> Int in
+                let row = index / n
+                let col = index % n
+                return col * n + (n - 1 - row)
+            })
+            #expect(cells == rotated, "n=\(n)")
+        }
+    }
+
+    @Test("Orb capacities match the reference implementation") func orbCapacity() {
+        // Cell counts pinned by the validated Python prototype.
+        let expected = [121: 10080, 161: 18496, 201: 29416, 241: 42872, 281: 58832]
+        for (n, count) in expected {
+            #expect(DenseMatrixCode.orbCellsBySize[n]?.count == count, "n=\(n)")
+        }
+    }
+
+    @Test("Orb roundtrip survives rotations and decorative-cell noise") func orbRoundtrip() throws {
+        let payload = randomPayload(3000, seed: 5)
+        let symbol = try DenseMatrixCode.encodeOrb(payload: payload)
+        var grid = orbGridLuminances(of: symbol)
+        for rotation in 0 ..< 4 {
+            let decoded = DenseMatrixCode.decodeOrb(gridLuminances: grid, size: symbol.size)
+            #expect(decoded == payload, "rotation \(rotation)")
+            grid = DenseMatrixCode.rotateClockwise(grid, side: symbol.size)
+        }
+    }
+
+    @Test("Orb decode always succeeds with 0.8% of data cells flipped") func orbNoisyRoundtrip() throws {
+        let payload = randomPayload(3000, seed: 5)
+        let symbol = try DenseMatrixCode.encodeOrb(payload: payload)
+        let cells = try #require(DenseMatrixCode.orbCellsBySize[symbol.size])
+        for seed in UInt64(1) ... 4 {
+            var rng = XorshiftRNG(state: seed)
+            var grid = orbGridLuminances(of: symbol)
+            var positions = Set<Int>()
+            while positions.count < cells.count * 8 / 1000 {
+                positions.insert(cells[rng.below(cells.count)])
+            }
+            for p in positions {
+                grid[p] = 255 - grid[p]
+            }
+            let decoded = DenseMatrixCode.decodeOrb(gridLuminances: grid, size: symbol.size)
+            #expect(decoded == payload, "seed \(seed)")
+        }
+    }
+
+    @Test("A device-setup transfer rides the orb end to end") func orbTransferEndToEnd() throws {
+        var transfer = DeviceSetupTransfer()
+        transfer.hostName = "Kid's iPhone"
+        var backup = TrioSettingsBackup()
+        backup.insulinConcentrationFactor = 1
+        transfer.backup = backup
+
+        let payload = try DeviceSetupPayloadCoder.compress(transfer)
+        let symbol = try DenseMatrixCode.encodeOrb(payload: payload)
+        #expect(symbol.shape == .orb)
+        let decodedPayload = try #require(
+            DenseMatrixCode.decodeOrb(gridLuminances: orbGridLuminances(of: symbol), size: symbol.size)
+        )
+        let decoded = try DeviceSetupPayloadCoder.decompress(decodedPayload)
+        #expect(decoded.hostName == "Kid's iPhone")
+    }
+
     @Test("A device-setup transfer rides the dense matrix end to end") func transferEndToEnd() throws {
         var transfer = DeviceSetupTransfer()
         transfer.createdAt = Date()

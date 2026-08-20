@@ -1985,8 +1985,8 @@ extension SettingsExport.StateModel {
         do {
             let frames = try DeviceSetupQRCodec.encode(transfer)
             let payload = try DeviceSetupPayloadCoder.compress(transfer)
-            let matrixImage = (try? DenseMatrixCode.encode(payload: payload))
-                .flatMap { DenseMatrixCode.render($0) }
+            let matrixImage = (try? DenseMatrixCode.encodeOrb(payload: payload))
+                .flatMap { DenseMatrixCode.renderOrb($0) }
                 .map { UIImage(cgImage: $0) }
             return .success(DeviceSetupCode(matrixImage: matrixImage, frames: frames))
         } catch {

@@ -343,10 +343,13 @@ final class DenseMatrixScanProcessor {
         return request
     }()
 
-    /// Per-grid-size EMA of interior cell luminances.
+    /// Per-grid-size EMA of cell luminances, square symbol (interior grid).
     private var accumulators: [Int: [Float]] = [:]
+    /// Per-grid-size EMA of cell luminances, orb symbol (full bounding grid).
+    private var orbAccumulators: [Int: [Float]] = [:]
     /// Set once any header decodes for a size — later frames only try that one.
     private var lockedSize: Int?
+    private var lockedShape: DenseMatrixCode.Shape?
     private var grayBuffer: [UInt8]
 
     init() {
@@ -364,10 +367,21 @@ final class DenseMatrixScanProcessor {
         for observation in observations.sorted(by: { $0.confidence > $1.confidence }) {
             guard let corrected = perspectiveCorrect(image, observation: observation) else { continue }
             renderGray(corrected)
-            guard let frame = locateFrame() else { continue }
-            seenSymbol = true
-            if let payload = attemptDecode(frameBounds: frame) {
-                return .payload(payload)
+
+            // The two symbol shapes have opposite polarity, so their locators
+            // cannot false-positive on each other: the square frame is a dark
+            // band on a light card, the orb ring a bright band on a dark one.
+            if lockedShape != .orb, let frame = locateFrame() {
+                seenSymbol = true
+                if let payload = attemptDecode(frameBounds: frame) {
+                    return .payload(payload)
+                }
+            }
+            if lockedShape != .square, let ring = locateRing() {
+                seenSymbol = true
+                if let payload = attemptDecodeOrb(ringBounds: ring) {
+                    return .payload(payload)
+                }
             }
         }
         return seenSymbol ? .symbolSeen : .none
@@ -493,8 +507,133 @@ final class DenseMatrixScanProcessor {
         return (left, right, top, bottom)
     }
 
+    /// Locates the orb's bright ring on its dark card by probing inward near
+    /// the midlines of each edge. Near a midline the circle's extreme points
+    /// coincide with its bounding box, so the same box-probing scheme as the
+    /// square frame works — with the polarity flipped.
+    private func locateRing() -> (left: Int, right: Int, top: Int, bottom: Int)? {
+        let side = workingSide
+        // Tight around the midlines: a circle's edge shifts only ~0.2% of the
+        // radius within 5% of the midline, well under one module.
+        let probes = [0.46, 0.5, 0.54].map { Int(Double(side) * $0) }
+
+        var minV = 255, maxV = 0
+        for y in stride(from: 0, to: side, by: 37) {
+            for x in stride(from: 0, to: side, by: 37) {
+                let v = luminance(x: x, y: y)
+                minV = min(minV, v)
+                maxV = max(maxV, v)
+            }
+        }
+        guard maxV - minV > 40 else { return nil }
+        let threshold = (minV + maxV) / 2
+
+        func edge(values: (Int) -> Int, limit: Int) -> Int? {
+            // Walk inward: skip the card's thin bright border if the quad
+            // included it, require dark (the card margin), then the first
+            // sustained bright run is the ring's outer edge.
+            var index = 0
+            let maxBorder = side * 3 / 100
+            while index < maxBorder, values(index) >= threshold { index += 1 }
+            var darkRun = 0
+            while index < limit {
+                if values(index) < threshold {
+                    darkRun += 1
+                } else if darkRun >= 3 {
+                    var brightRun = 0
+                    var j = index
+                    while j < limit, values(j) >= threshold, brightRun < 4 {
+                        brightRun += 1
+                        j += 1
+                    }
+                    if brightRun >= 3 { return index }
+                    darkRun = 0
+                } else {
+                    darkRun = 0
+                }
+                index += 1
+            }
+            return nil
+        }
+
+        func median(_ values: [Int]) -> Int? {
+            guard !values.isEmpty else { return nil }
+            return values.sorted()[values.count / 2]
+        }
+
+        let limit = side / 2
+        let lefts = probes.compactMap { y in edge(values: { self.luminance(x: $0, y: y) }, limit: limit) }
+        let rights = probes.compactMap { y in
+            edge(values: { self.luminance(x: side - 1 - $0, y: y) }, limit: limit).map { side - 1 - $0 }
+        }
+        let tops = probes.compactMap { x in edge(values: { self.luminance(x: x, y: $0) }, limit: limit) }
+        let bottoms = probes.compactMap { x in
+            edge(values: { self.luminance(x: x, y: side - 1 - $0) }, limit: limit).map { side - 1 - $0 }
+        }
+
+        guard lefts.count >= 2, rights.count >= 2, tops.count >= 2, bottoms.count >= 2,
+              let left = median(lefts), let right = median(rights),
+              let top = median(tops), let bottom = median(bottoms)
+        else { return nil }
+
+        let width = right - left
+        let height = bottom - top
+        guard width > side / 3, height > side / 3 else { return nil }
+        guard abs(width - height) < max(width, height) / 8 else { return nil }
+        return (left, right, top, bottom)
+    }
+
+    private func attemptDecodeOrb(ringBounds: (left: Int, right: Int, top: Int, bottom: Int)) -> Data? {
+        let candidates = (lockedShape == .orb ? lockedSize : nil).map { [$0] } ?? DenseMatrixCode.sizes
+        let width = Float(ringBounds.right - ringBounds.left)
+        let height = Float(ringBounds.bottom - ringBounds.top)
+
+        for n in candidates {
+            let pitchX = width / Float(n)
+            let pitchY = height / Float(n)
+            guard pitchX >= 2.2 else { continue }
+
+            // The orb samples the full bounding grid; the codec masks out
+            // everything that is not a data cell.
+            var samples = [Float](repeating: 0, count: n * n)
+            for row in 0 ..< n {
+                let cy = Float(ringBounds.top) + (Float(row) + 0.5) * pitchY
+                for col in 0 ..< n {
+                    let cx = Float(ringBounds.left) + (Float(col) + 0.5) * pitchX
+                    samples[row * n + col] = sampleCell(cx: cx, cy: cy)
+                }
+            }
+
+            let averaged: [Float]
+            if var acc = orbAccumulators[n] {
+                for i in 0 ..< acc.count {
+                    acc[i] = acc[i] * 0.75 + samples[i] * 0.25
+                }
+                orbAccumulators[n] = acc
+                averaged = acc
+            } else {
+                orbAccumulators[n] = samples
+                averaged = samples
+            }
+
+            for grid in [averaged, samples] {
+                if let payload = DenseMatrixCode.decodeOrb(gridLuminances: grid, size: n)
+                    ?? DenseMatrixCode.decodeOrb(gridLuminances: Self.mirrored(grid, side: n), size: n)
+                {
+                    return payload
+                }
+            }
+
+            if lockedSize == nil, DenseMatrixCode.orbHeaderReads(gridLuminances: averaged, size: n) {
+                lockedSize = n
+                lockedShape = .orb
+            }
+        }
+        return nil
+    }
+
     private func attemptDecode(frameBounds: (left: Int, right: Int, top: Int, bottom: Int)) -> Data? {
-        let candidates = lockedSize.map { [$0] } ?? DenseMatrixCode.sizes
+        let candidates = (lockedShape == .square ? lockedSize : nil).map { [$0] } ?? DenseMatrixCode.sizes
         let width = Float(frameBounds.right - frameBounds.left)
         let height = Float(frameBounds.bottom - frameBounds.top)
 
@@ -543,6 +682,7 @@ final class DenseMatrixScanProcessor {
             // wasting time on the other hypotheses.
             if lockedSize == nil, headerReads(averaged, inner: inner, size: n) {
                 lockedSize = n
+                lockedShape = .square
             }
         }
         return nil

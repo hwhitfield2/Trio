@@ -30,14 +30,21 @@ struct DeviceSetupPresenterView: View {
                         .padding(.horizontal)
 
                     if showingMatrix, let matrixImage = code.matrixImage {
+                        // The dark card's thin bright border is not just looks:
+                        // it is the high-contrast quad the scanner's rectangle
+                        // detection locks onto before finding the ring inside.
                         Image(uiImage: matrixImage)
                             .interpolation(.none)
                             .resizable()
                             .scaledToFit()
                             .frame(maxWidth: 340, maxHeight: 340)
-                            .padding(10)
-                            .background(Color.white)
-                            .cornerRadius(12)
+                            .padding(6)
+                            .background(Color(red: 0.015, green: 0.03, blue: 0.08))
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color(red: 0.85, green: 0.96, blue: 1), lineWidth: 2.5)
+                            )
 
                         Text("Hold the phones steady about 15–25 cm apart; the new phone reads the code within a few seconds. Keep this screen at full brightness.")
                             .font(.footnote)

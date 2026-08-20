@@ -52,9 +52,20 @@ enum DenseMatrixCode {
         }
     }
 
-    /// A rendered symbol: `modules[row * size + col]`, true = black.
+    /// How a symbol's cells are laid out and inked.
+    enum Shape {
+        /// Black cells on white inside a square frame — the original TDM1 look.
+        case square
+        /// Luminous dots on dark inside a glowing ring — same coding, a disk
+        /// of cells instead of a square, and bright now means bit 1.
+        case orb
+    }
+
+    /// A rendered symbol: `modules[row * size + col]`, true = inked
+    /// (black for `.square`, bright for `.orb`).
     struct Symbol {
         let size: Int
+        let shape: Shape
         let modules: [Bool]
     }
 
@@ -76,40 +87,96 @@ enum DenseMatrixCode {
         return sizes.first { capacityBytes(size: $0) >= need }
     }
 
+    // MARK: - Orb geometry
+
+    /// Modules reserved in the orb's middle for the glowing core — no data.
+    static let orbCoreRadius = 6
+
+    /// Row-major flattened indices (row * n + col) of the orb's data cells:
+    /// inside the disk that the ring and its gap bound, outside the core.
+    /// Pure integer arithmetic on an odd grid, so the set maps exactly onto
+    /// itself under 90° rotation — which is what lets the decoder reuse the
+    /// square symbol's rotation trials.
+    static let orbCellsBySize: [Int: [Int]] = {
+        var bySize = [Int: [Int]]()
+        for n in sizes {
+            let center = (n - 1) / 2
+            let limit = (n - 7) * (n - 7)
+            let coreSquared = orbCoreRadius * orbCoreRadius
+            var cells = [Int]()
+            for row in 0 ..< n {
+                for col in 0 ..< n {
+                    let dx = col - center
+                    let dy = row - center
+                    let distanceSquared = dx * dx + dy * dy
+                    if 4 * distanceSquared <= limit, distanceSquared >= coreSquared {
+                        cells.append(row * n + col)
+                    }
+                }
+            }
+            bySize[n] = cells
+        }
+        return bySize
+    }()
+
+    static func orbCapacityBytes(size n: Int) -> Int {
+        (orbCellsBySize[n]?.count ?? 0) / 8
+    }
+
+    static func orbPickSize(payloadLength: Int) -> Int? {
+        let need = encodedByteCount(payloadLength: payloadLength)
+        return sizes.first { orbCapacityBytes(size: $0) >= need }
+    }
+
     // MARK: - Encoding
 
-    static func encode(payload: Data) throws -> Symbol {
-        guard let n = pickSize(payloadLength: payload.count) else {
-            throw CodeError.payloadTooLarge
-        }
-
+    /// Header + interleaved RS body, scrambled, bit-packed MSB first and
+    /// padded to `cellCount` with the same pseudo-random texture so the
+    /// symbol has no large blank areas for the camera's exposure to smear
+    /// over. Shared by both shapes.
+    private static func encodeBits(payload: Data, size n: Int, cellCount: Int) -> [Bool] {
         let header = makeHeader(size: n, payload: payload)
         var stream = ReedSolomon.encode(header, paritySymbols: headerParity)
-
-        let blocks = bodyBlocks(payload: Array(payload))
-        stream += interleave(blocks)
+        stream += interleave(bodyBlocks(payload: Array(payload)))
         stream = scramble(stream)
 
-        // Bit-pack MSB first into the data region, then pad the remaining
-        // cells with the same pseudo-random texture so the symbol has no
-        // large blank areas for the camera's exposure to smear over.
-        let cells = dataCellCount(size: n)
         var bits = [Bool]()
-        bits.reserveCapacity(cells)
+        bits.reserveCapacity(cellCount)
         for byte in stream {
             for k in stride(from: 7, through: 0, by: -1) {
                 bits.append((byte >> k) & 1 == 1)
             }
         }
-        let padMask = scrambleMask(count: (cells - bits.count) / 8 + 2)
+        let padMask = scrambleMask(count: (cellCount - bits.count) / 8 + 2)
         var padIndex = 0
-        while bits.count < cells {
+        while bits.count < cellCount {
             let byte = padMask[(padIndex / 8) % padMask.count]
             bits.append((byte >> (7 - padIndex % 8)) & 1 == 1)
             padIndex += 1
         }
+        return bits
+    }
 
-        return Symbol(size: n, modules: assembleModules(size: n, dataBits: bits))
+    static func encode(payload: Data) throws -> Symbol {
+        guard let n = pickSize(payloadLength: payload.count) else {
+            throw CodeError.payloadTooLarge
+        }
+        let bits = encodeBits(payload: payload, size: n, cellCount: dataCellCount(size: n))
+        return Symbol(size: n, shape: .square, modules: assembleModules(size: n, dataBits: bits))
+    }
+
+    static func encodeOrb(payload: Data) throws -> Symbol {
+        guard let n = orbPickSize(payloadLength: payload.count),
+              let cells = orbCellsBySize[n]
+        else {
+            throw CodeError.payloadTooLarge
+        }
+        let bits = encodeBits(payload: payload, size: n, cellCount: cells.count)
+        var modules = [Bool](repeating: false, count: n * n)
+        for (index, bit) in zip(cells, bits) {
+            modules[index] = bit
+        }
+        return Symbol(size: n, shape: .orb, modules: modules)
     }
 
     private static func makeHeader(size n: Int, payload: Data) -> [UInt8] {
@@ -248,11 +315,11 @@ enum DenseMatrixCode {
         return Header(size: size, payloadLength: length, hashPrefix: Array(header[10 ..< 16]))
     }
 
-    /// Decodes the payload from the binarized data-region bits of one
-    /// orientation. Returns nil unless every RS block decodes and the
-    /// payload hash matches the header.
+    /// Decodes the payload from the binarized data-cell bits of one
+    /// orientation (any shape — the bit stream layout is identical).
+    /// Returns nil unless every RS block decodes and the payload hash
+    /// matches the header.
     static func decodeBits(_ bits: [Bool], size n: Int) -> Data? {
-        guard bits.count == dataCellCount(size: n) else { return nil }
         guard let header = decodeHeader(bits: bits), header.size == n else { return nil }
 
         let blockLengths = bodyBlockLengths(payloadLength: header.payloadLength)
@@ -315,6 +382,57 @@ enum DenseMatrixCode {
         return out
     }
 
+    static func rotateClockwise(_ values: [Float], side: Int) -> [Float] {
+        var out = [Float](repeating: 0, count: values.count)
+        for row in 0 ..< side {
+            for col in 0 ..< side {
+                out[col * side + (side - 1 - row)] = values[row * side + col]
+            }
+        }
+        return out
+    }
+
+    /// Decodes an orb from luminance samples of the FULL n×n bounding grid
+    /// (row-major, any orientation). Bright cell = bit 1. Cells outside the
+    /// data disk — ring, gap, glowing core — are sampled but ignored: the
+    /// threshold is computed over the data cells only, so the decorative
+    /// parts cannot skew it.
+    static func decodeOrb(gridLuminances: [Float], size n: Int) -> Data? {
+        guard let cells = orbCellsBySize[n], gridLuminances.count == n * n else { return nil }
+
+        // The data-cell multiset is identical in every rotation (the cell set
+        // is 90°-symmetric), so one threshold serves all four trials.
+        let dataValues = cells.map { gridLuminances[$0] }
+        guard let threshold = otsuThreshold(dataValues) else { return nil }
+
+        var grid = gridLuminances
+        for _ in 0 ..< 4 {
+            let bits = cells.map { grid[$0] > threshold }
+            if let payload = decodeBits(bits, size: n) {
+                return payload
+            }
+            grid = rotateClockwise(grid, side: n)
+        }
+        return nil
+    }
+
+    /// Cheap orientation-only probe for the orb, mirroring `decodeHeader`'s
+    /// role in the scanner's size lock.
+    static func orbHeaderReads(gridLuminances: [Float], size n: Int) -> Bool {
+        guard let cells = orbCellsBySize[n], gridLuminances.count == n * n else { return false }
+        let dataValues = cells.map { gridLuminances[$0] }
+        guard let threshold = otsuThreshold(dataValues) else { return false }
+        var grid = gridLuminances
+        for _ in 0 ..< 4 {
+            let bits = cells.map { grid[$0] > threshold }
+            if let header = decodeHeader(bits: bits), header.size == n {
+                return true
+            }
+            grid = rotateClockwise(grid, side: n)
+        }
+        return false
+    }
+
     /// Otsu's threshold over a 256-bin histogram of the luminances. Returns
     /// nil for degenerate input (all cells the same brightness — the camera
     /// is not looking at a symbol).
@@ -357,8 +475,100 @@ enum DenseMatrixCode {
 
     // MARK: - Rendering
 
-    /// Renders the symbol as a black-on-white bitmap, `pixelsPerModule` px per
-    /// cell plus a quiet margin. The caller shows it pixel-exact
+    /// Renders the orb: luminous particles on near-black, a glowing core,
+    /// and a bright ring bounding the disk — the setup-orb look. Only
+    /// luminance carries data, so all the color is free decoration: every
+    /// dot is drawn far brighter than the background, and the decoder's
+    /// threshold splits them cleanly whatever the tint.
+    static func renderOrb(_ symbol: Symbol, pixelsPerModule: Int = 4, quietModules: Int = 4) -> CGImage? {
+        guard symbol.shape == .orb, let cells = orbCellsBySize[symbol.size] else { return nil }
+        let n = symbol.size
+        let sidePx = (n + 2 * quietModules) * pixelsPerModule
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: sidePx,
+            height: sidePx,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        let center = CGPoint(x: CGFloat(sidePx) / 2, y: CGFloat(sidePx) / 2)
+        let ppm = CGFloat(pixelsPerModule)
+        let outerRadius = CGFloat(n) / 2 * ppm
+
+        // Deep-space background.
+        context.setFillColor(CGColor(srgbRed: 0.015, green: 0.03, blue: 0.08, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: sidePx, height: sidePx))
+
+        // Soft glow behind the whole disk, brightest at the core. Kept dim
+        // outside the core so unlit data cells stay clearly on the dark side
+        // of the threshold.
+        if let glow = CGGradient(
+            colorsSpace: colorSpace,
+            colors: [
+                CGColor(srgbRed: 0.55, green: 0.85, blue: 1, alpha: 0.9),
+                CGColor(srgbRed: 0.2, green: 0.45, blue: 0.9, alpha: 0.25),
+                CGColor(srgbRed: 0.05, green: 0.1, blue: 0.3, alpha: 0)
+            ] as CFArray,
+            locations: [0, 0.28, 1]
+        ) {
+            context.drawRadialGradient(
+                glow,
+                startCenter: center,
+                startRadius: 0,
+                endCenter: center,
+                endRadius: CGFloat(orbCoreRadius + 4) * ppm,
+                options: []
+            )
+        }
+
+        // The bounding ring: 2 modules thick, outer edge exactly at the
+        // symbol bounds — it is what the scanner's probes lock onto.
+        context.setStrokeColor(CGColor(srgbRed: 0.85, green: 0.96, blue: 1, alpha: 1))
+        context.setLineWidth(2 * ppm)
+        context.strokeEllipse(in: CGRect(
+            x: center.x - outerRadius + ppm,
+            y: center.y - outerRadius + ppm,
+            width: 2 * (outerRadius - ppm),
+            height: 2 * (outerRadius - ppm)
+        ))
+
+        // The particles. Color drifts from white near the core to cyan-blue
+        // at the rim; all of it high-luminance.
+        let quiet = CGFloat(quietModules) * ppm
+        let dotRadius = 0.42 * ppm
+        let maxDistance = CGFloat(n - 7) / 2
+        let gridCenter = CGFloat(n - 1) / 2
+        for index in cells where symbol.modules[index] {
+            let row = index / n
+            let col = index % n
+            let dx = CGFloat(col) - gridCenter
+            let dy = CGFloat(row) - gridCenter
+            let t = min(1, (dx * dx + dy * dy).squareRoot() / maxDistance)
+            context.setFillColor(CGColor(
+                srgbRed: 1 - 0.45 * t,
+                green: 1 - 0.12 * t,
+                blue: 1,
+                alpha: 1
+            ))
+            let x = quiet + (CGFloat(col) + 0.5) * ppm
+            // Flip rows so module (0,0) renders top-left, matching sampling.
+            let y = CGFloat(sidePx) - quiet - (CGFloat(row) + 0.5) * ppm
+            context.fillEllipse(in: CGRect(
+                x: x - dotRadius,
+                y: y - dotRadius,
+                width: 2 * dotRadius,
+                height: 2 * dotRadius
+            ))
+        }
+        return context.makeImage()
+    }
+
+    /// Renders the square symbol as a black-on-white bitmap, `pixelsPerModule`
+    /// px per cell plus a quiet margin. The caller shows it pixel-exact
     /// (`interpolation(.none)`).
     static func render(_ symbol: Symbol, pixelsPerModule: Int = 4, quietModules: Int = 4) -> CGImage? {
         let n = symbol.size
