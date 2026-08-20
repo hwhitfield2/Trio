@@ -34,7 +34,13 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     @Published var annunciationResult: (success: Bool, message: String)?
     @Published var diagnosticsInProgress = false
     @Published var diagnosticsReport: String?
-    @Published var pumpSoundSelection: TandemAnnunciationMode = .audioHigh
+    /// Per-category levels the user is editing. Populated from the pump.
+    @Published var soundLevels: [TandemSoundCategory: TandemAnnunciationMode] = [:]
+    /// Read-only levels the pump exposes but Trio cannot change.
+    @Published var buttonSoundLevel: TandemAnnunciationMode?
+    @Published var fillTubingSoundLevel: TandemAnnunciationMode?
+    @Published var loadingSounds = false
+    @Published var loadedSoundLevels = false
     @Published var settingPumpSound = false
     @Published var pumpSoundResult: (success: Bool, message: String)?
 
@@ -535,13 +541,49 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
         TandemHaptics.success()
     }
 
-    /// Set the pump's alarm/alert/reminder sound level. The completion arrives
+    /// Level shown for one category's picker (defaults to loud before a load).
+    func soundLevel(_ category: TandemSoundCategory) -> TandemAnnunciationMode {
+        soundLevels[category] ?? .audioHigh
+    }
+
+    func setSoundLevel(_ category: TandemSoundCategory, _ mode: TandemAnnunciationMode) {
+        soundLevels[category] = mode
+        pumpSoundResult = nil
+        objectWillChange.send()
+    }
+
+    /// Read the pump's current per-category levels so the pickers start from the
+    /// truth rather than a guess. Cheap and unsigned.
+    func loadSoundLevels() {
+        guard !loadingSounds else { return }
+        loadingSounds = true
+        pumpSoundResult = nil
+        pumpManager.readPumpSoundConfig { [weak self] globals in
+            guard let self else { return }
+            self.loadingSounds = false
+            guard let globals else {
+                self.pumpSoundResult = (false, String(localized: "Could not read the pump's sound settings. Make sure the pump is connected."))
+                self.objectWillChange.send()
+                return
+            }
+            for category in TandemSoundCategory.allCases {
+                self.soundLevels[category] = TandemAnnunciationMode(rawValue: category.currentLevel(from: globals)) ?? .audioHigh
+            }
+            self.buttonSoundLevel = TandemAnnunciationMode(rawValue: globals.buttonAnnunId)
+            self.fillTubingSoundLevel = TandemAnnunciationMode(rawValue: globals.fillTubingAnnunId)
+            self.loadedSoundLevels = true
+            self.objectWillChange.send()
+        }
+    }
+
+    /// Write the edited per-category levels to the pump. The completion arrives
     /// on the main queue from the driver.
-    func setPumpSound() {
-        let mode = pumpSoundSelection
+    func applySoundLevels() {
+        let desired = soundLevels
+        guard !desired.isEmpty else { return }
         settingPumpSound = true
         pumpSoundResult = nil
-        pumpManager.setPumpSoundMode(mode) { [weak self] error in
+        pumpManager.setPumpSoundLevels(desired) { [weak self] error in
             guard let self else { return }
             self.settingPumpSound = false
             if let error {
@@ -549,10 +591,8 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                 self.pumpSoundResult = (false, error.localizedDescription)
             } else {
                 TandemHaptics.success()
-                self.pumpSoundResult = (
-                    true,
-                    String(localized: "The pump's alarm, alert and reminder sounds are now set to \(mode.localizedDescription).")
-                )
+                self.loadedSoundLevels = true
+                self.pumpSoundResult = (true, String(localized: "The pump's sound levels are updated. Play a test pattern above to hear the result."))
             }
             self.objectWillChange.send()
         }
@@ -1243,30 +1283,69 @@ struct TandemSettingsView: View {
         .tandemRowBackground()
     }
 
+    private func soundLevelPicker(_ category: TandemSoundCategory) -> some View {
+        Picker(
+            category.localizedTitle,
+            selection: Binding(
+                get: { viewModel.soundLevel(category) },
+                set: { viewModel.setSoundLevel(category, $0) }
+            )
+        ) {
+            ForEach([TandemAnnunciationMode.audioHigh, .audioMedium, .audioLow, .vibrate], id: \.self) { mode in
+                Text(mode.localizedDescription.capitalized).tag(mode)
+            }
+        }
+        .disabled(viewModel.settingPumpSound || viewModel.loadingSounds || !viewModel.loadedSoundLevels)
+    }
+
     private var pumpSoundSection: some View {
         Section {
-            Picker(String(localized: "Pump sound level"), selection: $viewModel.pumpSoundSelection) {
-                ForEach([TandemAnnunciationMode.audioHigh, .audioMedium, .audioLow, .vibrate], id: \.self) { mode in
-                    Text(mode.localizedDescription.capitalized).tag(mode)
+            if !viewModel.loadedSoundLevels {
+                TandemActionButton(
+                    title: String(localized: "Load current sound levels"),
+                    systemImage: "arrow.down.circle",
+                    emphasis: .bordered,
+                    isBusy: viewModel.loadingSounds,
+                    busyTitle: String(localized: "Reading the pump…")
+                ) {
+                    viewModel.loadSoundLevels()
                 }
-            }
-            .disabled(viewModel.settingPumpSound)
+            } else {
+                ForEach(TandemSoundCategory.allCases) { category in
+                    soundLevelPicker(category)
+                }
 
-            TandemActionButton(
-                title: String(localized: "Set pump sound level"),
-                systemImage: "speaker.wave.2.fill",
-                emphasis: .bordered,
-                isBusy: viewModel.settingPumpSound,
-                busyTitle: String(localized: "Setting the pump…")
-            ) {
-                viewModel.setPumpSound()
+                // Read-only: the pump reports these but SetPumpSounds has no
+                // field for them, so Trio cannot change them.
+                if let button = viewModel.buttonSoundLevel {
+                    TandemInfoRow(
+                        label: String(localized: "Button (read-only)"),
+                        value: button.localizedDescription.capitalized
+                    )
+                }
+                if let fill = viewModel.fillTubingSoundLevel {
+                    TandemInfoRow(
+                        label: String(localized: "Fill tubing (read-only)"),
+                        value: fill.localizedDescription.capitalized
+                    )
+                }
+
+                TandemActionButton(
+                    title: String(localized: "Apply sound levels"),
+                    systemImage: "speaker.wave.2.fill",
+                    emphasis: .bordered,
+                    isBusy: viewModel.settingPumpSound,
+                    busyTitle: String(localized: "Setting the pump…")
+                ) {
+                    viewModel.applySoundLevels()
+                }
             }
 
             if let result = viewModel.pumpSoundResult {
                 TandemCallout(
                     title: result.success
-                        ? String(localized: "Sound level set")
-                        : String(localized: "Could not set the sound level"),
+                        ? String(localized: "Sound levels set")
+                        : String(localized: "Could not set the sound levels"),
                     message: result.message,
                     tone: result.success ? .ok : .critical
                 )
@@ -1275,7 +1354,7 @@ struct TandemSettingsView: View {
             Text("Pump sounds").glassCaption()
         } footer: {
             Text(
-                "Sets how loud the pump's alarms, alerts and reminders are — and with them Trio's glucose annunciations, which have no volume of their own. On a Mobi this is the only place to change it, since the pump has no screen. Quick-bolus and CGM-alert sounds are left as they are."
+                "How loud each of the pump's own sounds is — Loud, Medium, Low, or Vibrate. Alarm, alert and reminder levels also govern Trio's glucose annunciations, which have no volume of their own. On a Mobi this is the only place to change them, since the pump has no screen. Button and fill-tubing are read-only — the pump reports them but has no command to change them. To HEAR a change, use the Test buttons above: the pump has no way to play a chosen category's tone on demand, so those play Trio's annunciation pattern, whose loudness follows the pump's setting."
             )
         }
         .tandemRowBackground()

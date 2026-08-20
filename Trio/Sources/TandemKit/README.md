@@ -666,17 +666,28 @@ The parameterization we want lives elsewhere, and there are three honest tiers:
    "words" — burst counts, groupings, gaps — composed from the fixed burst, as
    `TandemGlucoseAnnunciation` already does (2 bursts = low, 3 = high). No new
    protocol, bounded by the 5-minute annunciation rate limit.
-2. **`SetPumpSounds` — now a Trio control (Pump sounds, in settings).**
+2. **`SetPumpSounds` — a per-category Trio control (Pump sounds, in settings).**
    Opcode `0xE4`, encoding backed by pumpx2's real-app capture vectors.
-   `TandemPumpSounds.swift` sets the pump's **alarm, alert and reminder** sound
-   level (loud / medium / quiet / vibrate) from Trio. It reads the current
-   config first so the categories it does not touch (quick-bolus, CGM alert)
-   keep their values, changes only the targeted ones via the `changeBitmask`,
-   and confirms by reading `PumpGlobals` back — a change the pump accepts but
-   does not apply is reported, not assumed. On a **Mobi this is the only way to
-   change the pump's sound level at all**, since the pump has no screen and the
-   Tandem app cannot run while Trio is the paired controller. Signed but
-   non-delivery, so it needs no bolus opt-in — the same footing as `PlaySound`.
+   `TandemPumpSounds.swift` sets **each writable category** — bolus, reminder,
+   alert, alarm and quick-bolus — to loud / medium / low / vibrate from Trio,
+   via `setPumpSoundLevels(_:)`. The UI loads the current levels first (so the
+   pickers start from the truth), writes only the categories the user changed
+   via the `changeBitmask`, and confirms by reading `PumpGlobals` back — every
+   changed category must report its new level, or the change is reported as not
+   taken, never assumed. The pump's **button** and **fill-tubing** levels are
+   read-only: `SetPumpSounds` has no field for them, so they are shown but not
+   editable. On a **Mobi this is the only way to change any of it**, since the
+   pump has no screen and the Tandem app cannot run while Trio is the paired
+   controller. Signed but non-delivery, so it needs no bolus opt-in — the same
+   footing as `PlaySound`.
+
+   What this does **not** do is play a chosen category's tone on demand. There
+   is no such command: `PlaySound` is parameterless (`size=0`), so it plays one
+   fixed burst, and the category tones fire only on their real events. So the
+   "hear it" button plays the `PlaySound` pattern, whose loudness follows the
+   pump's setting — which lets a Mobi user *discover* which category governs
+   `PlaySound` by setting categories to vibrate one at a time and testing, an
+   answer pumpx2 does not record.
 3. **Speculative axes (bench-only).** The `SetPumpSounds` CGM-alert field has a
    repeat/escalation variant `PlaySound` cannot express, an always-zero unknown
    byte that may unlock more categories, and `DismissNotification`'s

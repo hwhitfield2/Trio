@@ -59,4 +59,56 @@ import Testing
         #expect(error.errorDescription?.contains("loud") == true)
         #expect(error.errorDescription?.contains("vibrate") == true)
     }
+
+    @Test("Only the writable categories exist, each with the right change bit") func categories() {
+        // Button and fill-tubing are deliberately absent: SetPumpSounds has no
+        // field for them, so they must not appear as settable categories.
+        #expect(TandemSoundCategory.allCases.map(\.rawValue).sorted()
+            == ["alarm", "alert", "bolus", "quickBolus", "reminder"])
+        // Bolus is written through the "general" field/bit.
+        #expect(TandemSoundCategory.bolus.changeBit == .general)
+        #expect(TandemSoundCategory.reminder.changeBit == .reminder)
+        #expect(TandemSoundCategory.alert.changeBit == .alert)
+        #expect(TandemSoundCategory.alarm.changeBit == .alarm)
+        #expect(TandemSoundCategory.quickBolus.changeBit == .quickBolus)
+    }
+
+    @Test("Each category reads its own level from PumpGlobals") func currentLevels() throws {
+        // PumpGlobals layout: [7]=button, [8]=quickBolus, [9]=bolus,
+        // [10]=reminder, [11]=alert, [12]=alarm, [13]=fillTubing.
+        var cargo = Data(count: 14)
+        cargo[7] = 3 // button vibrate (read-only)
+        cargo[8] = 2 // quickBolus low
+        cargo[9] = 1 // bolus medium
+        cargo[10] = 0 // reminder loud
+        cargo[11] = 3 // alert vibrate
+        cargo[12] = 0 // alarm loud
+        cargo[13] = 1 // fillTubing (read-only)
+        let g = try TandemPumpGlobalsResponse(cargo: cargo)
+
+        #expect(TandemSoundCategory.bolus.currentLevel(from: g) == 1)
+        #expect(TandemSoundCategory.reminder.currentLevel(from: g) == 0)
+        #expect(TandemSoundCategory.alert.currentLevel(from: g) == 3)
+        #expect(TandemSoundCategory.alarm.currentLevel(from: g) == 0)
+        #expect(TandemSoundCategory.quickBolus.currentLevel(from: g) == 2)
+        // Button is not a settable category, but the pump still reports it.
+        #expect(g.buttonAnnunId == 3)
+    }
+
+    @Test("Writing several categories builds one mask and one cargo") func multiCategoryCargo() {
+        // Set bolus=low(2), alarm=vibrate(3); leave the rest at a read baseline.
+        let req = TandemSetPumpSoundsRequest(
+            quickBolus: 0,
+            general: 2, // bolus low
+            reminder: 0,
+            alert: 0,
+            alarm: 3, // alarm vibrate
+            cgmAlertA: 0,
+            cgmAlertB: 0,
+            changeBitmask: (TandemSoundCategory.bolus.changeBit.rawValue
+                | TandemSoundCategory.alarm.changeBit.rawValue)
+        )
+        // general(bit 4) | alarm(bit 32) = 36.
+        #expect(req.cargo == Data([0, 0, 2, 0, 0, 3, 0, 0, 36]))
+    }
 }

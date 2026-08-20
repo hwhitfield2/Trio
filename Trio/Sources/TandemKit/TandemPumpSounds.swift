@@ -28,26 +28,87 @@ enum TandemPumpSoundError: LocalizedError {
     }
 }
 
-extension TandemPumpManager {
-    /// The categories Trio's sound control governs: the ones that make alarms,
-    /// alerts and reminders — and Trio's own annunciations — audible. Quick-bolus
-    /// and CGM-alert sounds are left as the pump has them.
-    private static let soundCategories: TandemSetPumpSoundsRequest.Categories =
-        [.reminder, .alert, .alarm]
+/// A pump sound category whose level Trio can *set*.
+///
+/// Only these five are writable: `SetPumpSounds` has no field for the pump's
+/// **button** or **fill-tubing** sounds, so those are read-only — the pump
+/// reports them but nothing can change them remotely.
+enum TandemSoundCategory: String, CaseIterable, Identifiable {
+    case bolus
+    case reminder
+    case alert
+    case alarm
+    case quickBolus
 
-    /// Set the pump's alarm/alert/reminder sound level. Read-modify-write: it
-    /// reads the current settings so the categories it is *not* changing keep
-    /// their values, writes the chosen level to the ones it is, and confirms by
-    /// reading back.
+    var id: String { rawValue }
+
+    var localizedTitle: String {
+        switch self {
+        case .bolus: return String(localized: "Bolus")
+        case .reminder: return String(localized: "Reminder")
+        case .alert: return String(localized: "Alert")
+        case .alarm: return String(localized: "Alarm")
+        case .quickBolus: return String(localized: "Quick bolus")
+        }
+    }
+
+    /// The change-bitmask bit that tells the pump this category is being written.
+    var changeBit: TandemSetPumpSoundsRequest.Categories {
+        switch self {
+        case .bolus: return .general
+        case .reminder: return .reminder
+        case .alert: return .alert
+        case .alarm: return .alarm
+        case .quickBolus: return .quickBolus
+        }
+    }
+
+    /// This category's current level from a PumpGlobals read. `SetPumpSounds`
+    /// calls the bolus level "general", but PumpGlobals reads it as `bolus`.
+    func currentLevel(from globals: TandemPumpGlobalsResponse) -> UInt8 {
+        switch self {
+        case .bolus: return globals.bolusAnnunId
+        case .reminder: return globals.reminderAnnunId
+        case .alert: return globals.alertAnnunId
+        case .alarm: return globals.alarmAnnunId
+        case .quickBolus: return globals.quickBolusAnnunId
+        }
+    }
+}
+
+extension TandemPumpManager {
+    /// Read the pump's full sound configuration for display, off the BLE queue.
+    /// Completion is delivered on the main queue.
+    func readPumpSoundConfig(completion: @escaping (TandemPumpGlobalsResponse?) -> Void) {
+        commandQueue.async { [weak self] in
+            guard let self else { return }
+            if self.ensureConnectedAndAuthenticated() != nil {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            let globals = self.readPumpGlobals()
+            DispatchQueue.main.async { completion(globals) }
+        }
+    }
+
+    /// Set the level of one or more sound categories. Read-modify-write: it reads
+    /// the current settings so untargeted categories keep their values, writes
+    /// the chosen levels to the ones in `desired`, and confirms by reading back —
+    /// each changed category must actually report its new level, because the
+    /// pump can accept a change and not apply it.
     ///
     /// Signed but non-delivery, so it needs no bolus opt-in — the same footing
     /// as `PlaySound`. Runs on `commandQueue`; connects if it has to.
-    func setPumpSoundMode(
-        _ mode: TandemAnnunciationMode,
+    func setPumpSoundLevels(
+        _ desired: [TandemSoundCategory: TandemAnnunciationMode],
         completion: @escaping ((any LocalizedError)?) -> Void
     ) {
         commandQueue.async { [weak self] in
             guard let self else { return }
+            guard !desired.isEmpty else {
+                self.finishSound(completion, nil)
+                return
+            }
 
             if let error = self.ensureConnectedAndAuthenticated() {
                 self.finishSound(completion, TandemPumpSoundError.notConnected(error.localizedDescription))
@@ -67,16 +128,20 @@ extension TandemPumpManager {
                 return
             }
 
-            let level = mode.rawValue
+            func level(_ category: TandemSoundCategory) -> UInt8 {
+                desired[category]?.rawValue ?? category.currentLevel(from: current)
+            }
+            let mask = desired.keys.reduce(UInt8(0)) { $0 | $1.changeBit.rawValue }
+
             let request = TandemSetPumpSoundsRequest(
-                quickBolus: current.quickBolusAnnunId,
-                general: current.bolusAnnunId,
-                reminder: level,
-                alert: level,
-                alarm: level,
+                quickBolus: level(.quickBolus),
+                general: level(.bolus),
+                reminder: level(.reminder),
+                alert: level(.alert),
+                alarm: level(.alarm),
                 cgmAlertA: 0,
                 cgmAlertB: 0,
-                changeBitmask: Self.soundCategories.rawValue
+                changeBitmask: mask
             )
 
             switch self.session.send(request) {
@@ -90,20 +155,34 @@ extension TandemPumpManager {
                 return
             }
 
-            // The read-back is the verdict — the pump can accept and not apply.
+            // The read-back is the verdict — every changed category must report
+            // the level we asked for.
             guard let after = self.readPumpGlobals() else {
                 self.finishSound(completion, TandemPumpSoundError.couldNotReadBack)
                 return
             }
-            let got = TandemAnnunciationMode(rawValue: after.alarmAnnunId) ?? .vibrate
-            if after.alarmAnnunId == level {
-                self.log.info("Pump sound level set to \(mode.localizedDescription)")
-                self.notifyStateDidChange()
-                self.finishSound(completion, nil)
-            } else {
+            for (category, mode) in desired where category.currentLevel(from: after) != mode.rawValue {
+                let got = TandemAnnunciationMode(rawValue: category.currentLevel(from: after)) ?? .vibrate
                 self.finishSound(completion, TandemPumpSoundError.didNotTake(requested: mode, got: got))
+                return
             }
+
+            let summary = desired
+                .sorted { $0.key.rawValue < $1.key.rawValue }
+                .map { "\($0.key.rawValue)=\($0.value.localizedDescription)" }
+                .joined(separator: ", ")
+            self.log.info("Pump sound levels updated: \(summary)")
+            self.notifyStateDidChange()
+            self.finishSound(completion, nil)
         }
+    }
+
+    /// Convenience: set alarm, alert and reminder to one level together.
+    func setPumpSoundMode(
+        _ mode: TandemAnnunciationMode,
+        completion: @escaping ((any LocalizedError)?) -> Void
+    ) {
+        setPumpSoundLevels([.reminder: mode, .alert: mode, .alarm: mode], completion: completion)
     }
 
     /// Read the pump's current sound configuration, unsigned and cheap.
