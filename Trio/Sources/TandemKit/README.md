@@ -23,6 +23,7 @@ implements what each pump actually supports:
 | Closed loop | ✅ native temp rates **or** microbolus-basal | ⚠️ experimental microbolus-basal only | Mode is a single explicit choice; the two never run together |
 | Cartridge change + fill tubing | ⚠️ opt-in, untested | ⚠️ opt-in, field-tested | Sequence verified on a Mobi; the tubing fill runs from the pump's own button |
 | Prime cannula | ⚠️ opt-in, untested | ❌ | `FillCannula` is Mobi-only; prime on the pump itself on a t:slim X2 |
+| Read-only diagnostics dump | ✅ | ✅ | "Read pump data" in settings — sends only unsigned status queries; see below |
 
 So the two models give Trio genuinely different roles:
 
@@ -542,6 +543,104 @@ known to work against real pumps.
 
 This is clean-room-style reuse of a documented, community-maintained protocol —
 no Tandem firmware or proprietary code is included.
+
+## Diagnostics, and the road beyond pumpx2
+
+`TandemDiagnostics.swift` is the in-app "connect to the pump and extract data"
+tool, reached from **Read pump data** in the pump settings. It sweeps a curated
+set of read-only status queries — firmware/serial, API version, sound
+configuration, battery, insulin, basal, Control-IQ, home-screen icons, clock,
+CGM, load state, alarms, alerts, last bolus — and produces a report that is
+shown, copyable, and written to the app log.
+
+It is the safest possible way to talk to the pump, **by construction, not by
+care**:
+
+- Every query goes through one generic `probe(...)` that refuses — before
+  sending anything — any request that is signed, `modifiesInsulinDelivery`, or
+  not on the unsigned `currentStatus` characteristic. Every insulin-moving
+  command in the protocol is signed and lives on `control`, so this positive
+  allowlist makes delivery structurally unreachable from diagnostics even if the
+  probe list is edited carelessly later. `TandemDiagnosticsTests` pins that
+  classification against the real message types (including the opcode-collision
+  trap where `0xA4` is a harmless read on `currentStatus` but `SetTempRate` on
+  `control` — told apart by characteristic, never by opcode).
+- Each probe is its own `commandQueue` item, so a real therapy command enqueued
+  mid-report waits at most one 6 s probe, never the whole sweep; and it does not
+  run at all while a bolus or cartridge change is active.
+
+**What this deliberately is *not*, and why.** A separate research pass mapped
+the full pumpx2 opcode space and asked what an exploration tool could add. Two
+tempting features were rejected as unsafe for a tool that runs against a live,
+worn insulin pump, and are intentionally absent:
+
+- **No blind opcode sweep.** `currentStatus` is *not* uniformly read-only —
+  e.g. `CreateHistoryLogRequest` (opcode 126) is an unsigned *write* on that
+  characteristic — and how the pump firmware handles an *unknown* opcode it
+  receives cannot be proven safe from the host-side decode tables. Fuzzing
+  unclaimed opcodes risks malfunction alarms, watchdog resets, or lockups.
+  Diagnostics therefore send only specific, already-modeled reads with correct
+  cargo — never an empty probe against a possible setter, never an unknown
+  opcode. Opcode *discovery* belongs on a bench pump, correlated with official
+  t:connect BLE captures, not on a pump in therapeutic use.
+- **No raw-send / arbitrary-opcode path yet.** Any such primitive must be
+  unsigned-only with no access to the signing key, restricted by a positive
+  characteristic allowlist (so `authorization` and `historyLog` are unreachable
+  too, not just `control`), gated behind the bolus opt-in with per-send
+  confirmation, and never call the transport's `write` directly. Until that is
+  built and reviewed, the read-only dump above is the whole tool.
+
+### On richer pump feedback than beep + vibrate
+
+The "only beep and vibrate" ceiling is real for the on-demand channel, and it is
+not something pumpx2 failed to decode: `PlaySound` is genuinely *parameterless*
+(opcode `0xF4`, empty cargo — there is no tone/volume/duration/pattern byte to
+have missed). One accepted `PlaySound` is one fixed burst, and a status of 0
+means *accepted*, not *audible* — whether it is loud, quiet, or silent is set by
+the pump's own Sound configuration, which the diagnostics dump now surfaces
+(`PumpGlobals`, opcode 86, per-category `audioHigh/medium/low/vibrate`).
+
+The parameterization we want lives elsewhere, and there are three honest tiers:
+
+1. **Phone-side burst vocabulary (safe, available now).** More distinguishable
+   "words" — burst counts, groupings, gaps — composed from the fixed burst, as
+   `TandemGlucoseAnnunciation` already does (2 bursts = low, 3 = high). No new
+   protocol, bounded by the 5-minute annunciation rate limit.
+2. **`SetPumpSounds` tier-raising (decodable, but rewrites global state).**
+   Opcode `0xE4`, encoding known and backed by real-app capture vectors, not yet
+   modeled in Trio. It could momentarily raise a category to `audioHigh` before
+   annunciating and restore it after — making the fixed burst loud on a quiet
+   pump. It changes a *global user preference*, so it needs snapshot/restore and
+   an explicit opt-in; this is a product decision, not just an implementation.
+3. **Speculative axes (bench-only).** The `SetPumpSounds` CGM-alert field has a
+   repeat/escalation variant `PlaySound` cannot express, an always-zero unknown
+   byte that may unlock more categories, and `DismissNotification`'s
+   `executeExtraAction` flag — all undecoded, to be probed on a bench pump, never
+   in therapy.
+
+So richer feedback *is* reachable — through `SetPumpSounds` and the pump's alert
+engine — but not by finding a hidden `PlaySound` parameter, because there isn't
+one.
+
+### Roadmap to depend less on pumpx2 at runtime
+
+1. The diagnostics dump above is the on-device capture harness: it lets every
+   opcode and layout be **verified against real hardware** instead of trusted
+   from transcription.
+2. An owned opcode catalog keyed on `(characteristic, opcode)` — never opcode
+   alone — with each entry marked confirmed-on-hardware vs transcribed.
+3. Formalize the already-half-plumbed event channels (`qualifyingEvents`,
+   `controlStream`) into a subscription so Trio reacts to suspend/resume/alarm/
+   bolus changes instead of polling.
+4. More unsigned status/settings reads (PumpSettings, IDP profile/segment,
+   BolusCalc snapshot, features) to close settings drift.
+5. History-log ingestion on the `historyLog` characteristic — the biggest single
+   capability gain, for post-disconnect reconciliation and daily totals.
+6. Only then, selective writes (e.g. `SetPumpSounds`) behind their own opt-ins
+   after bench validation — and gated by the *characteristic* allowlist, not by
+   trusting pumpx2's `modifiesInsulinDelivery` flag, which is under-inclusive
+   (it does not flag `SetIDPSegment`, `SetMaxBasalLimit`, `ChangeControlIQ`, or
+   `ChangeTimeDate`, all of which affect delivery).
 
 ## Hardware verification status
 

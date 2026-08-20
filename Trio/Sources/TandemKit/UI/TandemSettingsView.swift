@@ -1,6 +1,7 @@
 import Combine
 import LoopKit
 import SwiftUI
+import UIKit
 
 /// Drives the pump screen.
 ///
@@ -31,6 +32,8 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     @Published var glucoseAnnunciationEnabled: Bool
     @Published var testingAnnunciation: TandemGlucoseAlarmKind?
     @Published var annunciationResult: (success: Bool, message: String)?
+    @Published var diagnosticsInProgress = false
+    @Published var diagnosticsReport: String?
 
     let pumpManager: TandemPumpManager
 
@@ -501,6 +504,26 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
             }
         }
     }
+
+    /// Read everything the pump will report about itself. Read-only — see
+    /// `TandemPumpManager.runPumpDiagnostics`.
+    func runDiagnostics() {
+        diagnosticsInProgress = true
+        diagnosticsReport = nil
+        // The manager delivers its completion on the main queue.
+        pumpManager.runPumpDiagnostics { [weak self] report in
+            guard let self else { return }
+            self.diagnosticsInProgress = false
+            self.diagnosticsReport = report.text
+            self.objectWillChange.send()
+        }
+    }
+
+    func copyDiagnostics() {
+        guard let report = diagnosticsReport else { return }
+        UIPasteboard.general.string = report
+        TandemHaptics.success()
+    }
 }
 
 struct TandemSettingsView: View {
@@ -532,6 +555,7 @@ struct TandemSettingsView: View {
                 if viewModel.remoteBolusEnabled {
                     testDoseSection
                 }
+                diagnosticsSection
                 aboutSection
                 deleteSection
             }
@@ -980,6 +1004,43 @@ struct TandemSettingsView: View {
             Text("Diagnostics").glassCaption()
         } footer: {
             Text(viewModel.testDoseFooterText)
+        }
+        .tandemRowBackground()
+    }
+
+    private var diagnosticsSection: some View {
+        Section {
+            TandemActionButton(
+                title: String(localized: "Read pump data"),
+                systemImage: "stethoscope",
+                emphasis: .bordered,
+                isBusy: viewModel.diagnosticsInProgress,
+                busyTitle: String(localized: "Reading the pump…")
+            ) {
+                viewModel.runDiagnostics()
+            }
+
+            if let report = viewModel.diagnosticsReport {
+                ScrollView(.vertical) {
+                    Text(report)
+                        .font(.system(.footnote, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 260)
+
+                Button {
+                    viewModel.copyDiagnostics()
+                } label: {
+                    Label(String(localized: "Copy report"), systemImage: "doc.on.doc")
+                }
+            }
+        } header: {
+            Text("Pump data").glassCaption()
+        } footer: {
+            Text(
+                "Reads everything the pump will report about itself — versions, battery, insulin, sound settings, alarms — using only read-only queries that cannot change delivery. The full report is also written to the app log."
+            )
         }
         .tandemRowBackground()
     }
