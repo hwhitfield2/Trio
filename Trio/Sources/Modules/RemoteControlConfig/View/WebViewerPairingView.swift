@@ -128,7 +128,7 @@ struct WebViewerPairingView: View {
     private var scannerContent: some View {
         VStack(spacing: 16) {
             ViewerRegistrationScannerRepresentable { code in
-                if state.handleScannedViewerRegistration(code) {
+                if state.handleScannedViewerRegistration(code, expectedViewerId: viewer.id) {
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     isScanning = false
                 }
@@ -175,6 +175,67 @@ struct WebViewerPairingView: View {
             Button("Done", action: onDone)
                 .buttonStyle(.borderedProminent)
                 .foregroundColor(.white)
+        }
+    }
+}
+
+/// Sheet for re-scanning an already-paired viewer whose browser shows a new
+/// registration code — its push subscription rotated, so the host must learn
+/// the new address the same way it learned the first one.
+struct ViewerRescanView: View {
+    let viewer: PairedFollower
+    @ObservedObject var state: RemoteControlConfig.StateModel
+    let onDone: () -> Void
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                if state.viewerRegistered {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 56))
+                        .foregroundColor(.green)
+                    Text("\(viewer.name) is connected again")
+                        .font(.headline)
+                    Button("Done", action: onDone)
+                        .buttonStyle(.borderedProminent)
+                        .foregroundColor(.white)
+                } else {
+                    ViewerRegistrationScannerRepresentable { code in
+                        if state.handleScannedViewerRegistration(code, expectedViewerId: viewer.id) {
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        }
+                    } onPermissionDenied: {
+                        state.viewerRegistrationError = String(
+                            localized: "Trio needs camera access to scan the browser's code. Allow it in the iOS Settings app under Trio → Camera."
+                        )
+                    }
+                    .frame(height: 360)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+
+                    Text("Point the camera at the registration code shown in \(viewer.name)'s browser.")
+                        .font(.callout)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+
+                    if let error = state.viewerRegistrationError {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundColor(.orange)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.top)
+            .navigationTitle("Scan Browser Code")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDone)
+                }
+            }
         }
     }
 }

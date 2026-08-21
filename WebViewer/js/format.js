@@ -6,13 +6,15 @@
 
   // Nightscout-style trend names, as the host's snapshot carries them.
   const ARROWS = {
+    TripleUp: '↑↑↑',
     DoubleUp: '↑↑',
     SingleUp: '↑',
     FortyFiveUp: '↗',
     Flat: '→',
     FortyFiveDown: '↘',
     SingleDown: '↓',
-    DoubleDown: '↓↓'
+    DoubleDown: '↓↓',
+    TripleDown: '↓↓↓'
   };
 
   root.TrioFormat = {

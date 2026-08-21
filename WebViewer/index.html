@@ -79,6 +79,7 @@
       <p id="connect-status" role="status"></p>
       <div class="button-row">
         <button id="btn-connect-retry" class="primary" hidden>Enable Notifications &amp; Connect</button>
+        <button id="btn-connect-startover" class="destructive">Start Over</button>
       </div>
     </section>
 
@@ -116,8 +117,9 @@
         <summary>Settings</summary>
         <label class="setting-row">
           <input type="checkbox" id="pref-notifications">
-          Show current glucose as a silent notification when this page is in
-          the background
+          Show glucose values in the background notification. When off, a
+          generic "updated" notification is shown instead — the browser
+          requires every background update to be visible.
         </label>
         <div class="button-row">
           <button id="btn-show-code">Show Registration Code</button>

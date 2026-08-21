@@ -169,7 +169,11 @@
 
     function onPointer(event) {
       const rect = svg.getBoundingClientRect();
-      const t = tMin + ((event.clientX - rect.left) / rect.width) * (tMax - tMin);
+      // Screen x → viewBox x → time, inverting the same map the marks were
+      // drawn with (the plot does not span the full SVG width).
+      const viewX = ((event.clientX - rect.left) / rect.width) * width;
+      const fraction = Math.min(Math.max((viewX - margin.left) / plotW, 0), 1);
+      const t = tMin + fraction * (tMax - tMin);
       let best = readings[0];
       for (const reading of readings) {
         if (Math.abs(reading.date - t) < Math.abs(best.date - t)) best = reading;

@@ -85,19 +85,28 @@ async function handleStatusPush(pairing, encrypted) {
   await tellClients({ type: 'snapshot' });
 
   if (await anyVisibleClient()) return;
+
+  // A background push must always end in a visible notification — that is
+  // the userVisibleOnly contract, and Chrome substitutes its own generic
+  // notice otherwise. The preference only controls whether glucose values
+  // appear in it (a lock-screen privacy choice), never whether it is shown.
   const prefs = (await TrioStore.get('prefs')) || {};
-  if (prefs.statusNotifications === false) return;
+  const showValues = prefs.statusNotifications !== false;
 
   const units = snapshot.units || 'mg/dL';
   const reading = (snapshot.readings || [])[0];
-  const title = reading
+  const title = showValues && reading
     ? `${TrioFormat.displayGlucose(reading.sgv, units)} ${units} ${TrioFormat.arrow(reading.direction)}`.trim()
     : 'Trio Viewer';
   const parts = [];
-  if (typeof snapshot.iob === 'number') parts.push(`IOB ${snapshot.iob.toFixed(2)} U`);
-  if (typeof snapshot.cob === 'number') parts.push(`COB ${Math.round(snapshot.cob)} g`);
-  if (snapshot.suspended) parts.push('Insulin suspended');
-  if (reading) parts.push(`as of ${new Date(reading.date * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+  if (showValues) {
+    if (typeof snapshot.iob === 'number') parts.push(`IOB ${snapshot.iob.toFixed(2)} U`);
+    if (typeof snapshot.cob === 'number') parts.push(`COB ${Math.round(snapshot.cob)} g`);
+    if (snapshot.suspended) parts.push('Insulin suspended');
+    if (reading) parts.push(`as of ${new Date(reading.date * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+  } else {
+    parts.push('Updated in the background.');
+  }
 
   await self.registration.showNotification(title, {
     body: parts.join(' · '),

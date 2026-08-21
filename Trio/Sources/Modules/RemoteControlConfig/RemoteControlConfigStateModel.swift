@@ -23,6 +23,10 @@ extension RemoteControlConfig {
         /// stored, so the pairing sheet can say the viewer is connected.
         @Published var viewerRegistered: Bool = false
         @Published var viewerRegistrationError: String?
+        /// An already-paired viewer whose browser is showing a fresh
+        /// registration code (its push subscription rotated); drives the
+        /// re-scan sheet.
+        @Published var rescanViewer: PairedFollower?
 
         // Follower app versions
         /// Latest follower release, as published in the Trio repository.
@@ -215,13 +219,35 @@ extension RemoteControlConfig {
             refreshFollowers()
         }
 
-        /// Handles a QR string scanned during viewer pairing. Returns true
-        /// once a registration was accepted and stored, so the scanner can
-        /// dismiss; stray codes return false without any error.
-        func handleScannedViewerRegistration(_ code: String) -> Bool {
+        /// Opens the re-scan flow for a viewer whose browser shows a new
+        /// registration code (e.g. after the push service rotated its
+        /// subscription).
+        func beginViewerRescan(id: String) {
+            viewerRegistered = false
+            viewerRegistrationError = nil
+            rescanViewer = FollowerPairingManager.shared.follower(withId: id)
+        }
+
+        func finishViewerRescan() {
+            rescanViewer = nil
+            viewerRegistered = false
+            viewerRegistrationError = nil
+            refreshFollowers()
+        }
+
+        /// Handles a QR string scanned during viewer pairing or re-scan.
+        /// Returns true once a registration was accepted and stored, so the
+        /// scanner can dismiss; stray codes return false without any error.
+        ///
+        /// The registration must name the exact viewer this scan is for — a
+        /// registration is otherwise valid for as long as its pairing lives,
+        /// so without the binding a stale code left on some other browser's
+        /// screen could complete the wrong pairing.
+        func handleScannedViewerRegistration(_ code: String, expectedViewerId: String) -> Bool {
             guard let registration = WebViewerPushRegistration.parse(code) else { return false }
 
-            guard let follower = FollowerPairingManager.shared.follower(withId: registration.followerId),
+            guard registration.followerId == expectedViewerId,
+                  let follower = FollowerPairingManager.shared.follower(withId: registration.followerId),
                   follower.isViewerOnly
             else {
                 viewerRegistrationError = String(

@@ -292,8 +292,9 @@ Status and alerts ride RFC 8030 Web Push to the browser's push service
   lets nobody forge a status the viewer would accept:
   `{"encrypted_status": "...", "follower_id": "..."}` (same snapshot as
   APNS/FCM, budgeted to web push's slightly smaller 3993-byte limit), and
-  `{"encrypted_alert": "..."}` whose plaintext is
-  `{"type":"alert","title","body","timestamp","sound"}` — unlike APNS,
+  `{"encrypted_alert": "...", "follower_id": "..."}` whose plaintext is
+  `{"type":"alert","title","body","timestamp","sound"}` (`sound` is the
+  `FollowerAlertSound` raw value, e.g. `urgent` or `silent`) — unlike APNS,
   where alert text is visible to Apple, viewer alerts are end-to-end
   encrypted, and the service worker authenticates them before showing a
   notification.
@@ -344,14 +345,18 @@ direction: after subscribing, the page displays
 and the host scans it (**Scan Browser Code**). `proof` is
 `HMAC-SHA-256(key: UTF-8(secret), message: "trio-viewer-push\n" +
 follower_id + "\n" + endpoint + "\n" + p256dh + "\n" + auth)` — the host
-only accepts a registration from the party that actually holds the secret.
-After storing it the host pushes a first snapshot immediately.
+only accepts a registration from the party that actually holds the secret,
+and only for the exact viewer the scan was opened for (`follower_id` must
+match), so a stale code on some other browser's screen cannot complete the
+wrong pairing. After storing it the host pushes a first snapshot
+immediately.
 
 If the browser's push service rotates the subscription
 (`pushsubscriptionchange`), the page resubscribes and shows a fresh
-registration code to scan; the host cannot be told automatically, which is
-deliberate — re-pointing a viewer's data stream always takes the host
-user's hand.
+registration code; the host user re-scans it from the viewer's row in
+Remote Control (swipe → **Scan Code**). The host cannot be told
+automatically, which is deliberate — re-pointing a viewer's data stream
+always takes the host user's hand.
 
 ### On migration
 

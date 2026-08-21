@@ -79,7 +79,9 @@
       pairedAt: Date.now()
     });
     pendingBundle = null;
-    await startConnect();
+    // A fresh pairing must not inherit a subscription bound to an older
+    // pairing's VAPID key.
+    await startConnect(true);
   }
 
   // ---------------------------------------------------------------- camera
@@ -139,7 +141,15 @@
     return iOS && !window.navigator.standalone;
   }
 
-  async function startConnect() {
+  function subscriptionMatchesKey(subscription, vapidPublicKey) {
+    const key = subscription.options && subscription.options.applicationServerKey;
+    if (!key) return false;
+    const current = new Uint8Array(key);
+    const expected = TrioCrypto.base64urlToBytes(vapidPublicKey);
+    return current.length === expected.length && current.every((byte, i) => byte === expected[i]);
+  }
+
+  async function startConnect(forceNewSubscription) {
     show('connect');
     setText('connect-status', '');
     document.getElementById('btn-connect-retry').hidden = true;
@@ -179,13 +189,21 @@
         return;
       }
 
-      // Any earlier subscription is bound to an older VAPID key; start clean.
-      const existing = await registration.pushManager.getSubscription();
-      if (existing) await existing.unsubscribe();
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: TrioCrypto.base64urlToBytes(pairing.vapidPublicKey)
-      });
+      // Keep a live subscription that already belongs to this pairing —
+      // "Show Registration Code" must display the address the host knows,
+      // not silently mint a new one and strand the old. Only a fresh
+      // pairing (different VAPID key) starts clean.
+      let subscription = await registration.pushManager.getSubscription();
+      if (subscription && (forceNewSubscription || !subscriptionMatchesKey(subscription, pairing.vapidPublicKey))) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: TrioCrypto.base64urlToBytes(pairing.vapidPublicKey)
+        });
+      }
 
       await showRegistrationCode(pairing, subscription);
     } catch (error) {
@@ -307,10 +325,16 @@
   // ---------------------------------------------------------------- wiring
 
   async function unpair() {
-    const registration = await navigator.serviceWorker.getRegistration();
+    const registration = await ('serviceWorker' in navigator
+      ? navigator.serviceWorker.getRegistration()
+      : Promise.resolve(null));
     if (registration) {
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) await subscription.unsubscribe();
+      // Unpairing means this device should stop showing the data — including
+      // the glucose readout sitting in the notification shade.
+      const notifications = await registration.getNotifications().catch(() => []);
+      for (const notification of notifications) notification.close();
     }
     await TrioStore.clearAll();
     document.getElementById('settings').open = false;
@@ -345,6 +369,9 @@
     document.getElementById('btn-reregister').addEventListener('click', reregister);
     document.getElementById('btn-show-code').addEventListener('click', reregister);
     document.getElementById('btn-connect-retry').addEventListener('click', () => startConnect());
+    document.getElementById('btn-connect-startover').addEventListener('click', () => {
+      if (window.confirm('Forget this pairing and start over?')) unpair();
+    });
     document.getElementById('pref-notifications').addEventListener('change', async (event) => {
       const prefs = (await TrioStore.get('prefs')) || {};
       prefs.statusNotifications = event.target.checked;
@@ -377,6 +404,9 @@
   }
 
   async function restore() {
+    // Mid-verification there is nothing stored yet; yanking the user off the
+    // code screen because the tab lost focus for a moment helps nobody.
+    if (pendingBundle && !screens.verify.hidden) return;
     const pairing = await TrioStore.get('pairing');
     if (!pairing) {
       show('pair');

@@ -21,7 +21,7 @@ const STATUS_WIRE =
   'AQIDBAUGBwgJCgsMqjHhvPDa/6jA246BvYiTBqEpI9VbzzdI0BQuL1fuUjtCN3FC+bJWf/IBpVlhLcDnYQC/xWHo9fzfb/UoIsvuBkTbkK60N3gmnWJWB8eUVeS49tgl8KH/crORyRXRtN/o70a5wMjB8e4e/sc8Ki9gKeMM+WYlIotpaNh30Q0SzccI0XZV1/ruQ+LR0LekyCL6zpbxqqhTRh1fLA==';
 
 const ALERT_WIRE =
-  'AQIDBAUGBwgJCgsMqjHgvPaB56PXsMCdsYXCWbAyJcAaimpJ/V5lbRLuH3R3KHEcurNBOq1e5ic9advydETmhCb/6O/XfKN7fJL+D1KtzP/wJXgmmmxUSZiHX/KR2Z1opJTnJ/CHn1j05IK8tgCquJeG4/IMppw4Nn0/KbhC72AwdIOPwNAq6G05Fq6XkNpoUliz';
+  'AQIDBAUGBwgJCgsMqjHgvPaB56PXsMCdsYXCWbAyJcAaimpJ/V5lbRLuH3R3KHEcurNBOq1e5kl+PI23O1X8nSLh7KyAPbZzfpH8DFatzOPiYT1wgmACH9/xF7mqi6hytPjwIOCw2h/E+JH5lBv91tTTtadet8dycT5pbqtaqG+fhPLsJnYbHjh0JPRtrWt+';
 
 test('decrypts a SecureMessenger status envelope', async () => {
   const snapshot = await TrioCrypto.decryptEnvelope(SECRET, STATUS_WIRE);
@@ -40,7 +40,9 @@ test('decrypts an alert envelope', async () => {
   assert.equal(alert.type, 'alert');
   assert.equal(alert.title, 'Trio · Urgent Low');
   assert.equal(alert.body, 'Glucose 54 mg/dL.');
-  assert.equal(alert.sound, 'urgentLow');
+  // "urgent" is a FollowerAlertSound raw value — what the host actually
+  // sends — not the name of the alert rule that chose it.
+  assert.equal(alert.sound, 'urgent');
 });
 
 test('rejects a tampered envelope and a wrong secret', async () => {

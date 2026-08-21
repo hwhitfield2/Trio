@@ -268,6 +268,18 @@ extension RemoteControlConfig {
                                         Label("Revoke", systemImage: "trash")
                                     }
 
+                                    // A viewer whose browser renewed its push
+                                    // subscription shows a fresh registration
+                                    // code; this is where the host re-scans it.
+                                    if follower.isViewerOnly {
+                                        Button {
+                                            state.beginViewerRescan(id: follower.id)
+                                        } label: {
+                                            Label("Scan Code", systemImage: "qrcode.viewfinder")
+                                        }
+                                        .tint(.blue)
+                                    }
+
                                     if follower.isOutdated(comparedTo: state.latestFollowerVersion),
                                        follower.isPushRegistered
                                     {
@@ -448,6 +460,18 @@ extension RemoteControlConfig {
                 if let viewer = state.pairingViewer, let payload = state.viewerPairingPayload {
                     WebViewerPairingView(viewer: viewer, payload: payload, state: state) {
                         state.finishViewerPairing()
+                    }
+                }
+            }
+            .sheet(
+                isPresented: Binding(
+                    get: { state.rescanViewer != nil },
+                    set: { if !$0 { state.finishViewerRescan() } }
+                )
+            ) {
+                if let viewer = state.rescanViewer {
+                    ViewerRescanView(viewer: viewer, state: state) {
+                        state.finishViewerRescan()
                     }
                 }
             }
