@@ -46,7 +46,7 @@ jobs:
           time xcodebuild build-for-testing \
             -workspace Trio.xcworkspace \
             -scheme "Trio Tests" \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
             2>&1 | tee xcodebuild-build.log
 
       - name: Save cache
@@ -64,7 +64,7 @@ jobs:
           time xcodebuild test-without-building \
             -workspace Trio.xcworkspace \
             -scheme "Trio Tests" \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
             2>&1 | tee xcodebuild.log
 
       - name: Annotate test results
