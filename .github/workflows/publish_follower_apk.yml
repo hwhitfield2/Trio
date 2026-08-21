@@ -1,0 +1,41 @@
+name: Publish Follower APK to a release
+
+# Copies the trio-follower-android artifact from a "5. Build Trio Follower"
+# run onto a GitHub release, so the APK can be downloaded from a stable link
+# (Actions artifact downloads require a signed-in browser session and expire).
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Workflow run ID to take the trio-follower-android artifact from
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download follower Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: trio-follower-android
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          mv app-release.apk trio-follower.apk
+          gh release delete follower-apk --yes --cleanup-tag || true
+          gh release create follower-apk trio-follower.apk \
+            --title "Trio Follower Android APK" \
+            --prerelease \
+            --target main \
+            --notes "Latest trio-follower-android artifact, copied from workflow run ${RUN_ID}. Download trio-follower.apk below and install it on the follower device."
