@@ -483,7 +483,7 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     /// the pump offers.
     func describePattern(_ kind: TandemGlucoseAlarmKind) -> String {
         let pattern = TandemAnnunciationPattern.pattern(for: kind)
-        return String(localized: "\(pattern.bursts) rounds of beeps")
+        return String(localized: "\(pattern.bursts) bursts, back to back")
     }
 
     /// Play one of the patterns on demand. The point of the test is that the
@@ -539,7 +539,7 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                     self.annunciationResult = (
                         true,
                         String(
-                            localized: "The pump accepted a \(entry.name.lowercased()) burst (\(entry.id)×). It plays one fixed tone, so tell the patterns apart by how many bursts you hear — the count is the only cue there is. If you heard nothing, raise the pump's sound level under Pump sounds."
+                            localized: "Playing \(entry.name.lowercased()): \(entry.id) bursts back to back, as fast as the pump allows. It plays one fixed tone, so cues differ by how long the run is — a short buzz versus a long one. If you heard nothing, raise the pump's sound level under Pump sounds."
                         )
                     )
                 }
@@ -1245,12 +1245,13 @@ struct TandemSettingsView: View {
                 .disabled(viewModel.testingAnnunciation != nil || viewModel.testingPatternId != nil)
 
                 // Audition palette: the pump has no command to play a specific
-                // category tone, so distinct cues are distinct burst counts.
-                // Hear them here, then we can assign one per scenario.
+                // category tone, so cues are runs of the one fixed burst played
+                // back to back — a short buzz vs a long one. Hear them here,
+                // then we can assign one per scenario.
                 Text("Audition cues").glassCaption()
                 ForEach(TandemAnnunciationPattern.palette) { entry in
                     TandemActionButton(
-                        title: String(localized: "Play \(entry.name.lowercased()) — \(entry.id)×"),
+                        title: String(localized: "Play \(entry.name.lowercased()) — \(entry.id) bursts"),
                         systemImage: "speaker.wave.2",
                         emphasis: .bordered,
                         isBusy: viewModel.testingPatternId == entry.id,

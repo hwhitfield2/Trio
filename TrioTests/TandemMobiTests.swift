@@ -548,13 +548,22 @@ private extension Data {
         let high = TandemAnnunciationPattern.pattern(for: .high)
 
         // Field-measured: one accepted PlaySound is one fixed burst (two beeps
-        // and two vibrations), and requests that land while it plays are
-        // refused. Rhythm is therefore not controllable — burst count is the
-        // whole difference, so the two counts must differ and stay small
-        // enough to count through a pocket.
+        // and two vibrations). Bursts are fired back to back into one
+        // continuous run, so the audible difference is the run's LENGTH, and
+        // the counts must differ.
         #expect(low.bursts == 2)
         #expect(high.bursts == 3)
         #expect(low.bursts != high.bursts)
+
+        // Back-to-back means no deliberate pause between bursts: the next is
+        // asked for the instant the last is accepted, and the busy-retry — not
+        // a fixed gap — paces the run to the pump's own speed.
+        #expect(TandemAnnunciationPattern.interBurstDelay == 0)
+        // The retry window must comfortably outlast one burst, or a run would
+        // abandon a burst partway and sound shorter than intended.
+        #expect(
+            Double(TandemAnnunciationPattern.maxBusyRetries) * TandemAnnunciationPattern.busyRetryDelay > 4
+        )
 
         // And neither pattern may drag on so long it is still sounding at the
         // next CGM reading, even with every busy retry spent.

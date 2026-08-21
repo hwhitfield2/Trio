@@ -57,14 +57,22 @@ struct TandemAnnunciationPattern: Equatable {
         PaletteEntry(id: 4, name: String(localized: "Quadruple")),
     ]
 
-    /// Pause after an accepted burst before asking for the next one.
-    static let interBurstDelay: TimeInterval = 4
+    /// Delay after an accepted burst before asking for the next one. Zero on
+    /// purpose: the goal is a continuous run — beep-beep-beep-beep with no dead
+    /// air — so Trio asks for the next burst the instant the last was accepted.
+    /// The pump refuses (busy) while it is still playing, and the quick
+    /// busy-retry below is what paces the run to exactly the pump's own speed,
+    /// so bursts land back to back rather than with a gap between them.
+    static let interBurstDelay: TimeInterval = 0
 
     /// The pump refuses a request that lands while it is still playing —
     /// status 1 is its pacing, not a rejection — so a refused burst is retried
-    /// on this cadence, up to the cap, instead of being treated as a failure.
-    static let busyRetryDelay: TimeInterval = 2.5
-    static let maxBusyRetries = 6
+    /// on this cadence. Kept short so Trio catches the moment a burst ends and
+    /// fires the next with barely a gap. `maxBusyRetries × busyRetryDelay` must
+    /// stay comfortably longer than one burst so a burst is never abandoned
+    /// mid-run, while still bounding how long a genuinely stuck pump is polled.
+    static let busyRetryDelay: TimeInterval = 0.4
+    static let maxBusyRetries = 15
 
     /// Longest a pattern can take with every retry spent, for sanity tests.
     var worstCaseDuration: TimeInterval {
