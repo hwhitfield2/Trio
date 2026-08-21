@@ -380,8 +380,32 @@ Built:
     temps/scheduled basal. Windows may wrap midnight; overlaps combine to the most
     restrictive cap. Manual boluses unaffected.
 
+12. ✅ StateEstimator validated against a real export (`ml/validate_estimator.py`:
+    estimate at t vs. the reading delivered at t + lag, reference offset fixed
+    while the assumed lag sweeps). **Finding: on this G7 data no assumed lag
+    (0–15 min) beats the raw readings** — est RMSE 13.0–14.1 vs raw 11.9 mg/dL
+    overall, same ordering on the moving-glucose subset — consistent with the
+    sensor already smoothing and lag-compensating in firmware. Consequence:
+    the Swift port is deferred and the lag-compensation toggle (§2.6) should
+    default off; the dynamics model trains on raw readings. Revisit with a
+    sensor-specific lag model or a sensor that exposes raw values.
+13. ✅ Dynamics model implemented (`ml/trioml/features.py`, `ml/trioml/model.py`,
+    `ml/train_dynamics.py`) — quantile TCN (~20k params, p10/p50/p90
+    trajectories at 5-min steps over 4 h, ordering by construction, pinball
+    loss ×3 on p10) conditioned on 6-h history + the insulin plan (delivered
+    insulin at training; a candidate plan at controller time). Residual
+    formulation: it predicts deltas from current glucose. First real-data run
+    (14-day export, 3,567 samples, newest 3 days held out): candidate RMSE
+    19.5/27.5/31.1 mg/dL at 30/60/120 min vs persistence 21.8/34.7/52.1;
+    p10 miss rate 0.07 (gate ≤ 0.12); every gate passes, stable across seeds.
+    Caveats: the held-out window has zero readings below 80, so the low-region
+    gate is vacuous on this export — more weeks of data must accumulate before
+    that gate means anything; and the export lacks oref `predBGs`, so the
+    Phase 2 "beats oref" bar is still open (baselines are the enforced bar).
+
 Next:
 
-12. Validate the StateEstimator against a real export (estimate at t vs. the
-    reading that arrives at t + lag), then port to Swift with golden-file parity.
-13. Shadow-mode `MLAlgorithm` once a trained model passes the Phase 2 gates.
+14. Export determination `predBGs` from the app so the Phase 2 gate can compare
+    the dynamics model against oref like-for-like.
+15. Core ML export of a gate-passing candidate (versioned + checksummed) and the
+    shadow-mode `MLAlgorithm` that records its forecasts alongside oref's.

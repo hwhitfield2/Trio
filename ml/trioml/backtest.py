@@ -54,6 +54,39 @@ def run_backtest(
     return metrics
 
 
+def metrics_from_predictions(
+    records: list[dict],
+    horizons: tuple[int, ...] = schema.LABEL_HORIZONS_MINUTES,
+) -> dict:
+    """Same metrics shape as run_backtest, from precomputed predictions.
+
+    For predictors that need more than a glucose history (the dynamics model
+    consumes full feature samples): records are
+    ``{"horizon": minutes, "predicted": mg/dL, "actual": mg/dL}``, so candidate
+    and champion can be scored on identical (frame, horizon) pairs — the gates
+    require like-for-like comparison.
+    """
+    metrics: dict[str, dict] = {}
+    for horizon in horizons:
+        errors: list[float] = []
+        low_errors: list[float] = []
+        for record in records:
+            if record["horizon"] != horizon:
+                continue
+            error = record["predicted"] - record["actual"]
+            errors.append(error)
+            if record["actual"] < schema.LOW_REGION_THRESHOLD:
+                low_errors.append(error)
+        metrics[str(horizon)] = {
+            "rmse": _rmse(errors),
+            "mae": _mean(list(map(abs, errors))),
+            "n": len(errors),
+            "low_rmse": _rmse(low_errors),
+            "low_n": len(low_errors),
+        }
+    return metrics
+
+
 def _rmse(errors: list[float]) -> float | None:
     if not errors:
         return None

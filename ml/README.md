@@ -16,8 +16,14 @@ provides:
   degrade in the low region AND passes the hypo-safety replay
   (zero would-have-dosed-during-low events). A failed gate means the champion
   keeps running.
-- `trioml.model` — quantile-regression sequence model skeleton (requires torch;
-  everything else is stdlib-only so the gate suite runs anywhere)
+- `trioml.features` — frames → model samples: 6-h history windows, insulin-plan
+  conditioning channels, masked future-trajectory labels (gaps are masked,
+  never interpolated into labels)
+- `trioml.model` — the quantile dynamics model (plan §2.2): a small temporal
+  conv net predicting p10/p50/p90 glucose trajectories over 4 h, conditioned
+  on history + an insulin plan, trained with low-quantile-weighted pinball
+  loss; quantile ordering holds by construction. Requires torch; everything
+  else is stdlib-only so the gate suite runs anywhere
 - `trioml.estimator` — CGM-lag-compensating Kalman StateEstimator prototype
 - `trioml.nightscout` — Nightscout → export-schema converter (deep history:
   the phone retains only 90 days; a long-running Nightscout site holds more)
@@ -41,7 +47,8 @@ The pipeline is designed to start small and grow:
 ## Usage
 
 ```bash
-# run the test suite (stdlib only)
+# run the test suite (stdlib only; the torch model tests skip themselves
+# when torch is absent)
 python3 -m unittest discover -s ml/tests -v
 
 # build frames from an export
@@ -51,7 +58,22 @@ events = load_events('trio-training-export-….jsonl')
 frames = build_frames(events)
 print(len(frames), 'frames')
 "
+
+# train the dynamics model and run the promotion gate suite on held-out days
+pip install torch
+python3 ml/train_dynamics.py trio-training-export-….jsonl --outdir ml/output
+
+# validate the StateEstimator against the same export (plan §7, item 12)
+python3 ml/validate_estimator.py trio-training-export-….jsonl --outdir ml/output
 ```
+
+`train_dynamics.py` holds out the newest days (`--test-days`, default 3),
+scores the candidate against the naive baselines on identical (frame, horizon)
+pairs, checks the low-quantile calibration gate, and writes the report plus a
+checksummed model artifact to `--outdir` (gitignored — it derives from
+personal health data). The oref-predBGs comparison the Phase 2 gate ultimately
+requires still needs the exporter to include determination `predBGs`; until
+then the baselines are the enforced bar.
 
 ## Invariants
 

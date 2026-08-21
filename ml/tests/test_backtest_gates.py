@@ -52,6 +52,53 @@ class BacktestTests(unittest.TestCase):
         self.assertLess(trend["30"]["rmse"], last["30"]["rmse"])
 
 
+class MetricsFromPredictionsTests(unittest.TestCase):
+    def test_matches_run_backtest_shape_and_values(self):
+        records = [
+            {"horizon": 30, "predicted": 110.0, "actual": 100.0},
+            {"horizon": 30, "predicted": 70.0, "actual": 75.0},
+            {"horizon": 60, "predicted": 200.0, "actual": 200.0},
+        ]
+        metrics = backtest.metrics_from_predictions(records)
+        self.assertEqual(metrics["30"]["n"], 2)
+        self.assertEqual(metrics["30"]["low_n"], 1)  # actual 75 < threshold 80
+        self.assertAlmostEqual(metrics["30"]["mae"], 7.5)
+        self.assertAlmostEqual(metrics["60"]["rmse"], 0.0)
+        self.assertIsNone(metrics["120"]["rmse"])
+
+
+class CalibrationGateTests(unittest.TestCase):
+    def _samples(self, misses: int, total: int) -> list[dict]:
+        return [
+            {"p10": 100.0, "actual": 90.0 if i < misses else 110.0}
+            for i in range(total)
+        ]
+
+    def test_conservative_p10_passes(self):
+        result = gates.low_quantile_calibration(self._samples(misses=10, total=200))
+        self.assertTrue(result["passed"])
+        self.assertAlmostEqual(result["miss_rate"], 0.05)
+
+    def test_optimistic_p10_fails(self):
+        result = gates.low_quantile_calibration(self._samples(misses=50, total=200))
+        self.assertFalse(result["passed"])
+
+    def test_insufficient_data_fails_closed(self):
+        result = gates.low_quantile_calibration(self._samples(misses=0, total=10))
+        self.assertFalse(result["passed"])
+        self.assertIsNone(result["miss_rate"])
+
+    def test_calibration_blocks_promotion(self):
+        frames = synthetic_frames()
+        champion = backtest.run_backtest(frames, baseline.last_value)
+        candidate = backtest.run_backtest(frames, baseline.linear_trend)
+        comparison = gates.compare_backtests(candidate, champion)
+        bad_calibration = gates.low_quantile_calibration(self._samples(misses=50, total=200))
+        verdict = gates.promotion_verdict(comparison, gates.hypo_safety_replay([]), bad_calibration)
+        self.assertFalse(verdict["promote"])
+        self.assertFalse(verdict["calibration_passed"])
+
+
 class GateTests(unittest.TestCase):
     def test_candidate_beating_champion_passes(self):
         frames = synthetic_frames()
