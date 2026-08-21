@@ -555,15 +555,8 @@ private extension Data {
         #expect(high.bursts == 3)
         #expect(low.bursts != high.bursts)
 
-        // Back-to-back means no deliberate pause between bursts: the next is
-        // asked for the instant the last is accepted, and the busy-retry — not
-        // a fixed gap — paces the run to the pump's own speed.
-        #expect(TandemAnnunciationPattern.interBurstDelay == 0)
-        // The retry window must comfortably outlast one burst, or a run would
-        // abandon a burst partway and sound shorter than intended.
-        #expect(
-            Double(TandemAnnunciationPattern.maxBusyRetries) * TandemAnnunciationPattern.busyRetryDelay > 4
-        )
+        // Bursts fire back to back into one continuous run — the timing that
+        // makes that happen is asserted in `busyPacingBounds`.
 
         // And neither pattern may drag on so long it is still sounding at the
         // next CGM reading, even with every busy retry spent.
@@ -586,12 +579,16 @@ private extension Data {
     }
 
     @Test("Busy pacing is bounded") func busyPacingBounds() {
-        // The pump refuses a request while a burst is still playing; the retry
-        // budget must outlast one burst comfortably without hammering the pump.
+        // Bursts are fired back to back: no fixed pause between them, so the
+        // next is asked for the instant the last is accepted.
+        #expect(TandemAnnunciationPattern.interBurstDelay == 0)
+        // The pump refuses a request that lands mid-burst, and the busy-retry
+        // budget is what paces the run. It must outlast one burst so a run is
+        // never abandoned partway (which would sound shorter than intended),
+        // without hammering a genuinely stuck pump for too long.
         let budget = TandemAnnunciationPattern.busyRetryDelay * Double(TandemAnnunciationPattern.maxBusyRetries)
-        #expect(budget >= 10)
+        #expect(budget >= 4)
         #expect(budget <= 30)
-        #expect(TandemAnnunciationPattern.interBurstDelay > 0)
     }
 
     @Test("The opt-in persists and the rate-limit clock does not") func statePersistence() {
