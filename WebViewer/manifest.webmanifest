@@ -1,0 +1,15 @@
+{
+  "name": "Trio Viewer",
+  "short_name": "Trio Viewer",
+  "description": "Read-only follower for Trio: glucose, insulin and carb data, end-to-end encrypted from the Trio phone to this browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101418",
+  "theme_color": "#7856ff",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

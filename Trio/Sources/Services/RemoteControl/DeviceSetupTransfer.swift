@@ -47,6 +47,10 @@ struct RemoteControlTransfer: Codable {
     /// working without re-pairing. Carrying `lastSequence` preserves replay
     /// protection across the move.
     var followers: [PairedFollower]?
+
+    /// The VAPID key web viewers' push subscriptions are bound to. Optional so
+    /// transfers from hosts that predate web viewers still decode.
+    var vapidPrivateKey: String?
 }
 
 enum DeviceSetupCodecError: LocalizedError {

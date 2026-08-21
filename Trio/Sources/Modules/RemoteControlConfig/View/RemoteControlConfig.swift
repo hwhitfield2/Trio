@@ -17,11 +17,25 @@ extension RemoteControlConfig {
         @State private var isCopied: Bool = false
         @State private var showFollowerNamePrompt: Bool = false
         @State private var newFollowerName: String = ""
+        @State private var showViewerNamePrompt: Bool = false
+        @State private var newViewerName: String = ""
 
         @Environment(\.colorScheme) var colorScheme
         @Environment(AppState.self) var appState
 
         private func followerDetailText(_ follower: PairedFollower) -> String {
+            if follower.isViewerOnly {
+                let paired = String(
+                    format: String(localized: "Paired %@", comment: "Follower pairing date"),
+                    follower.createdAt.formatted(date: .abbreviated, time: .omitted)
+                )
+                let kind = String(localized: "Web viewer · read-only", comment: "Follower row caption for a web viewer")
+                let push = follower.isPushRegistered
+                    ? String(localized: "Status pushes on")
+                    : String(localized: "Awaiting browser registration", comment: "Web viewer that has not registered its push subscription yet")
+                return kind + " · " + paired + " · " + push
+            }
+
             // A follower moved here by a device-setup transfer that could never
             // register a push address cannot be told where this device is — the
             // only way forward for it is a fresh pairing QR code.
@@ -215,7 +229,11 @@ extension RemoteControlConfig {
                                         maySuspendInsulin: follower.maySuspendInsulin,
                                         onSuspendPermissionChange: {
                                             state.setMaySuspendInsulin(followerId: follower.id, $0)
-                                        }
+                                        },
+                                        // A web viewer cannot act at all, so
+                                        // there is no suspend permission to
+                                        // offer.
+                                        showsSuspendPermission: !follower.isViewerOnly
                                     )
                                 } label: {
                                     VStack(alignment: .leading, spacing: 2) {
@@ -223,19 +241,23 @@ extension RemoteControlConfig {
                                         Text(followerDetailText(follower))
                                             .font(.caption)
                                             .foregroundColor(.secondary)
-                                        HStack(spacing: 4) {
-                                            if follower.isOutdated(comparedTo: state.latestFollowerVersion) {
-                                                Image(systemName: "arrow.up.circle.fill")
-                                                    .foregroundColor(.orange)
+                                        // A web viewer has no app to be behind
+                                        // on; version rows apply to apps only.
+                                        if !follower.isViewerOnly {
+                                            HStack(spacing: 4) {
+                                                if follower.isOutdated(comparedTo: state.latestFollowerVersion) {
+                                                    Image(systemName: "arrow.up.circle.fill")
+                                                        .foregroundColor(.orange)
+                                                        .font(.caption)
+                                                }
+                                                Text(followerVersionText(follower))
                                                     .font(.caption)
+                                                    .foregroundColor(
+                                                        follower.isOutdated(comparedTo: state.latestFollowerVersion)
+                                                            ? .orange
+                                                            : .secondary
+                                                    )
                                             }
-                                            Text(followerVersionText(follower))
-                                                .font(.caption)
-                                                .foregroundColor(
-                                                    follower.isOutdated(comparedTo: state.latestFollowerVersion)
-                                                        ? .orange
-                                                        : .secondary
-                                                )
                                         }
                                     }
                                 }
@@ -319,6 +341,15 @@ extension RemoteControlConfig {
                         .buttonStyle(.borderedProminent)
                         .foregroundColor(.white)
                         .disabled(!state.isTrioRemoteControlEnabled)
+
+                        Button(action: {
+                            newViewerName = ""
+                            showViewerNamePrompt = true
+                        }) {
+                            Label("Pair Web Viewer", systemImage: "safari")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
                 ).listRowBackground(Color.chart)
 
@@ -376,6 +407,15 @@ extension RemoteControlConfig {
             } message: {
                 Text("Give this follower device a name so you can recognize and revoke it later.")
             }
+            .alert("Pair Web Viewer", isPresented: $showViewerNamePrompt) {
+                TextField("Viewer name (e.g. Grandma's laptop)", text: $newViewerName)
+                Button("Cancel", role: .cancel) {}
+                Button("Create QR Code") {
+                    state.startViewerPairing(name: newViewerName)
+                }
+            } message: {
+                Text("A web viewer sees glucose, insulin and carb data in a browser but can never send commands. Name it so you can recognize and revoke it later.")
+            }
             .alert(
                 "Pairing Failed",
                 isPresented: Binding(
@@ -396,6 +436,18 @@ extension RemoteControlConfig {
                 if let follower = state.pairingFollower, let payload = state.pairingPayload {
                     FollowerPairingView(follower: follower, payload: payload) {
                         state.finishPairing()
+                    }
+                }
+            }
+            .sheet(
+                isPresented: Binding(
+                    get: { state.pairingViewer != nil && state.viewerPairingPayload != nil },
+                    set: { if !$0 { state.finishViewerPairing() } }
+                )
+            ) {
+                if let viewer = state.pairingViewer, let payload = state.viewerPairingPayload {
+                    WebViewerPairingView(viewer: viewer, payload: payload, state: state) {
+                        state.finishViewerPairing()
                     }
                 }
             }

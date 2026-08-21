@@ -244,6 +244,122 @@ when the snapshot was built, and its colour scheme (`staticColor` or
 by, so a reading is the same colour on both screens. A host that predates
 either sends neither, and the follower falls back to its own defaults.
 
+## Web viewer (read-only browser follower)
+
+A web viewer is a `PairedFollower` that watches from a browser
+(`WebViewer/`, a static page — no build, no server-side code) and can never
+act. Its read-only guarantee is a *withheld capability* first and a policy
+check second:
+
+1. **No credentials.** The viewer pairing bundle (below) contains no APNS
+   credentials and no host push address — nothing in the browser can address
+   the host. It never learns the `.p8` key, which also means the developer
+   key is never handed to a web page.
+2. **Policy backstop.** The record is stored with `mayControl: false`; the
+   host refuses every follower command from it except `status_request`
+   (`TrioRemoteControl.handleFollowerNotification`), in case its secret is
+   ever combined with credentials leaked elsewhere. `maySuspend` is also
+   false.
+3. **No command UI.** The page has none.
+
+**Keep in sync:**
+
+| Concern | Host (Swift) | Viewer (JS) |
+| --- | --- | --- |
+| Viewer bundle & registration | `Trio/Sources/Services/RemoteControl/FollowerPairingManager.swift` | `WebViewer/js/app.js` |
+| Envelope decryption, codes, proof | `SecureMessenger.swift` / `FollowerPairingManager.swift` | `WebViewer/js/trio-crypto.js` |
+| Web Push encryption & VAPID | `Trio/Sources/Services/RemoteControl/WebPushMessenger.swift` | (the browser's own Push API) |
+| Push handling | `Trio/Sources/Services/RemoteControl/FollowerPushSender.swift` | `WebViewer/sw.js` |
+
+Shared test vectors: `TrioTests/WebViewerPairingTests.swift` ↔
+`WebViewer/test/crypto.test.mjs`.
+
+### Transport: Web Push
+
+Status and alerts ride RFC 8030 Web Push to the browser's push service
+(FCM for Chrome, Mozilla's autopush for Firefox, Apple's for Safari):
+
+- The host authenticates with a **self-generated VAPID key**
+  (RFC 8292; ES256, `FollowerPairingManager.vapidPrivateKey`, keychain). No
+  account with any push provider. Subscriptions are bound to this key, so it
+  rides along in a device-setup transfer (`RemoteControlTransfer`).
+- Each message is encrypted per RFC 8291 (`aes128gcm`, RFC 8188) to keys the
+  *browser* generated at subscribe time — the push service relays
+  ciphertext. `WebPushMessenger` implements this; the RFC 8291 Appendix A
+  vector is pinned in `TrioTests/WebPushCryptoTests.swift`.
+- Inside that, the payload is the same AES-256-GCM envelope every follower
+  transport carries, keyed by the pairing secret — so a leaked subscription
+  lets nobody forge a status the viewer would accept:
+  `{"encrypted_status": "...", "follower_id": "..."}` (same snapshot as
+  APNS/FCM, budgeted to web push's slightly smaller 3993-byte limit), and
+  `{"encrypted_alert": "..."}` whose plaintext is
+  `{"type":"alert","title","body","timestamp","sound"}` — unlike APNS,
+  where alert text is visible to Apple, viewer alerts are end-to-end
+  encrypted, and the service worker authenticates them before showing a
+  notification.
+- Status pushes use the `Topic: status` header, so a browser that was closed
+  overnight wakes to one snapshot, not a backlog. When the push service
+  reports the subscription gone (404/410), the host clears the registration
+  and stops pushing.
+
+### Pairing
+
+Host: Settings → Remote Control → **Pair Web Viewer** (does not require
+Remote Control to be enabled — watching is not remote control). The QR (also
+copyable as text, e.g. for a desktop browser paired via Universal Clipboard):
+
+```json
+{
+  "v": 1,
+  "type": "trio-viewer-pairing",
+  "follower_id": "<UUID>",
+  "follower_name": "<name>",
+  "host_name": "<host device name>",
+  "secret": "<base64, 32 random bytes>",
+  "units": "mg/dL",
+  "vapid_public_key": "<base64url, uncompressed P-256 point>"
+}
+```
+
+The distinct `type` keeps the follower app from accepting a viewer code and
+vice versa. The same six-digit verification code ritual as app pairing
+applies (same derivation from the secret).
+
+Because a browser cannot send `register_follower` (it has no channel to the
+host), registration is the pairing's second scan, in the opposite
+direction: after subscribing, the page displays
+
+```json
+{
+  "v": 1,
+  "type": "trio-viewer-push",
+  "follower_id": "<UUID>",
+  "endpoint": "<push service URL>",
+  "p256dh": "<base64url>",
+  "auth": "<base64url>",
+  "proof": "<base64url HMAC-SHA-256>"
+}
+```
+
+and the host scans it (**Scan Browser Code**). `proof` is
+`HMAC-SHA-256(key: UTF-8(secret), message: "trio-viewer-push\n" +
+follower_id + "\n" + endpoint + "\n" + p256dh + "\n" + auth)` — the host
+only accepts a registration from the party that actually holds the secret.
+After storing it the host pushes a first snapshot immediately.
+
+If the browser's push service rotates the subscription
+(`pushsubscriptionchange`), the page resubscribes and shows a fresh
+registration code to scan; the host cannot be told automatically, which is
+deliberate — re-pointing a viewer's data stream always takes the host
+user's hand.
+
+### On migration
+
+Web viewers are *not* flagged `needsHostUpdate` by a device-setup transfer:
+they hold no host address to correct, and pushing to them keeps working on
+the new device because the VAPID key and their subscriptions move with the
+transfer.
+
 ## Host device migration
 
 When the host user moves Trio to a new phone with the device-setup QR

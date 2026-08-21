@@ -114,6 +114,23 @@ class TrioRemoteControl: Injectable {
             "Follower command from \(follower.name) decrypted and authenticated (sequence \(sequence))."
         )
 
+        // A view-only follower (web viewer) may ask for status and nothing
+        // else. Its pairing bundle carries no APNS credentials, so under
+        // normal circumstances it cannot even reach this code — this check is
+        // the policy backstop behind that withheld capability, in case its
+        // secret is ever combined with credentials leaked elsewhere.
+        guard follower.mayControlRemotely || commandPayload.commandType == .statusRequest else {
+            await logError(
+                "Command rejected: \(follower.name) is a view-only follower and may not send commands.",
+                payload: commandPayload
+            )
+            await notifyFollower(followerId, String(
+                localized: "This follower is view-only and cannot send commands.",
+                comment: "Told to a read-only follower whose command was refused"
+            ))
+            return
+        }
+
         try await dispatch(commandPayload, followerId: followerId)
 
         // Push a fresh status snapshot so the follower sees the effect of its

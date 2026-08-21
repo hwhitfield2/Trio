@@ -423,6 +423,10 @@
 		AEC49BE7B933E7171AFFF218 /* CaregiverMessagingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */; };
 		FA0000000000000000000002 /* FollowerPairingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000001 /* FollowerPairingManager.swift */; };
 		FA0000000000000000000008 /* FollowerPushSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* FollowerPushSender.swift */; };
+		FA000000000000000000002A /* WebPushMessenger.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000029 /* WebPushMessenger.swift */; };
+		FA000000000000000000002C /* WebViewerPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000002B /* WebViewerPairingView.swift */; };
+		FA000000000000000000002E /* WebPushCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000002D /* WebPushCryptoTests.swift */; };
+		FA0000000000000000000030 /* WebViewerPairingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000002F /* WebViewerPairingTests.swift */; };
 		FA000000000000000000000A /* FollowerStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000009 /* FollowerStatusPublisher.swift */; };
 		FA000000000000000000000C /* FollowerLiveActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000B /* FollowerLiveActivityState.swift */; };
 		FA0000000000000000000010 /* FollowerVersionChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000F /* FollowerVersionChecker.swift */; };
@@ -1628,6 +1632,10 @@
 		C92440877C4E65C3FC101E06 /* CaregiverMessagingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaregiverMessagingManager.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* FollowerPairingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerPairingManager.swift; sourceTree = "<group>"; };
 		FA0000000000000000000007 /* FollowerPushSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerPushSender.swift; sourceTree = "<group>"; };
+		FA0000000000000000000029 /* WebPushMessenger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebPushMessenger.swift; sourceTree = "<group>"; };
+		FA000000000000000000002B /* WebViewerPairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewerPairingView.swift; sourceTree = "<group>"; };
+		FA000000000000000000002D /* WebPushCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebPushCryptoTests.swift; sourceTree = "<group>"; };
+		FA000000000000000000002F /* WebViewerPairingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewerPairingTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000009 /* FollowerStatusPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerStatusPublisher.swift; sourceTree = "<group>"; };
 		FA000000000000000000000B /* FollowerLiveActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerLiveActivityState.swift; sourceTree = "<group>"; };
 		FA000000000000000000000F /* FollowerVersionChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerVersionChecker.swift; sourceTree = "<group>"; };
@@ -3375,6 +3383,8 @@
 				FA0000000000000000000015 /* FollowerSuspensionTests.swift */,
 				FA000000000000000000001F /* DeviceSetupTransferTests.swift */,
 				FA0000000000000000000027 /* DenseMatrixCodeTests.swift */,
+				FA000000000000000000002D /* WebPushCryptoTests.swift */,
+				FA000000000000000000002F /* WebViewerPairingTests.swift */,
 				AB0300000000000000000A09 /* ClinicReportTests.swift */,
 				AB0200000000000000000A07 /* InsightsEngineTests.swift */,
 				AB0400000000000000000A0C /* FoodLibraryTests.swift */,
@@ -4367,6 +4377,7 @@
 				DD485F172E466F1800CE8CBF /* SecureMessenger.swift */,
 				FA0000000000000000000001 /* FollowerPairingManager.swift */,
 				FA0000000000000000000007 /* FollowerPushSender.swift */,
+				FA0000000000000000000029 /* WebPushMessenger.swift */,
 				FA0000000000000000000009 /* FollowerStatusPublisher.swift */,
 				FA000000000000000000000B /* FollowerLiveActivityState.swift */,
 				FA000000000000000000000F /* FollowerVersionChecker.swift */,
@@ -4406,6 +4417,7 @@
 			children = (
 				DD9ECB732CA9A0C300AA7C45 /* RemoteControlConfig.swift */,
 				FA0000000000000000000003 /* FollowerPairingView.swift */,
+				FA000000000000000000002B /* WebViewerPairingView.swift */,
 				AB0800000000000000000A03 /* FollowerAlertSettingsView.swift */,
 			);
 			path = View;
@@ -5445,6 +5457,8 @@
 				DD485F182E466F1800CE8CBF /* SecureMessenger.swift in Sources */,
 				FA0000000000000000000002 /* FollowerPairingManager.swift in Sources */,
 				FA0000000000000000000008 /* FollowerPushSender.swift in Sources */,
+				FA000000000000000000002A /* WebPushMessenger.swift in Sources */,
+				FA000000000000000000002C /* WebViewerPairingView.swift in Sources */,
 				FA000000000000000000000A /* FollowerStatusPublisher.swift in Sources */,
 				FA000000000000000000000C /* FollowerLiveActivityState.swift in Sources */,
 				FA0000000000000000000010 /* FollowerVersionChecker.swift in Sources */,
@@ -5999,6 +6013,8 @@
 				FA0000000000000000000016 /* FollowerSuspensionTests.swift in Sources */,
 				FA0000000000000000000020 /* DeviceSetupTransferTests.swift in Sources */,
 				FA0000000000000000000028 /* DenseMatrixCodeTests.swift in Sources */,
+				FA000000000000000000002E /* WebPushCryptoTests.swift in Sources */,
+				FA0000000000000000000030 /* WebViewerPairingTests.swift in Sources */,
 				AB0300000000000000000B09 /* ClinicReportTests.swift in Sources */,
 				AB0200000000000000000B07 /* InsightsEngineTests.swift in Sources */,
 				AB0400000000000000000B0C /* FoodLibraryTests.swift in Sources */,

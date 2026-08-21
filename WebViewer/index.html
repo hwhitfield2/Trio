@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#101418" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Trio Viewer">
+  <title>Trio Viewer</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <img src="icons/icon.svg" alt="" width="28" height="28">
+    <h1>Trio Viewer</h1>
+    <span class="chip">read-only</span>
+  </header>
+
+  <main>
+    <!-- Pairing -->
+    <section id="screen-pair" hidden>
+      <h2>Follow a Trio</h2>
+      <p>
+        On the Trio phone, open <strong>Settings → Remote Control → Pair Web
+        Viewer</strong>. Then scan the code it shows, or paste it here.
+      </p>
+      <p class="fineprint">
+        This viewer shows glucose, insulin and carb data. It cannot send
+        anything to the Trio — the pairing contains no control credentials.
+      </p>
+      <video id="scan-video" playsinline muted hidden></video>
+      <div class="button-row">
+        <button id="btn-scan" class="primary">Scan Pairing Code</button>
+      </div>
+      <details>
+        <summary>Paste the code instead</summary>
+        <textarea id="paste-input" rows="5" spellcheck="false"
+                  placeholder='{"v":1,"type":"trio-viewer-pairing", …}'></textarea>
+        <div class="button-row">
+          <button id="btn-paste" class="primary">Use Pasted Code</button>
+        </div>
+        <p class="fineprint">
+          The code is a key. After pasting it, delete it from wherever it
+          passed through.
+        </p>
+      </details>
+      <p id="pair-error" class="error" role="alert"></p>
+    </section>
+
+    <!-- Verification -->
+    <section id="screen-verify" hidden>
+      <h2>Confirm the pairing</h2>
+      <p>
+        Pairing with <strong id="verify-host"></strong> as
+        <strong id="verify-name"></strong>.
+      </p>
+      <p class="verify-code" id="verify-code" aria-label="Verification code"></p>
+      <p>
+        Trio shows a verification code on the phone. Only continue if it
+        matches this one.
+      </p>
+      <div class="button-row">
+        <button id="btn-verify-confirm" class="primary">Codes Match — Continue</button>
+        <button id="btn-verify-cancel">Cancel</button>
+      </div>
+    </section>
+
+    <!-- Push registration -->
+    <section id="screen-connect" hidden>
+      <h2>Connect this browser</h2>
+      <div id="connect-qr" class="qr-holder" aria-label="Registration code for Trio to scan"></div>
+      <p id="connect-status" role="status"></p>
+      <div class="button-row">
+        <button id="btn-connect-retry" class="primary" hidden>Enable Notifications &amp; Connect</button>
+      </div>
+    </section>
+
+    <!-- Dashboard -->
+    <section id="screen-dashboard" hidden>
+      <div id="reregister-banner" class="banner banner-warning" hidden>
+        This browser renewed its push registration and Trio no longer reaches it.
+        <button id="btn-reregister">Show New Code</button>
+      </div>
+      <div id="stale-banner" class="banner banner-warning" hidden></div>
+      <div id="status-banner" class="banner" hidden></div>
+
+      <div id="dashboard-content">
+        <div class="current">
+          <span id="current-bg" class="current-bg">--</span>
+          <span id="current-arrow" class="current-arrow"></span>
+        </div>
+        <p id="current-age" class="current-age"></p>
+
+        <div class="pill-row">
+          <div class="pill"><span class="pill-label">IOB</span><span id="pill-iob"></span></div>
+          <div class="pill"><span class="pill-label">COB</span><span id="pill-cob"></span></div>
+          <div class="pill"><span class="pill-label">Eventual</span><span id="pill-eventual"></span></div>
+          <div class="pill"><span class="pill-label">Last loop</span><span id="pill-loop"></span></div>
+        </div>
+
+        <div id="chart" class="chart"></div>
+        <p class="chart-legend fineprint">
+          ▼ bolus &nbsp;·&nbsp; ● carbs &nbsp;·&nbsp; dots are colored by the
+          Trio's own display ranges
+        </p>
+      </div>
+
+      <details id="settings">
+        <summary>Settings</summary>
+        <label class="setting-row">
+          <input type="checkbox" id="pref-notifications">
+          Show current glucose as a silent notification when this page is in
+          the background
+        </label>
+        <div class="button-row">
+          <button id="btn-show-code">Show Registration Code</button>
+          <button id="btn-unpair" class="destructive">Unpair This Viewer</button>
+        </div>
+      </details>
+
+      <footer>
+        <p id="footer-connection" class="fineprint"></p>
+        <p class="fineprint">
+          Data arrives end-to-end encrypted from the Trio phone and stays in
+          this browser. This page talks to no server.
+        </p>
+      </footer>
+    </section>
+  </main>
+
+  <script src="js/vendor/jsQR.js"></script>
+  <script src="js/vendor/qrcode.js"></script>
+  <script src="js/trio-crypto.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/format.js"></script>
+  <script src="js/chart.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

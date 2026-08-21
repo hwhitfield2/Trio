@@ -16,6 +16,14 @@ extension RemoteControlConfig {
         @Published var pairingPayload: String?
         @Published var pairingError: String?
 
+        // Web viewer pairing (read-only browser follower)
+        @Published var pairingViewer: PairedFollower?
+        @Published var viewerPairingPayload: String?
+        /// Set once the browser's registration code has been scanned and
+        /// stored, so the pairing sheet can say the viewer is connected.
+        @Published var viewerRegistered: Bool = false
+        @Published var viewerRegistrationError: String?
+
         // Follower app versions
         /// Latest follower release, as published in the Trio repository.
         @Published var latestFollowerVersion: String?
@@ -177,6 +185,75 @@ extension RemoteControlConfig {
             pairingFollower = nil
             pairingPayload = nil
             refreshFollowers()
+        }
+
+        /// Creates a read-only web viewer and prepares its pairing QR payload.
+        /// Mirrors `startPairing`, but a viewer bundle needs no APNS
+        /// credentials or device token, so this cannot fail for those reasons.
+        func startViewerPairing(name: String) {
+            pairingError = nil
+            viewerRegistered = false
+            viewerRegistrationError = nil
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let viewer = FollowerPairingManager.shared
+                .addViewer(named: trimmedName.isEmpty ? String(localized: "Web Viewer") : trimmedName)
+            do {
+                viewerPairingPayload = try FollowerPairingManager.shared.makeViewerPairingPayload(for: viewer)
+                pairingViewer = viewer
+            } catch {
+                FollowerPairingManager.shared.removeFollower(withId: viewer.id)
+                pairingError = error.localizedDescription
+            }
+            refreshFollowers()
+        }
+
+        func finishViewerPairing() {
+            pairingViewer = nil
+            viewerPairingPayload = nil
+            viewerRegistered = false
+            viewerRegistrationError = nil
+            refreshFollowers()
+        }
+
+        /// Handles a QR string scanned during viewer pairing. Returns true
+        /// once a registration was accepted and stored, so the scanner can
+        /// dismiss; stray codes return false without any error.
+        func handleScannedViewerRegistration(_ code: String) -> Bool {
+            guard let registration = WebViewerPushRegistration.parse(code) else { return false }
+
+            guard let follower = FollowerPairingManager.shared.follower(withId: registration.followerId),
+                  follower.isViewerOnly
+            else {
+                viewerRegistrationError = String(
+                    localized: "This browser code belongs to a different pairing. Start over with a fresh QR code.",
+                    comment: "Scanned web viewer registration names an unknown or non-viewer follower"
+                )
+                return false
+            }
+            guard registration.verifyProof(secret: follower.secret) else {
+                viewerRegistrationError = String(
+                    localized: "This browser code could not be verified. Make sure the browser scanned this device's pairing code first.",
+                    comment: "Scanned web viewer registration failed its authenticity check"
+                )
+                return false
+            }
+
+            FollowerPairingManager.shared.updateWebPushRegistration(
+                followerId: registration.followerId,
+                endpoint: registration.endpoint,
+                p256dh: registration.p256dh,
+                auth: registration.auth
+            )
+            viewerRegistrationError = nil
+            viewerRegistered = true
+            refreshFollowers()
+
+            // Push a first snapshot right away, so the browser shows data
+            // seconds after pairing instead of waiting for the next reading.
+            Task.detached(priority: .utility) {
+                await TrioRemoteControl.shared.statusPublisher.publish(toFollowerId: registration.followerId)
+            }
+            return true
         }
 
         func revokeFollower(id: String) {

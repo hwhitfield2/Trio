@@ -67,6 +67,8 @@ final class FollowerPushSender {
             try await sendViaAPNS(encrypted: encrypted, payloadKey: key, to: follower, token: token)
         case "fcm":
             try await sendViaFCM(encrypted: encrypted, payloadKey: key, to: follower, token: token)
+        case "webpush":
+            try await sendViaWebPush(encrypted: encrypted, payloadKey: key, to: follower)
         default:
             throw FollowerPushError.transportFailure("Unknown push transport: \(follower.pushTransport ?? "nil")")
         }
@@ -106,6 +108,14 @@ final class FollowerPushSender {
                 sound: sound,
                 to: follower,
                 token: token,
+                extraData: extraData
+            )
+        case "webpush":
+            try await sendAlertViaWebPush(
+                title: title,
+                body: body,
+                sound: sound,
+                to: follower,
                 extraData: extraData
             )
         default:
@@ -430,6 +440,79 @@ final class FollowerPushSender {
 
     private static func apnsReason(from data: Data) -> String? {
         (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["reason"] as? String
+    }
+
+    // MARK: - Web Push (web viewers)
+
+    /// Delivers an encrypted status (or other keyed payload) to a web
+    /// viewer's browser subscription. The `Topic` header collapses queued
+    /// status messages, so a browser that was closed for hours wakes to one
+    /// current snapshot rather than a backlog.
+    private func sendViaWebPush(encrypted: String, payloadKey: String, to follower: PairedFollower) async throws {
+        let payload: [String: Any] = [
+            payloadKey: encrypted,
+            "follower_id": follower.id
+        ]
+        do {
+            try await WebPushMessenger.shared.send(
+                payload: payload,
+                to: follower,
+                urgency: "normal",
+                topic: payloadKey == "encrypted_status" ? "status" : nil,
+                ttl: payloadKey == "encrypted_status" ? 300 : 3600
+            )
+        } catch WebPushError.subscriptionGone {
+            // The browser's subscription died (cleared site data, expired by
+            // the push service). Stop pushing to the dead address; the
+            // viewer's page notices and offers a fresh registration code.
+            FollowerPairingManager.shared.clearWebPushRegistration(followerId: follower.id)
+            throw FollowerPushError.transportFailure("Web push subscription expired")
+        } catch let error as WebPushError {
+            throw FollowerPushError.transportFailure(error.localizedDescription)
+        }
+    }
+
+    /// Alerts to a web viewer travel encrypted like everything else — the
+    /// service worker holds the pairing secret and decrypts before showing a
+    /// notification, so nobody with a captured subscription can forge one.
+    private func sendAlertViaWebPush(
+        title: String,
+        body: String,
+        sound: FollowerAlertSound,
+        to follower: PairedFollower,
+        extraData: [String: String] = [:]
+    ) async throws {
+        guard let messenger = SecureMessenger(sharedSecret: follower.secret) else {
+            throw FollowerPushError.transportFailure("Failed to initialize encryption for web viewer")
+        }
+
+        var alert: [String: Any] = [
+            "type": "alert",
+            "title": title,
+            "body": body,
+            "timestamp": Int(Date().timeIntervalSince1970),
+            "sound": sound.rawValue
+        ]
+        if !extraData.isEmpty {
+            alert["data"] = extraData
+        }
+
+        let plaintext = try JSONSerialization.data(withJSONObject: alert, options: [.sortedKeys])
+        let encrypted = try messenger.encrypt(data: plaintext)
+        do {
+            try await WebPushMessenger.shared.send(
+                payload: ["encrypted_alert": encrypted, "follower_id": follower.id],
+                to: follower,
+                urgency: "high",
+                topic: nil,
+                ttl: 3600
+            )
+        } catch WebPushError.subscriptionGone {
+            FollowerPairingManager.shared.clearWebPushRegistration(followerId: follower.id)
+            throw FollowerPushError.transportFailure("Web push subscription expired")
+        } catch let error as WebPushError {
+            throw FollowerPushError.transportFailure(error.localizedDescription)
+        }
     }
 
     // MARK: - FCM (Android followers)

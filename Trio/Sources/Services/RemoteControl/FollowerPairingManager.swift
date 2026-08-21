@@ -1,3 +1,4 @@
+import CryptoKit
 import CryptoSwift
 import Foundation
 import Swinject
@@ -51,6 +52,31 @@ struct PairedFollower: Codable, Identifiable, Equatable {
     var maySuspend: Bool?
 
     var maySuspendInsulin: Bool { maySuspend ?? true }
+
+    /// Whether this follower may act on the host at all — bolus, meal, temp
+    /// target, override, suspension. Optional and treated as allowed when
+    /// absent, so every follower paired before this existed keeps working.
+    ///
+    /// Web viewers are created with `false`. Their pairing bundle carries no
+    /// APNS credentials, so they have no channel to send commands through in
+    /// the first place — this flag is the policy backstop behind that missing
+    /// capability, checked on every follower command the host receives.
+    var mayControl: Bool?
+
+    var mayControlRemotely: Bool { mayControl ?? true }
+
+    /// A read-only follower: it receives status but the host refuses every
+    /// command from it except a status request.
+    var isViewerOnly: Bool { !(mayControl ?? true) }
+
+    // Web viewer push subscription. For `pushTransport` "webpush",
+    // `pushToken` holds the subscription endpoint URL and these two carry the
+    // browser-generated encryption keys (unpadded base64url, as the browser's
+    // `PushSubscription.toJSON()` renders them). Registered by scanning the
+    // browser's code on this device — a viewer has no command channel to
+    // register through.
+    var webPushP256dh: String?
+    var webPushAuth: String?
 
     /// Set when this follower record was carried over from another host device
     /// and has not yet been told the new host's push address. Followers keep
@@ -154,6 +180,104 @@ struct FollowerPairingBundle: Codable {
     static let pairingType = "trio-follower-pairing"
 }
 
+/// Everything a read-only web viewer needs, delivered by QR code (or pasted).
+/// Deliberately *not* a `FollowerPairingBundle`: a viewer receives no APNS
+/// credentials and no host push address, so it is unable to send commands —
+/// the read-only guarantee is a withheld capability, not just a policy flag.
+/// The distinct `type` keeps the follower app from accepting a viewer code
+/// and the web viewer from accepting a follower code.
+struct ViewerPairingBundle: Codable {
+    let version: Int
+    let type: String
+    let followerId: String
+    let followerName: String
+    let hostName: String
+    let secret: String
+    let units: String
+    /// The host's VAPID public key (unpadded base64url of the uncompressed
+    /// P-256 point). The browser needs it as `applicationServerKey` when it
+    /// subscribes for pushes.
+    let vapidPublicKey: String
+
+    enum CodingKeys: String, CodingKey {
+        case version = "v"
+        case type
+        case followerId = "follower_id"
+        case followerName = "follower_name"
+        case hostName = "host_name"
+        case secret
+        case units
+        case vapidPublicKey = "vapid_public_key"
+    }
+
+    static let pairingType = "trio-viewer-pairing"
+}
+
+/// What the web viewer displays back after subscribing: its push subscription,
+/// scanned by the host to complete the pairing. The `proof` is an HMAC over
+/// the subscription with the follower's secret, so the host only accepts a
+/// registration from the party that actually scanned the pairing code.
+struct WebViewerPushRegistration: Codable {
+    let version: Int
+    let type: String
+    let followerId: String
+    let endpoint: String
+    let p256dh: String
+    let auth: String
+    let proof: String
+
+    enum CodingKeys: String, CodingKey {
+        case version = "v"
+        case type
+        case followerId = "follower_id"
+        case endpoint
+        case p256dh
+        case auth
+        case proof
+    }
+
+    static let registrationType = "trio-viewer-push"
+
+    /// Parses a scanned QR string. Returns nil for anything that is not a
+    /// viewer push registration — the camera sees plenty of stray codes.
+    static func parse(_ string: String) -> WebViewerPushRegistration? {
+        guard let data = string.data(using: .utf8),
+              let registration = try? JSONDecoder().decode(WebViewerPushRegistration.self, from: data),
+              registration.type == registrationType,
+              registration.version == 1
+        else { return nil }
+        return registration
+    }
+
+    /// The exact bytes both sides authenticate: a stable, newline-joined
+    /// encoding of everything the host is about to store.
+    private var provenMessage: Data {
+        Data([Self.registrationType, followerId, endpoint, p256dh, auth].joined(separator: "\n").utf8)
+    }
+
+    static func proof(followerId: String, endpoint: String, p256dh: String, auth: String, secret: String) -> String {
+        let message = Data(
+            [registrationType, followerId, endpoint, p256dh, auth].joined(separator: "\n").utf8
+        )
+        let mac = CryptoKit.HMAC<CryptoKit.SHA256>.authenticationCode(
+            for: message,
+            using: SymmetricKey(data: Data(secret.utf8))
+        )
+        return WebPushVAPID.base64URL(Data(mac))
+    }
+
+    /// Whether `proof` was produced with this follower's secret. Constant-time
+    /// via CryptoKit's own comparison.
+    func verifyProof(secret: String) -> Bool {
+        guard let claimed = WebPushMessenger.base64URLDecode(proof) else { return false }
+        return CryptoKit.HMAC<CryptoKit.SHA256>.isValidAuthenticationCode(
+            claimed,
+            authenticating: provenMessage,
+            using: SymmetricKey(data: Data(secret.utf8))
+        )
+    }
+}
+
 enum FollowerPairingError: LocalizedError {
     case missingDeviceToken
     case missingAPNSCredentials
@@ -183,6 +307,7 @@ final class FollowerPairingManager: Injectable {
         static let apnsKeyId = "followerPairing.apnsKeyId"
         static let apnsKey = "followerPairing.apnsKey"
         static let fcmServiceAccount = "followerPairing.fcmServiceAccount"
+        static let vapidPrivateKey = "followerPairing.vapidPrivateKey"
     }
 
     @Injected() private var keychain: Keychain!
@@ -224,6 +349,29 @@ final class FollowerPairingManager: Injectable {
         return follower
     }
 
+    /// Creates a read-only web viewer: no command authority, no suspension
+    /// authority, and (by way of `makeViewerPairingPayload`) no APNS
+    /// credentials ever handed out.
+    @discardableResult func addViewer(named name: String) -> PairedFollower {
+        let viewer = PairedFollower(
+            id: UUID().uuidString,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            secret: Self.generateSecret(),
+            createdAt: Date(),
+            lastSequence: 0,
+            lastSeenAt: nil,
+            maySuspend: false,
+            mayControl: false,
+            alerts: nil
+        )
+        queue.sync {
+            var all = loadFollowers()
+            all.append(viewer)
+            saveFollowers(all)
+        }
+        return viewer
+    }
+
     func removeFollower(withId id: String) {
         queue.sync {
             var all = loadFollowers()
@@ -260,6 +408,41 @@ final class FollowerPairingManager: Injectable {
                 all[index].appPlatform = appPlatform
                 all[index].appVersionReportedAt = Date()
             }
+            saveFollowers(all)
+        }
+    }
+
+    /// Stores the push subscription a web viewer displayed after subscribing
+    /// in its browser. Called from the pairing UI after the registration's
+    /// HMAC proof has been verified — viewers have no command channel to
+    /// register through.
+    func updateWebPushRegistration(followerId: String, endpoint: String, p256dh: String, auth: String) {
+        queue.sync {
+            var all = loadFollowers()
+            guard let index = all.firstIndex(where: { $0.id == followerId }) else { return }
+            all[index].pushToken = endpoint
+            all[index].pushTransport = "webpush"
+            all[index].pushBundleId = nil
+            all[index].pushEnvironment = nil
+            all[index].webPushP256dh = p256dh
+            all[index].webPushAuth = auth
+            all[index].lastSeenAt = Date()
+            saveFollowers(all)
+        }
+    }
+
+    /// Drops a web viewer's subscription after the push service reported it
+    /// gone, so the host stops pushing to a dead address. The viewer's page
+    /// notices the missing pushes, resubscribes and shows a fresh
+    /// registration code to scan.
+    func clearWebPushRegistration(followerId: String) {
+        queue.sync {
+            var all = loadFollowers()
+            guard let index = all.firstIndex(where: { $0.id == followerId }),
+                  all[index].pushTransport == "webpush" else { return }
+            all[index].pushToken = nil
+            all[index].webPushP256dh = nil
+            all[index].webPushAuth = nil
             saveFollowers(all)
         }
     }
@@ -356,6 +539,38 @@ final class FollowerPairingManager: Injectable {
         FCMServiceAccount(json: fcmServiceAccountJSON) != nil
     }
 
+    // MARK: - VAPID key (web viewers)
+
+    /// Base64 of the raw 32-byte P-256 signing key this host authenticates
+    /// with towards web push services (RFC 8292). Self-generated, no provider
+    /// account involved. Browser subscriptions are bound to it, so it
+    /// migrates with the remote-control identity on a device transfer.
+    var vapidPrivateKey: String {
+        get { stringValue(forKey: StorageKeys.vapidPrivateKey) }
+        set { keychain.setValue(newValue, forKey: StorageKeys.vapidPrivateKey) }
+    }
+
+    /// Returns the VAPID private key, generating and storing one on first use.
+    @discardableResult func ensureVAPIDKey() -> String {
+        let existing = vapidPrivateKey
+        if !existing.isEmpty, (try? P256.Signing.PrivateKey(rawRepresentation: Data(base64Encoded: existing) ?? Data())) != nil {
+            return existing
+        }
+        let fresh = P256.Signing.PrivateKey().rawRepresentation.base64EncodedString()
+        vapidPrivateKey = fresh
+        return fresh
+    }
+
+    /// The matching public key in the form the browser's
+    /// `pushManager.subscribe({applicationServerKey})` takes: unpadded
+    /// base64url of the uncompressed point.
+    var vapidPublicKeyBase64URL: String? {
+        guard let raw = Data(base64Encoded: vapidPrivateKey),
+              let key = try? P256.Signing.PrivateKey(rawRepresentation: raw)
+        else { return nil }
+        return WebPushVAPID.base64URL(key.publicKey.x963Representation)
+    }
+
     // MARK: - Device migration
 
     /// Snapshot of the remote-control identity for a device-setup transfer:
@@ -378,7 +593,8 @@ final class FollowerPairingManager: Injectable {
             apnsKeyId: apnsKeyId.isEmpty ? nil : apnsKeyId,
             apnsKey: apnsKey.isEmpty ? nil : apnsKey,
             fcmServiceAccountJSON: fcmServiceAccountJSON.isEmpty ? nil : fcmServiceAccountJSON,
-            followers: allFollowers.isEmpty ? nil : allFollowers
+            followers: allFollowers.isEmpty ? nil : allFollowers,
+            vapidPrivateKey: vapidPrivateKey.isEmpty ? nil : vapidPrivateKey
         )
     }
 
@@ -396,6 +612,10 @@ final class FollowerPairingManager: Injectable {
         if let keyId = transfer.apnsKeyId { apnsKeyId = keyId }
         if let key = transfer.apnsKey { apnsKey = key }
         if let fcm = transfer.fcmServiceAccountJSON { fcmServiceAccountJSON = fcm }
+        // Browser subscriptions are bound to the VAPID key they were created
+        // with; without carrying it over, every web viewer would need a fresh
+        // pairing on the new device.
+        if let vapid = transfer.vapidPrivateKey { vapidPrivateKey = vapid }
         if let secret = transfer.sharedSecret, !secret.isEmpty {
             UserDefaults.standard.set(secret, forKey: "trioRemoteControlSharedSecret")
         }
@@ -407,7 +627,11 @@ final class FollowerPairingManager: Injectable {
         queue.sync {
             var all = loadFollowers()
             for var follower in migrated {
-                follower.needsHostUpdate = true
+                // A web viewer never addresses the host — its pairing carries
+                // no push address to correct — so there is no host update to
+                // owe it. Pushing to it keeps working because the VAPID key
+                // and its subscription both moved with this transfer.
+                follower.needsHostUpdate = follower.pushTransport == "webpush" ? nil : true
                 if let index = all.firstIndex(where: { $0.id == follower.id }) {
                     all[index] = follower
                 } else {
@@ -466,6 +690,43 @@ final class FollowerPairingManager: Injectable {
                 units: settings.settings.units.rawValue
             ),
             fcmAvailable: hasFCMCredentials
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let data = try encoder.encode(bundle)
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw NSError(
+                domain: "FollowerPairingManager",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to encode pairing payload"]
+            )
+        }
+        return json
+    }
+
+    /// Builds the JSON encoded into a web viewer's pairing QR code. Unlike a
+    /// follower pairing, this needs no APNS credentials and no device token —
+    /// nothing here lets the holder address this device.
+    func makeViewerPairingPayload(for viewer: PairedFollower) throws -> String {
+        ensureVAPIDKey()
+        guard let vapidPublicKey = vapidPublicKeyBase64URL else {
+            throw NSError(
+                domain: "FollowerPairingManager",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to prepare the web push key"]
+            )
+        }
+
+        let bundle = ViewerPairingBundle(
+            version: 1,
+            type: ViewerPairingBundle.pairingType,
+            followerId: viewer.id,
+            followerName: viewer.name,
+            hostName: UIDevice.current.name,
+            secret: viewer.secret,
+            units: settings.settings.units.rawValue,
+            vapidPublicKey: vapidPublicKey
         )
 
         let encoder = JSONEncoder()

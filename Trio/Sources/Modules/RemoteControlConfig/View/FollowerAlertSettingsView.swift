@@ -18,22 +18,28 @@ struct FollowerAlertSettingsView: View {
     @State var maySuspendInsulin: Bool
     let onSuspendPermissionChange: (Bool) -> Void
 
+    /// Hidden for web viewers: a viewer cannot act on the host at all, so
+    /// there is no suspend permission to grant or withdraw.
+    var showsSuspendPermission: Bool = true
+
     @Environment(\.colorScheme) var colorScheme
     @Environment(AppState.self) var appState
 
     var body: some View {
         Form {
-            Section(
-                header: Text("Emergency Stop"),
-                footer: Text(
-                    "Lets \(followerName) stop all insulin delivery from the follower app. Delivery stays stopped, and this phone alarms until you answer it — nothing restarts insulin on its own. Turn this off for a follower who should be able to watch but not act."
-                )
-            ) {
-                Toggle("Allow Suspending Insulin", isOn: $maySuspendInsulin)
-                    .onChange(of: maySuspendInsulin) { _, newValue in
-                        onSuspendPermissionChange(newValue)
-                    }
-            }.listRowBackground(Color.chart)
+            if showsSuspendPermission {
+                Section(
+                    header: Text("Emergency Stop"),
+                    footer: Text(
+                        "Lets \(followerName) stop all insulin delivery from the follower app. Delivery stays stopped, and this phone alarms until you answer it — nothing restarts insulin on its own. Turn this off for a follower who should be able to watch but not act."
+                    )
+                ) {
+                    Toggle("Allow Suspending Insulin", isOn: $maySuspendInsulin)
+                        .onChange(of: maySuspendInsulin) { _, newValue in
+                            onSuspendPermissionChange(newValue)
+                        }
+                }.listRowBackground(Color.chart)
+            }
 
             Section(
                 header: Text("Glucose Alerts"),

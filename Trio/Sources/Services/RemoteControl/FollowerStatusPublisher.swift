@@ -162,9 +162,18 @@ struct FollowerStatusSnapshot: Encodable {
 extension FollowerStatusSnapshot {
     /// APNS rejects a background notification larger than 4 KB.
     static let apnsPayloadLimit = 4096
+    /// Web push services cap the whole message at 4 KB too, but 86 bytes of
+    /// that are the `aes128gcm` content-coding header and 17 more the record
+    /// tag and padding delimiter — so the JSON envelope gets slightly less.
+    static let webPushPayloadLimit = 4096 - 86 - 17
     /// The `aps` dictionary, `follower_id` and the JSON scaffolding wrapped
     /// around `encrypted_status`.
     static let apnsEnvelopeOverhead = 128
+
+    /// The push budget for one follower, by its registered transport.
+    static func payloadLimit(forTransport transport: String?) -> Int {
+        transport == "webpush" ? webPushPayloadLimit : apnsPayloadLimit
+    }
 
     /// Readings kept before treatments start giving way instead. Two hours of
     /// glucose is the least that still reads as a trend.
@@ -185,7 +194,10 @@ extension FollowerStatusSnapshot {
     /// order is the point — a bolus is only meaningful against the glucose it
     /// was given for, and glucose without the bolus is a follower watching a
     /// number climb with no idea whether anyone has answered it.
-    func encodedWithinPushLimit(using encoder: JSONEncoder) throws -> Data {
+    func encodedWithinPushLimit(
+        using encoder: JSONEncoder,
+        payloadLimit: Int = FollowerStatusSnapshot.apnsPayloadLimit
+    ) throws -> Data {
         var snapshot = self
 
         // Everything is newest first, so the last element of each is the oldest.
@@ -219,7 +231,7 @@ extension FollowerStatusSnapshot {
         dropTreatmentsOffTheChart()
         var data = try encoder.encode(snapshot)
 
-        while Self.projectedPayloadSize(plaintextBytes: data.count) > Self.apnsPayloadLimit {
+        while Self.projectedPayloadSize(plaintextBytes: data.count) > payloadLimit {
             if snapshot.readings.count > Self.minimumReadings {
                 snapshot.readings.removeLast()
                 dropTreatmentsOffTheChart()
@@ -313,7 +325,10 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
                 // per-follower rather than shared.
                 let personalised = snapshot.withThresholds(from: follower.alertSettings)
                 if follower.isPushRegistered {
-                    let snapshotData = try personalised.encodedWithinPushLimit(using: encoder)
+                    let snapshotData = try personalised.encodedWithinPushLimit(
+                        using: encoder,
+                        payloadLimit: FollowerStatusSnapshot.payloadLimit(forTransport: follower.pushTransport)
+                    )
                     do {
                         let encrypted = try messenger.encrypt(data: snapshotData)
                         try await FollowerPushSender.shared.sendStatus(encryptedStatus: encrypted, to: follower)
