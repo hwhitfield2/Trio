@@ -23,7 +23,7 @@ enum TandemPumpSoundError: LocalizedError {
         case let .didNotTake(requested, got):
             return "Trio asked for \(requested.localizedDescription) but the pump still reports \(got.localizedDescription). Try again."
         case .couldNotReadBack:
-            return "The pump accepted the change, but Trio could not read the setting back to confirm it. Check with Read pump data."
+            return "The pump accepted the change, but Trio could not read the setting back to confirm it. Reload the sound levels to check."
         }
     }
 }

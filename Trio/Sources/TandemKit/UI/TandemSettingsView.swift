@@ -1,7 +1,6 @@
 import Combine
 import LoopKit
 import SwiftUI
-import UIKit
 
 /// Drives the pump screen.
 ///
@@ -23,18 +22,14 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
     @Published var showCartridgeSheet = false
     @Published var audioFeedbackEnabled: Bool
     @Published var audioFeedbackForAutomaticDoses: Bool
-    @Published var showTestDoseConfirmation = false
-    @Published var testDoseInProgress = false
-    @Published var testDoseResult: (success: Bool, message: String)?
-    @Published var testDoseUnits: Double = TandemSettingsViewModel.testDoseOptions[0]
     @Published var acknowledgingAlarms = false
     @Published var alarmErrorMessage: String?
     @Published var glucoseAnnunciationEnabled: Bool
     @Published var testingAnnunciation: TandemGlucoseAlarmKind?
-    @Published var testingPatternId: Int?
     @Published var annunciationResult: (success: Bool, message: String)?
-    @Published var diagnosticsInProgress = false
-    @Published var diagnosticsReport: String?
+    @Published var showSuspendConfirmation = false
+    @Published var suspendResumeInProgress = false
+    @Published var suspendErrorMessage: String?
     /// Per-category levels the user is editing. Populated from the pump.
     @Published var soundLevels: [TandemSoundCategory: TandemAnnunciationMode] = [:]
     /// Read-only levels the pump exposes but Trio cannot change.
@@ -369,89 +364,54 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
         microbolusBasalEnabled = false
     }
 
-    // MARK: - Minimum dose test
+    // MARK: - Suspend / resume
 
-    /// Candidate test amounts. The remote-bolus floor is settled — firmware
-    /// 7.6.0.1 accepts 0.05 U and rejects smaller amounts (status 1 at
-    /// initiate), and the driver's floor is pinned there (sub-floor commands
-    /// are refused locally, so they are not offered). What remains worth
-    /// probing is milliunit resolution ABOVE the floor: whether the pump
-    /// accepts and actually delivers e.g. 0.051 U, which fine-grained
-    /// microbolus dosing relies on.
-    static let testDoseOptions: [Double] = [0.05, 0.051, 0.055, 0.06, 0.1]
+    /// Both flavours of "not delivering" — the pump's own suspend on a Mobi,
+    /// and Trio withholding microboluses in microbolus-basal mode.
+    var isSuspended: Bool { state.suspended || state.microbolusSuspended }
 
-    var testDoseFooterText: String {
-        let confirm = isMobi
-            ? String(localized: "Trio records what the pump reports it delivered; a Mobi has no screen to confirm the amount independently")
-            : String(localized: "check the bolus history on the pump itself for the delivered amount")
-        return String(
-            localized: "The pump's remote-bolus minimum is 0.05 U; smaller doses are rejected. Use this to verify 0.05 U works on your pump, and to probe whether milliunit amounts above the floor (like 0.051 U) are accepted and delivered exactly — \(confirm). A rejection is harmless."
-        )
+    /// Suspending goes through the active basal control mode, so it is only
+    /// offered when Trio is actually driving delivery.
+    var canSuspendResume: Bool { basalControlMode != .none }
+
+    func requestSuspend() {
+        suspendErrorMessage = nil
+        showSuspendConfirmation = true
     }
 
-    func formatTestDose(_ units: Double) -> String {
-        TandemPumpState.doseText(units)
-    }
-
-    func requestTestDose() {
-        testDoseResult = nil
-        showTestDoseConfirmation = true
-    }
-
-    /// Deliver a single small bolus through the normal remote-bolus path to
-    /// find out whether the pump accepts a dose that small. The regular
-    /// enactBolus flow is used on purpose: the test exercises the exact
-    /// permission → initiate → reconcile sequence production dosing uses, and
-    /// the delivered insulin is recorded in the treatment log like any bolus.
-    func confirmTestDose() {
-        let units = testDoseUnits
-        let amountText = formatTestDose(units)
-        testDoseInProgress = true
-        pumpManager.enactBolus(units: units, activationType: .manualNoRecommendation) { [weak self] error in
+    func confirmSuspend() {
+        suspendResumeInProgress = true
+        suspendErrorMessage = nil
+        pumpManager.suspendDelivery { [weak self] error in
             DispatchQueue.main.async {
                 guard let self else { return }
-                self.testDoseInProgress = false
-                if let error {
-                    TandemHaptics.failure()
-                    if case .uncertainDelivery = error {
-                        // Not a rejection: communication dropped mid-command, so
-                        // the pump may or may not have delivered. Says nothing
-                        // about whether doses this small are accepted.
-                        let where1 = self.isMobi
-                            ? String(localized: "Trio will reconcile it from the pump's own bolus record on the next sync")
-                            : String(localized: "Check the bolus history on the pump itself")
-                        self.testDoseResult = (
-                            success: false,
-                            message: String(
-                                localized: "Communication was lost mid-command, so it is unknown whether the \(amountText) U test bolus was delivered — this does not tell us whether the pump accepts it. \(where1), then try again."
-                            )
-                        )
-                    } else {
-                        self.testDoseResult = (
-                            success: false,
-                            message: String(
-                                localized: "The pump did not accept the \(amountText) U test bolus: \(error.localizedDescription)"
-                            )
-                        )
-                    }
-                } else {
+                self.suspendResumeInProgress = false
+                self.suspendErrorMessage = error?.localizedDescription
+                if error == nil {
                     TandemHaptics.success()
-                    let confirm = self.isMobi
-                        ? String(localized: "Trio records the delivered amount from the pump's own bolus status; a Mobi has no screen to confirm it independently")
-                        : String(localized: "confirm on the pump itself that \(amountText) U was actually delivered")
-                    self.testDoseResult = (
-                        success: true,
-                        message: String(
-                            localized: "The pump accepted the \(amountText) U test bolus. It is recorded in Trio's treatment log — \(confirm)."
-                        )
-                    )
-                    // A tiny bolus completes almost instantly; refresh shortly
-                    // after so the delivery reconciles and the single-bolus
-                    // gate releases without waiting for the next heartbeat.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
-                        self?.refresh()
-                    }
+                } else {
+                    TandemHaptics.failure()
                 }
+                self.objectWillChange.send()
+            }
+        }
+    }
+
+    /// Resuming needs no confirmation: it restores normal delivery.
+    func resumeDelivery() {
+        suspendResumeInProgress = true
+        suspendErrorMessage = nil
+        pumpManager.resumeDelivery { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.suspendResumeInProgress = false
+                self.suspendErrorMessage = error?.localizedDescription
+                if error == nil {
+                    TandemHaptics.success()
+                } else {
+                    TandemHaptics.failure()
+                }
+                self.objectWillChange.send()
             }
         }
     }
@@ -508,64 +468,18 @@ final class TandemSettingsViewModel: ObservableObject, PumpManagerStatusObserver
                     // reporting success for a silent pump is how someone ends
                     // up trusting an alarm that never reaches them.
                     let soundWhere = self.isMobi
-                        ? String(localized: "set the pump's sound level under Pump sounds below")
+                        ? String(localized: "raise the pump's sound level under Pump sounds below")
                         : String(localized: "check the pump's own Sound setting")
                     self.annunciationResult = (
                         true,
                         String(
-                            localized: "The pump accepted the command and should be playing the \(kind.localizedTitle.lowercased()) pattern: \(self.describePattern(kind)). If you felt and heard nothing, the pump decided that, not Trio — this command has no volume of its own and follows the pump's own Sound setting. To make it audible, \(soundWhere)."
+                            localized: "The pump accepted the command and should be playing the \(kind.localizedTitle.lowercased()) pattern: \(self.describePattern(kind)). If you felt and heard nothing, \(soundWhere) — the command follows the pump's own sound setting."
                         )
                     )
                 }
                 self.objectWillChange.send()
             }
         }
-    }
-
-    /// Audition one palette pattern so the user can hear the distinct cues and
-    /// decide which belongs to which scenario.
-    func testPattern(_ entry: TandemAnnunciationPattern.PaletteEntry) {
-        testingPatternId = entry.id
-        annunciationResult = nil
-        pumpManager.testAnnunciationPattern(entry.pattern) { [weak self] error in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.testingPatternId = nil
-                if let error {
-                    TandemHaptics.failure()
-                    self.annunciationResult = (false, error.localizedDescription)
-                } else {
-                    TandemHaptics.success()
-                    self.annunciationResult = (
-                        true,
-                        String(
-                            localized: "Playing \(entry.name.lowercased()): \(entry.id) bursts back to back, as fast as the pump allows. It plays one fixed tone, so cues differ by how long the run is — a short buzz versus a long one. If you heard nothing, raise the pump's sound level under Pump sounds."
-                        )
-                    )
-                }
-                self.objectWillChange.send()
-            }
-        }
-    }
-
-    /// Read everything the pump will report about itself. Read-only — see
-    /// `TandemPumpManager.runPumpDiagnostics`.
-    func runDiagnostics() {
-        diagnosticsInProgress = true
-        diagnosticsReport = nil
-        // The manager delivers its completion on the main queue.
-        pumpManager.runPumpDiagnostics { [weak self] report in
-            guard let self else { return }
-            self.diagnosticsInProgress = false
-            self.diagnosticsReport = report.text
-            self.objectWillChange.send()
-        }
-    }
-
-    func copyDiagnostics() {
-        guard let report = diagnosticsReport else { return }
-        UIPasteboard.general.string = report
-        TandemHaptics.success()
     }
 
     /// Level shown for one category's picker (defaults to loud before a load).
@@ -650,13 +564,6 @@ struct TandemSettingsView: View {
                 glucoseAlarmSection
                 soundsSection
                 pumpSoundSection
-                // A section that pushes real insulin belongs with the
-                // diagnostics, not above the settings that decide how the pump
-                // loops.
-                if viewModel.remoteBolusEnabled {
-                    testDoseSection
-                }
-                diagnosticsSection
                 aboutSection
                 deleteSection
             }
@@ -736,12 +643,12 @@ struct TandemSettingsView: View {
                 "Trio will deliver ALL basal insulin as a stream of automatic microboluses, and will turn on remote bolus to do it. You MUST first set the pump's own basal profile to 0 U/hr and turn Control-IQ OFF — otherwise insulin will stack and you could go dangerously low. This disables the pump's built-in safety automation (Control-IQ / Basal-IQ) and relies entirely on Trio. It is experimental and unverified on hardware. Only enable if you fully understand the risk."
             )
         }
-        .alert(String(localized: "Deliver test bolus?"), isPresented: $viewModel.showTestDoseConfirmation) {
+        .alert(String(localized: "Suspend insulin delivery?"), isPresented: $viewModel.showSuspendConfirmation) {
             Button(String(localized: "Cancel"), role: .cancel) {}
-            Button(String(localized: "Deliver")) { viewModel.confirmTestDose() }
+            Button(String(localized: "Suspend"), role: .destructive) { viewModel.confirmSuspend() }
         } message: {
             Text(
-                "This sends a real \(viewModel.formatTestDose(viewModel.testDoseUnits)) U bolus to the pump to check whether it accepts a dose this small. It is real insulin and will be recorded in the treatment log."
+                "All insulin delivery stops until you resume it here. Trio will not loop while delivery is suspended."
             )
         }
         .alert(String(localized: "Remove pump?"), isPresented: $viewModel.showDeleteConfirmation) {
@@ -936,12 +843,41 @@ struct TandemSettingsView: View {
                     tone: .info
                 )
             }
-            if viewModel.state.suspended {
+            if viewModel.isSuspended {
                 TandemInfoRow(
                     label: String(localized: "Delivery"),
                     value: String(localized: "Suspended"),
                     tone: .caution
                 )
+            }
+            if viewModel.canSuspendResume {
+                if viewModel.isSuspended {
+                    TandemActionButton(
+                        title: String(localized: "Resume delivery"),
+                        systemImage: "play.circle",
+                        emphasis: .prominent,
+                        isBusy: viewModel.suspendResumeInProgress,
+                        busyTitle: String(localized: "Resuming…")
+                    ) {
+                        viewModel.resumeDelivery()
+                    }
+                } else {
+                    TandemActionButton(
+                        title: String(localized: "Suspend delivery"),
+                        systemImage: "pause.circle",
+                        emphasis: .bordered,
+                        isBusy: viewModel.suspendResumeInProgress,
+                        busyTitle: String(localized: "Suspending…")
+                    ) {
+                        viewModel.requestSuspend()
+                    }
+                }
+                if let error = viewModel.suspendErrorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(Color.loopRed)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         } header: {
             Text("Delivery").glassCaption()
@@ -1075,79 +1011,6 @@ struct TandemSettingsView: View {
         .tandemRowBackground()
     }
 
-    private var testDoseSection: some View {
-        Section {
-            Picker(String(localized: "Test amount"), selection: $viewModel.testDoseUnits) {
-                ForEach(TandemSettingsViewModel.testDoseOptions, id: \.self) { amount in
-                    Text("\(viewModel.formatTestDose(amount)) U").tag(amount)
-                }
-            }
-            .disabled(viewModel.testDoseInProgress)
-
-            TandemActionButton(
-                title: String(localized: "Deliver \(viewModel.formatTestDose(viewModel.testDoseUnits)) U test bolus"),
-                systemImage: "syringe",
-                emphasis: .bordered,
-                isBusy: viewModel.testDoseInProgress,
-                busyTitle: String(localized: "Testing delivery…")
-            ) {
-                viewModel.requestTestDose()
-            }
-
-            if let result = viewModel.testDoseResult {
-                TandemCallout(
-                    title: result.success
-                        ? String(localized: "The pump accepted it")
-                        : String(localized: "The pump did not deliver it"),
-                    message: result.message,
-                    tone: result.success ? .ok : .critical
-                )
-            }
-        } header: {
-            Text("Diagnostics").glassCaption()
-        } footer: {
-            Text(viewModel.testDoseFooterText)
-        }
-        .tandemRowBackground()
-    }
-
-    private var diagnosticsSection: some View {
-        Section {
-            TandemActionButton(
-                title: String(localized: "Read pump data"),
-                systemImage: "stethoscope",
-                emphasis: .bordered,
-                isBusy: viewModel.diagnosticsInProgress,
-                busyTitle: String(localized: "Reading the pump…")
-            ) {
-                viewModel.runDiagnostics()
-            }
-
-            if let report = viewModel.diagnosticsReport {
-                ScrollView(.vertical) {
-                    Text(report)
-                        .font(.system(.footnote, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 260)
-
-                Button {
-                    viewModel.copyDiagnostics()
-                } label: {
-                    Label(String(localized: "Copy report"), systemImage: "doc.on.doc")
-                }
-            }
-        } header: {
-            Text("Pump data").glassCaption()
-        } footer: {
-            Text(
-                "Reads everything the pump will report about itself — versions, battery, insulin, sound settings, alarms — using only read-only queries that cannot change delivery. The full report is also written to the app log."
-            )
-        }
-        .tandemRowBackground()
-    }
-
     // MARK: - Cartridge
 
     private var cartridgeSection: some View {
@@ -1231,7 +1094,7 @@ struct TandemSettingsView: View {
                 ) {
                     viewModel.testAnnunciation(.low)
                 }
-                .disabled(viewModel.testingAnnunciation != nil || viewModel.testingPatternId != nil)
+                .disabled(viewModel.testingAnnunciation != nil)
 
                 TandemActionButton(
                     title: String(localized: "Test the high pattern"),
@@ -1242,31 +1105,13 @@ struct TandemSettingsView: View {
                 ) {
                     viewModel.testAnnunciation(.high)
                 }
-                .disabled(viewModel.testingAnnunciation != nil || viewModel.testingPatternId != nil)
-
-                // Audition palette: the pump has no command to play a specific
-                // category tone, so cues are runs of the one fixed burst played
-                // back to back — a short buzz vs a long one. Hear them here,
-                // then we can assign one per scenario.
-                Text("Audition cues").glassCaption()
-                ForEach(TandemAnnunciationPattern.palette) { entry in
-                    TandemActionButton(
-                        title: String(localized: "Play \(entry.name.lowercased()) — \(entry.id) bursts"),
-                        systemImage: "speaker.wave.2",
-                        emphasis: .bordered,
-                        isBusy: viewModel.testingPatternId == entry.id,
-                        busyTitle: String(localized: "Buzzing…")
-                    ) {
-                        viewModel.testPattern(entry)
-                    }
-                    .disabled(viewModel.testingPatternId != nil || viewModel.testingAnnunciation != nil)
-                }
+                .disabled(viewModel.testingAnnunciation != nil)
 
                 if viewModel.annunciationRefused, viewModel.annunciationResult == nil {
                     TandemCallout(
                         title: String(localized: "The pump refused the last buzz"),
                         message: String(
-                            localized: "It refused even after Trio reconnected with a fresh key, so Trio is leaving it alone for an hour rather than waking it to be refused again. The phone alert is unaffected. Worth trying: raise the pump's sound level under Pump sounds below — a pump set to vibrate may decline to play a tone. A test button here asks again immediately."
+                            localized: "Trio will try again in an hour; the phone alert is unaffected. Raising the pump's sound level under Pump sounds often helps — a pump set to vibrate may decline to play a tone. A test button asks again immediately."
                         ),
                         tone: .caution
                     )
@@ -1294,7 +1139,7 @@ struct TandemSettingsView: View {
 
     private var glucoseAlarmFooter: String {
         String(
-            localized: "Uses Trio's own low and high alarms — the same thresholds, snooze and once-per-reading rule as the phone alert, so the pump never sounds for something the phone stayed quiet about. Each round is the pump's own fixed beep-and-vibrate burst; the pump offers no other sound, so the two alarms differ by how many rounds play. Trio connects to the pump to deliver it rather than waiting for the next check-in, never more than once every five minutes, and paces the rounds to the pump's own rhythm. Use the test buttons to learn the two apart before relying on them."
+            localized: "Uses Trio's own low and high alarms — the same thresholds and snooze as the phone alert, so the pump never sounds for something the phone stayed quiet about. The pump has one fixed beep-and-vibrate burst, so the two alarms differ by how many bursts play. Use the test buttons to learn them apart before relying on them."
         )
     }
 
@@ -1322,7 +1167,7 @@ struct TandemSettingsView: View {
             Text("Sounds").glassCaption()
         } footer: {
             Text(
-                "Tandem pumps cannot beep on command like an Omnipod, so Trio plays the confirmation sound on this phone instead: one tone when insulin delivery is accepted, another on cancel, suspend, or resume. Automatic doses (SMBs and basal microboluses) are silent unless enabled — with microbolus-basal looping on, they sound every loop cycle."
+                "Plays a confirmation sound on this phone when the pump changes delivery: one tone when a dose is accepted, another on cancel, suspend, or resume. Automatic doses (SMBs and basal microboluses) stay silent unless enabled."
             )
         }
         .tandemRowBackground()
@@ -1399,7 +1244,7 @@ struct TandemSettingsView: View {
             Text("Pump sounds").glassCaption()
         } footer: {
             Text(
-                "How loud each of the pump's own sounds is — Loud, Medium, Low, or Vibrate. Alarm, alert and reminder levels also govern Trio's glucose annunciations, which have no volume of their own. On a Mobi this is the only place to change them, since the pump has no screen. Button and fill-tubing are read-only — the pump reports them but has no command to change them. To HEAR a change, use the Test buttons above: the pump has no way to play a chosen category's tone on demand, so those play Trio's annunciation pattern, whose loudness follows the pump's setting."
+                "How loud each of the pump's own sounds is — Loud, Medium, Low, or Vibrate. The alarm, alert, and reminder levels also set how loud Trio's glucose alarms play on the pump. Button and fill-tubing are read-only — the pump reports them but offers no command to change them. To hear a change, use the test buttons above."
             )
         }
         .tandemRowBackground()

@@ -23,7 +23,7 @@ implements what each pump actually supports:
 | Closed loop | ✅ native temp rates **or** microbolus-basal | ⚠️ experimental microbolus-basal only | Mode is a single explicit choice; the two never run together |
 | Cartridge change + fill tubing | ⚠️ opt-in, untested | ⚠️ opt-in, field-tested | Sequence verified on a Mobi; the tubing fill runs from the pump's own button |
 | Prime cannula | ⚠️ opt-in, untested | ❌ | `FillCannula` is Mobi-only; prime on the pump itself on a t:slim X2 |
-| Read-only diagnostics dump | ✅ | ✅ | "Read pump data" in settings — sends only unsigned status queries; see below |
+| Read-only diagnostics dump | ✅ | ✅ | Driver-level tool (no longer surfaced in settings) — sends only unsigned status queries; see below |
 
 So the two models give Trio genuinely different roles:
 
@@ -602,12 +602,13 @@ no Tandem firmware or proprietary code is included.
 
 ## Diagnostics, and the road beyond pumpx2
 
-`TandemDiagnostics.swift` is the in-app "connect to the pump and extract data"
-tool, reached from **Read pump data** in the pump settings. It sweeps a curated
-set of read-only status queries — firmware/serial, API version, sound
-configuration, battery, insulin, basal, Control-IQ, home-screen icons, clock,
-CGM, load state, alarms, alerts, last bolus — and produces a report that is
-shown, copyable, and written to the app log.
+`TandemDiagnostics.swift` is the "connect to the pump and extract data"
+tool. It sweeps a curated set of read-only status queries — firmware/serial,
+API version, sound configuration, battery, insulin, basal, Control-IQ,
+home-screen icons, clock, CGM, load state, alarms, alerts, last bolus — and
+produces a report written to the app log. It lives on in the driver
+(`runPumpDiagnostics`) as a development tool; the settings screen no longer
+surfaces it.
 
 It is the safest possible way to talk to the pump, **by construction, not by
 care**:
@@ -670,10 +671,10 @@ The parameterization we want lives elsewhere, and there are three honest tiers:
    next is requested the instant the last is accepted, with `interBurstDelay`
    at 0 and a fast `busyRetryDelay` that lets the pump's own busy answers pace
    the run — so a cue is one continuous buzz whose *length* is the signal (a
-   short buzz vs a long one), not spaced beeps to count. The settings screen
-   exposes an **audition palette** (`TandemAnnunciationPattern.palette`, 1–4
-   bursts) so a user can hear the lengths and pick which cue maps to which
-   scenario. The pump has **no** command to play a specific *category* tone
+   short buzz vs a long one), not spaced beeps to count. The driver keeps an
+   **audition palette** (`TandemAnnunciationPattern.palette`, 1–4 bursts) of
+   the distinct run lengths; the settings screen exposes test buttons for the
+   two cues in use. The pump has **no** command to play a specific *category* tone
    (bolus, alarm, …); those fire only on their real events, so distinct cues
    can only be distinct run lengths. Bounded by the 5-minute annunciation rate
    limit.
