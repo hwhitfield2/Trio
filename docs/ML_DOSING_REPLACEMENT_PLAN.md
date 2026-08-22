@@ -403,9 +403,27 @@ Built:
     that gate means anything; and the export lacks oref `predBGs`, so the
     Phase 2 "beats oref" bar is still open (baselines are the enforced bar).
 
+14. ✅ `predBGs` in the export — `MLDataExporter` now writes each determination's
+    stored forecast curves (iob/zt/cob/uam, 5-min steps from the determination
+    time) as an optional additive field (schema stays v1; older exports remain
+    valid). `trioml.oref` turns them into the champion forecaster (scenario:
+    cob while COB > 0, else uam, else iob — never the zero-temp counterfactual)
+    and `train_dynamics.py` gates the candidate against oref on exactly the
+    (frame, horizon) pairs oref predicted. The existing corpus predates the
+    field, so this gate first bites on the next in-app export.
+15. ✅ Core ML export (offline half) — `ml/export_coreml.py` converts a
+    promote-verdict artifact to `DynamicsModel.mlpackage` (the TCN now uses
+    explicit causal left-padding so the trace is free of dynamic-shape ops),
+    refuses any candidate whose gate verdict wasn't promote, stamps the torch
+    weights checksum into the package metadata, and emits seeded
+    torch-output verification cases. Linux cannot execute Core ML, so the
+    app/Mac side must replay those cases through the compiled model within
+    tolerance before the artifact is trusted.
+
 Next:
 
-14. Export determination `predBGs` from the app so the Phase 2 gate can compare
-    the dynamics model against oref like-for-like.
-15. Core ML export of a gate-passing candidate (versioned + checksummed) and the
-    shadow-mode `MLAlgorithm` that records its forecasts alongside oref's.
+16. On-device Core ML verification replay, then the shadow-mode `MLAlgorithm`
+    recording p10/p50/p90 alongside oref every cycle (no dosing influence).
+17. Re-export from the app (now with predBGs) and run the candidate-vs-oref
+    gate for real; keep archiving exports to grow the low-region evidence the
+    vacuous gate is waiting for.

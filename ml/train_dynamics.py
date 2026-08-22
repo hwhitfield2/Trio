@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from trioml import backtest, baseline, dataset, features, gates, schema
+from trioml import backtest, baseline, dataset, features, gates, oref, schema
 from trioml import model as model_module
 
 MINUTES_PER_DAY = 24 * 60
@@ -49,11 +49,23 @@ def split_by_days(samples: list[dict], test_days: int) -> tuple[list[dict], list
     return train, test
 
 
-def evaluate_heldout(forecaster, test_samples: list[dict]) -> dict:
-    """Scores candidate + baselines on identical (sample, horizon) pairs."""
+def evaluate_heldout(
+    forecaster,
+    test_samples: list[dict],
+    oref_forecasts: "oref.OrefForecasts | None" = None,
+) -> dict:
+    """Scores candidate + baselines on identical (sample, horizon) pairs.
+
+    When the export carries predBGs, oref is scored too — and because oref
+    only has forecasts where a determination ran, the candidate-vs-oref
+    comparison is computed on exactly the pairs oref predicted (reported
+    separately as ``*_oref_subset``).
+    """
     candidate_records: list[dict] = []
     persistence_records: list[dict] = []
     trend_records: list[dict] = []
+    oref_records: list[dict] = []
+    candidate_oref_subset: list[dict] = []
     calibration_samples: list[dict] = []
     coverage: dict[str, dict] = {
         str(h): {"p10_miss": 0, "p90_miss": 0, "n": 0} for h in schema.LABEL_HORIZONS_MINUTES
@@ -75,6 +87,11 @@ def evaluate_heldout(forecaster, test_samples: list[dict]) -> dict:
             p90 = prediction["p90"][step]
 
             candidate_records.append({"horizon": horizon, "predicted": p50, "actual": actual})
+            if oref_forecasts is not None:
+                oref_predicted = oref_forecasts.at(sample["t"], horizon)
+                if oref_predicted is not None:
+                    oref_records.append({"horizon": horizon, "predicted": oref_predicted, "actual": actual})
+                    candidate_oref_subset.append({"horizon": horizon, "predicted": p50, "actual": actual})
             persistence_records.append({
                 "horizon": horizon,
                 "predicted": baseline.last_value(history_glucose, horizon),
@@ -91,7 +108,7 @@ def evaluate_heldout(forecaster, test_samples: list[dict]) -> dict:
             stats["p10_miss"] += 1 if actual < p10 else 0
             stats["p90_miss"] += 1 if actual > p90 else 0
 
-    return {
+    result = {
         "candidate": backtest.metrics_from_predictions(candidate_records),
         "persistence": backtest.metrics_from_predictions(persistence_records),
         "linear_trend": backtest.metrics_from_predictions(trend_records),
@@ -105,6 +122,10 @@ def evaluate_heldout(forecaster, test_samples: list[dict]) -> dict:
             for horizon, stats in coverage.items()
         },
     }
+    if oref_records:
+        result["oref"] = backtest.metrics_from_predictions(oref_records)
+        result["candidate_oref_subset"] = backtest.metrics_from_predictions(candidate_oref_subset)
+    return result
 
 
 def main() -> None:
@@ -136,12 +157,23 @@ def main() -> None:
     )
 
     forecaster = model_module.QuantileForecaster(trained)
-    evaluation = evaluate_heldout(forecaster, test_samples)
+    oref_forecasts = oref.OrefForecasts(events)
+    if len(oref_forecasts):
+        print(f"{len(oref_forecasts)} determinations carry predBGs — gating against oref too")
+    else:
+        oref_forecasts = None
+        print("export has no predBGs; oref comparison unavailable (baselines are the bar)")
+    evaluation = evaluate_heldout(forecaster, test_samples, oref_forecasts)
 
     comparisons = {
         name: gates.compare_backtests(evaluation["candidate"], evaluation[name])
         for name in ("persistence", "linear_trend")
     }
+    if "oref" in evaluation:
+        # Like-for-like: candidate scored only on the pairs oref predicted.
+        comparisons["oref"] = gates.compare_backtests(
+            evaluation["candidate_oref_subset"], evaluation["oref"]
+        )
     combined_comparison = {
         f"{name}:{horizon}": result
         for name, comparison in comparisons.items()
@@ -161,7 +193,7 @@ def main() -> None:
         "frames": len(frames),
         "samples": {"train": len(train_samples), "heldout": len(test_samples)},
         "training": train_report,
-        "metrics": {k: evaluation[k] for k in ("candidate", "persistence", "linear_trend")},
+        "metrics": {k: v for k, v in evaluation.items() if k not in ("calibration_samples", "coverage")},
         "coverage": evaluation["coverage"],
         "gates": {
             "comparisons": comparisons,
@@ -181,6 +213,14 @@ def main() -> None:
             f"{horizon:>8} {row[0]['rmse']:>10.1f} {row[1]['rmse']:>10.1f} "
             f"{row[2]['rmse']:>10.1f} {row[0]['n']:>6}"
         )
+    if "oref" in evaluation:
+        print(f"\n{'horizon':>8} {'candidate':>10} {'oref':>10} {'n':>6}   (RMSE mg/dL, oref-predicted pairs only)")
+        for horizon in schema.LABEL_HORIZONS_MINUTES:
+            cand = evaluation["candidate_oref_subset"][str(horizon)]
+            champ = evaluation["oref"][str(horizon)]
+            if champ["rmse"] is None or cand["rmse"] is None:
+                continue
+            print(f"{horizon:>8} {cand['rmse']:>10.1f} {champ['rmse']:>10.1f} {cand['n']:>6}")
     print(f"\np10 miss rate {calibration['miss_rate']:.3f} over {calibration['n']} "
           f"(gate ≤ {gates.MAX_LOW_QUANTILE_MISS_RATE})" if calibration["miss_rate"] is not None
           else f"\ncalibration: insufficient data (n={calibration['n']})")

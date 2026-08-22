@@ -25,6 +25,9 @@ provides:
   loss; quantile ordering holds by construction. Requires torch; everything
   else is stdlib-only so the gate suite runs anywhere
 - `trioml.estimator` — CGM-lag-compensating Kalman StateEstimator prototype
+- `trioml.oref` — oref's exported `predBGs` curves as the champion forecaster:
+  scenario selection (cob while carbs are on board, else uam, else iob — never
+  zt), aligned to frame anchors, returning None wherever oref didn't predict
 - `trioml.nightscout` — Nightscout → export-schema converter (deep history:
   the phone retains only 90 days; a long-running Nightscout site holds more)
 - `trioml.merge` — deduplicating merge of overlapping sources (periodic app
@@ -71,9 +74,22 @@ python3 ml/validate_estimator.py trio-training-export-….jsonl --outdir ml/outp
 scores the candidate against the naive baselines on identical (frame, horizon)
 pairs, checks the low-quantile calibration gate, and writes the report plus a
 checksummed model artifact to `--outdir` (gitignored — it derives from
-personal health data). The oref-predBGs comparison the Phase 2 gate ultimately
-requires still needs the exporter to include determination `predBGs`; until
-then the baselines are the enforced bar.
+personal health data). Exports whose determinations carry `predBGs` (the app
+exporter now includes them) additionally gate the candidate against oref's own
+forecasts, scored only on the pairs oref actually predicted; older exports
+fall back to the baselines as the bar.
+
+```bash
+# convert a promote-verdict artifact to Core ML (refuses failed candidates)
+pip install coremltools
+python3 ml/export_coreml.py ml/output
+```
+
+This writes `DynamicsModel.mlpackage` (torch weights checksum stamped into its
+metadata) plus `coreml_verification.json` — seeded synthetic input/output
+pairs from the torch model. Linux cannot execute Core ML, so the Mac/app side
+must replay those cases through the compiled model and demand agreement within
+tolerance before trusting the artifact.
 
 ## Invariants
 

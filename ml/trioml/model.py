@@ -54,22 +54,17 @@ try:
             kernel_size: int = 3,
         ):
             super().__init__()
-            layers: list[nn.Module] = []
+            self.convs = nn.ModuleList()
+            # Left-pad amounts per level: explicit causal padding (instead of
+            # symmetric padding + crop) keeps the graph free of dynamic-shape
+            # ops so the Core ML conversion stays a straight trace.
+            self.causal_pads: list[int] = []
             channels = in_channels
             for level in range(levels):
                 dilation = 2 ** level
-                layers += [
-                    nn.Conv1d(
-                        channels,
-                        hidden,
-                        kernel_size,
-                        padding=(kernel_size - 1) * dilation,
-                        dilation=dilation,
-                    ),
-                    nn.ReLU(),
-                ]
+                self.convs.append(nn.Conv1d(channels, hidden, kernel_size, dilation=dilation))
+                self.causal_pads.append((kernel_size - 1) * dilation)
                 channels = hidden
-            self.tcn = nn.Sequential(*layers)
             self.plan_encoder = nn.Sequential(
                 nn.Conv1d(plan_channels, hidden, kernel_size, padding=kernel_size // 2),
                 nn.ReLU(),
@@ -82,7 +77,9 @@ try:
             self.horizon_steps = horizon_steps
 
         def forward(self, history: "torch.Tensor", plan: "torch.Tensor") -> "torch.Tensor":
-            hist_features = self.tcn(history)[..., : history.shape[-1]]  # causal crop
+            hist_features = history
+            for pad, conv in zip(self.causal_pads, self.convs):
+                hist_features = nn.functional.relu(conv(nn.functional.pad(hist_features, (pad, 0))))
             pooled = hist_features[..., -1]  # last-step summary
             plan_pooled = self.plan_encoder(plan).mean(dim=-1)
             out = self.head(torch.cat([pooled, plan_pooled], dim=-1))

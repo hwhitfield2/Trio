@@ -114,6 +114,12 @@ final class BaseMLDataExporter: MLDataExporter, Injectable {
         let sensitivityRatio: Decimal?
         let glucose: Decimal?
         let enacted: Bool
+        /// oref's predBGs curves (mg/dL at 5-min steps from the determination
+        /// time): "iob"/"zt"/"cob"/"uam", whichever the run produced. Optional
+        /// and additive — older exports without it stay schema-valid — but this
+        /// is what lets the training side gate a candidate against oref
+        /// like-for-like instead of against eventualBG.
+        let predBGs: [String: [Int]]?
 
         private enum CodingKeys: String, CodingKey {
             case type
@@ -128,6 +134,7 @@ final class BaseMLDataExporter: MLDataExporter, Injectable {
             case sensitivityRatio
             case glucose
             case enacted
+            case predBGs
         }
     }
 
@@ -194,8 +201,14 @@ final class BaseMLDataExporter: MLDataExporter, Injectable {
             let determinationRequest = OrefDetermination.fetchRequest()
             determinationRequest.predicate = NSPredicate(format: "deliverAt >= %@", startDate as NSDate)
             determinationRequest.sortDescriptors = [NSSortDescriptor(key: "deliverAt", ascending: true)]
+            determinationRequest.relationshipKeyPathsForPrefetching = ["forecasts.forecastValues"]
             for determination in try context.fetch(determinationRequest) {
                 guard let date = determination.deliverAt else { continue }
+                var predBGs: [String: [Int]] = [:]
+                for forecast in determination.forecasts ?? [] {
+                    guard let type = forecast.type else { continue }
+                    predBGs[type] = forecast.forecastValuesArray.map { Int($0.value) }
+                }
                 lines.append(try encoder.encode(DeterminationRow(
                     date: date,
                     rate: determination.rate?.decimalValue,
@@ -207,7 +220,8 @@ final class BaseMLDataExporter: MLDataExporter, Injectable {
                     insulinReq: determination.insulinReq?.decimalValue,
                     sensitivityRatio: determination.sensitivityRatio?.decimalValue,
                     glucose: determination.glucose?.decimalValue,
-                    enacted: determination.enacted
+                    enacted: determination.enacted,
+                    predBGs: predBGs.isEmpty ? nil : predBGs
                 )))
             }
 
