@@ -1,4 +1,5 @@
 import 'glucose_ranges.dart';
+import 'pairing_bundle.dart' show AiConfig;
 
 /// Status snapshot pushed by the Trio host, decrypted from the
 /// `encrypted_status` push field. Schema is produced by
@@ -25,6 +26,7 @@ class StatusSnapshot {
     this.suspendedBy,
     this.suspendedAt,
     this.suspendAcknowledged = false,
+    this.ai,
   });
 
   final DateTime timestamp;
@@ -99,6 +101,11 @@ class StatusSnapshot {
   /// Insulin is stopped and nobody on the host has responded yet.
   bool get suspensionUnacknowledged => suspended && !suspendAcknowledged;
 
+  /// AI food search credentials, present while the host has the feature
+  /// configured. Fresher than the pairing-time copy, so callers prefer this
+  /// — the same precedence rule as the limits.
+  final AiConfig? ai;
+
   GlucoseReading? get latest => readings.isEmpty ? null : readings.first;
 
   int? get delta {
@@ -156,6 +163,7 @@ class StatusSnapshot {
           ? DateTime.fromMillisecondsSinceEpoch(((json['suspended_at'] as num) * 1000).round())
           : null,
       suspendAcknowledged: json['suspend_acknowledged'] == true,
+      ai: AiConfig.fromJson(json['ai']),
     );
   }
 }

@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/command.dart';
+import '../models/food_search_result.dart';
 import '../state/app_state.dart';
 import '../widgets/confirm_command.dart';
+import 'food_search_screen.dart';
 
 class MealScreen extends StatefulWidget {
   const MealScreen({super.key});
@@ -21,6 +23,12 @@ class _MealScreenState extends State<MealScreen> {
   String? _error;
   bool _sending = false;
 
+  /// Set when the fields were filled from an accepted AI food search: the
+  /// meal name and absorption estimate then travel with the command. Cleared
+  /// as soon as the carbs are edited by hand — the numbers no longer are what
+  /// the search estimated.
+  AcceptedFoodEstimate? _fromSearch;
+
   @override
   void dispose() {
     _carbs.dispose();
@@ -28,6 +36,22 @@ class _MealScreenState extends State<MealScreen> {
     _protein.dispose();
     _bolus.dispose();
     super.dispose();
+  }
+
+  Future<void> _searchFood() async {
+    final aiConfig = context.read<AppState>().aiConfig;
+    if (aiConfig == null) return;
+    final accepted = await Navigator.of(context).push<AcceptedFoodEstimate>(
+      MaterialPageRoute(builder: (_) => FoodSearchScreen(aiConfig: aiConfig)),
+    );
+    if (accepted == null || !mounted) return;
+    setState(() {
+      _fromSearch = accepted;
+      _carbs.text = accepted.carbsGrams.toString();
+      _fat.text = accepted.fatGrams > 0 ? accepted.fatGrams.toString() : '';
+      _protein.text = accepted.proteinGrams > 0 ? accepted.proteinGrams.toString() : '';
+      _error = null;
+    });
   }
 
   Future<void> _send() async {
@@ -55,9 +79,17 @@ class _MealScreenState extends State<MealScreen> {
       _error = null;
       _sending = true;
     });
+    final search = _fromSearch;
     final sent = await confirmAndSend(
       context,
-      TrioCommand.meal(carbs: carbs, fat: fat, protein: protein, bolusUnits: bolus),
+      TrioCommand.meal(
+        carbs: carbs,
+        fat: fat,
+        protein: protein,
+        bolusUnits: bolus,
+        note: search?.mealName,
+        absorptionHours: search?.absorptionHours,
+      ),
     );
     if (mounted) {
       setState(() => _sending = false);
@@ -67,12 +99,26 @@ class _MealScreenState extends State<MealScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final aiAvailable = context.watch<AppState>().aiConfig != null;
+    final search = _fromSearch;
     return Scaffold(
       appBar: AppBar(title: const Text('Remote Meal')),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          _numberField(_carbs, 'Carbs (g)', autofocus: true),
+          if (aiAvailable) ...[
+            OutlinedButton.icon(
+              onPressed: _sending ? null : _searchFood,
+              icon: const Icon(Icons.search),
+              label: const Text('Search food (AI)'),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (search != null) ...[
+            _searchBanner(search),
+            const SizedBox(height: 12),
+          ],
+          _numberField(_carbs, 'Carbs (g)', autofocus: !aiAvailable),
           const SizedBox(height: 12),
           _numberField(_fat, 'Fat (g, optional)'),
           const SizedBox(height: 12),
@@ -94,6 +140,39 @@ class _MealScreenState extends State<MealScreen> {
     );
   }
 
+  /// Shows what the fields were filled from, so what gets sent is explicit —
+  /// including that the host will spread a slow meal.
+  Widget _searchBanner(AcceptedFoodEstimate search) {
+    final theme = Theme.of(context);
+    final absorption = search.absorptionHours;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              absorption == null
+                  ? 'From food search: ${search.mealName}'
+                  : 'From food search: ${search.mealName} · spread over '
+                      '${absorption.toStringAsFixed(1)} h on the host',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          IconButton(
+            onPressed: () => setState(() => _fromSearch = null),
+            icon: const Icon(Icons.close, size: 18),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Detach the search result',
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _numberField(
     TextEditingController controller,
     String label, {
@@ -107,6 +186,13 @@ class _MealScreenState extends State<MealScreen> {
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(decimal ? r'[0-9.,]' : r'[0-9]')),
       ],
+      onChanged: identical(controller, _carbs)
+          ? (_) {
+              // Hand-edited carbs are no longer the search's estimate; sending
+              // its name and absorption along would misdescribe the entry.
+              if (_fromSearch != null) setState(() => _fromSearch = null);
+            }
+          : null,
       decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
     );
   }

@@ -39,7 +39,10 @@ class StatusService {
     // Ignore out-of-order pushes: only ever move forward in time.
     if (current != null && !snapshot.timestamp.isAfter(current.timestamp)) return null;
 
-    await _persist(json);
+    // The AI credentials ride the snapshot but do not belong in plain
+    // SharedPreferences: AppState folds them into the securely stored pairing
+    // bundle instead, so the persisted copy is stripped.
+    await _persist(Map<String, dynamic>.from(json)..remove('ai'));
     return snapshot;
   }
 

@@ -61,6 +61,29 @@ void main() {
       expect(reparsed.verificationCode, bundle.verificationCode);
       expect(reparsed.apns.apnsKey, bundle.apns.apnsKey);
     });
+
+    test('a bundle without AI credentials parses with none', () {
+      // Hosts that predate the feature, or have it off, send no "ai" key.
+      expect(PairingBundle.fromQrString(_sampleBundle).ai, isNull);
+    });
+
+    test('parses and round-trips the AI food search credentials', () {
+      final map = jsonDecode(_sampleBundle) as Map<String, dynamic>;
+      map['ai'] = {'api_key': 'sk-ant-test123', 'model': 'claude-sonnet-5'};
+      final bundle = PairingBundle.fromQrString(jsonEncode(map));
+      expect(bundle.ai?.apiKey, 'sk-ant-test123');
+      expect(bundle.ai?.model, 'claude-sonnet-5');
+
+      final reparsed = PairingBundle.fromQrString(jsonEncode(bundle.toJson()));
+      expect(reparsed.ai, bundle.ai);
+
+      // withAi is how a snapshot's fresher credentials are folded in — and how
+      // a host that turned the feature off clears them.
+      expect(bundle.withAi(null).ai, isNull);
+      expect(bundle.withAi(null).secret, bundle.secret);
+      final rotated = const AiConfig(apiKey: 'sk-ant-new', model: 'claude-sonnet-5');
+      expect(bundle.withAi(rotated).ai, rotated);
+    });
   });
 
   group('TrioCommand payload', () {
@@ -75,6 +98,25 @@ void main() {
       expect(payload['protein'], 20);
       expect(payload['bolus_amount'], 2.5);
       expect(payload['timestamp'], isA<double>());
+      // Not sent unless a food search set them.
+      expect(payload.containsKey('note'), isFalse);
+      expect(payload.containsKey('absorption_hours'), isFalse);
+    });
+
+    test('a meal from a food search carries the name and absorption estimate', () {
+      final payload = TrioCommand.meal(
+        carbs: 74,
+        fat: 30,
+        protein: 25,
+        note: 'Chicken burrito bowl',
+        absorptionHours: 5.5,
+      ).toPayload(user: 'Mom', sequence: 8);
+      // Keep in sync with CommandPayload.swift CodingKeys.
+      expect(payload['note'], 'Chicken burrito bowl');
+      expect(payload['absorption_hours'], 5.5);
+
+      final described = TrioCommand.meal(carbs: 74, note: 'Chicken burrito bowl').describe();
+      expect(described, contains('Chicken burrito bowl'));
     });
 
     test('temp target and override commands', () {
@@ -271,6 +313,32 @@ void main() {
     test('rejects non-status payloads', () {
       expect(StatusSnapshot.fromJson({'type': 'other', 'timestamp': 1.0}), isNull);
       expect(StatusSnapshot.fromJson({'type': 'status'}), isNull);
+    });
+
+    test('carries the host AI credentials when present, and none otherwise', () {
+      final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      final base = {
+        'type': 'status',
+        'timestamp': now,
+        'units': 'mg/dL',
+        'readings': <dynamic>[],
+      };
+
+      expect(StatusSnapshot.fromJson(base)!.ai, isNull);
+
+      final withAi = StatusSnapshot.fromJson({
+        ...base,
+        'ai': {'api_key': 'sk-ant-test123', 'model': 'claude-sonnet-5'},
+      });
+      expect(withAi!.ai?.apiKey, 'sk-ant-test123');
+      expect(withAi.ai?.model, 'claude-sonnet-5');
+
+      // An empty key is no configuration at all.
+      final emptyKey = StatusSnapshot.fromJson({
+        ...base,
+        'ai': {'api_key': '  ', 'model': 'claude-sonnet-5'},
+      });
+      expect(emptyKey!.ai, isNull);
     });
   });
 

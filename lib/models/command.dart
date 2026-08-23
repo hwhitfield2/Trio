@@ -12,6 +12,8 @@ class TrioCommand {
     this.fat,
     this.overrideName,
     this.scheduledTime,
+    this.note,
+    this.absorptionHours,
     this.pushToken,
     this.pushTransport,
     this.pushBundleId,
@@ -35,6 +37,15 @@ class TrioCommand {
   final int? fat;
   final String? overrideName;
   final double? scheduledTime;
+
+  /// Optional meal note (e.g. the meal name an AI food search produced),
+  /// shown in the host's history instead of "Remote meal command".
+  final String? note;
+
+  /// AI-estimated carb absorption duration in hours. The host clamps it and
+  /// spreads slow meals the way its own food search entries are spread.
+  final double? absorptionHours;
+
   final String? pushToken;
   final String? pushTransport;
   final String? pushBundleId;
@@ -60,6 +71,8 @@ class TrioCommand {
     int? fat,
     double? bolusUnits,
     DateTime? scheduledTime,
+    String? note,
+    double? absorptionHours,
   }) =>
       TrioCommand._(
         commandType: 'meal',
@@ -68,6 +81,8 @@ class TrioCommand {
         fat: fat,
         bolusAmount: bolusUnits,
         scheduledTime: scheduledTime == null ? null : scheduledTime.millisecondsSinceEpoch / 1000.0,
+        note: (note == null || note.trim().isEmpty) ? null : note.trim(),
+        absorptionHours: absorptionHours,
       );
 
   factory TrioCommand.tempTarget({required int targetMgdl, required int durationMinutes}) =>
@@ -140,6 +155,8 @@ class TrioCommand {
       if (fat != null) 'fat': fat,
       if (overrideName != null) 'overrideName': overrideName,
       if (scheduledTime != null) 'scheduled_time': scheduledTime,
+      if (note != null) 'note': note,
+      if (absorptionHours != null) 'absorption_hours': absorptionHours,
       if (pushToken != null) 'push_token': pushToken,
       if (pushTransport != null) 'push_transport': pushTransport,
       if (pushBundleId != null) 'push_bundle_id': pushBundleId,
@@ -195,7 +212,10 @@ class TrioCommand {
         if (fat != null && fat! > 0) parts.add('$fat g fat');
         if (protein != null && protein! > 0) parts.add('$protein g protein');
         if (bolusAmount != null) parts.add('bolus ${bolusAmount!.toStringAsFixed(2)} U');
-        return parts.join(', ');
+        final description = parts.join(', ');
+        // The meal name matters at confirmation time: it says what is about to
+        // be logged, not just how much.
+        return note == null ? description : '$description ("$note")';
       case 'temp_target':
         return 'Temp target $target mg/dL for $duration min';
       case 'cancel_temp_target':
