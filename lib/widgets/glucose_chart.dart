@@ -19,8 +19,25 @@ import 'glucose_colors.dart';
 class GlucoseChartScale {
   const GlucoseChartScale._(this.points, this.start, this.span);
 
-  factory GlucoseChartScale(List<GlucoseReading> readings) {
+  /// Without [window], the chart spans exactly the readings it was given.
+  /// With one, it spans that duration ending at the newest reading, and
+  /// readings from before the window are left out: an hour with no data is
+  /// then an honest gap rather than the whole chart quietly stretching.
+  factory GlucoseChartScale(List<GlucoseReading> readings, {Duration? window}) {
     final sorted = [...readings]..sort((a, b) => a.date.compareTo(b.date));
+
+    if (window != null && sorted.isNotEmpty) {
+      final end = sorted.last.date.millisecondsSinceEpoch.toDouble();
+      final start = end - window.inMilliseconds;
+      final visible =
+          sorted.where((reading) => reading.date.millisecondsSinceEpoch >= start).toList();
+      return GlucoseChartScale._(
+        List.unmodifiable(visible),
+        start,
+        window.inMilliseconds.toDouble(),
+      );
+    }
+
     final start = sorted.isEmpty ? 0.0 : sorted.first.date.millisecondsSinceEpoch.toDouble();
     final end = sorted.isEmpty ? 0.0 : sorted.last.date.millisecondsSinceEpoch.toDouble();
     // A single reading — or several sharing a timestamp — would otherwise
@@ -31,7 +48,8 @@ class GlucoseChartScale {
   /// Oldest first, which is the order they are drawn and scrubbed in.
   final List<GlucoseReading> points;
 
-  /// Epoch milliseconds of the oldest reading, and the window it spans.
+  /// Epoch milliseconds where the chart begins, and the window it spans. With
+  /// a fixed window the start can be well before the oldest reading.
   final double start;
   final double span;
 
@@ -52,7 +70,12 @@ class GlucoseChartScale {
     final at = date.millisecondsSinceEpoch.toDouble();
     // Half a reading's gap of slack at each end, so a treatment logged just
     // before the oldest reading still belongs to it rather than vanishing.
-    final slack = points.length > 1 ? span / (points.length - 1) / 2 : 0;
+    // Measured from the readings themselves, not [span] — with a fixed window
+    // the span can be hours longer than the data it holds.
+    final extent = (points.last.date.millisecondsSinceEpoch -
+            points.first.date.millisecondsSinceEpoch)
+        .toDouble();
+    final slack = points.length > 1 ? extent / (points.length - 1) / 2 : 0;
     if (at < start - slack || at > start + span + slack) return null;
 
     var best = 0;
@@ -96,6 +119,29 @@ class GlucoseChartScale {
 String glucoseReadoutValue(GlucoseReading reading, {required String units}) =>
     units == 'mmol/L' ? (reading.sgv / 18.0).toStringAsFixed(1) : reading.sgv.toString();
 
+/// Where the vertical axis is labelled, in mg/dL. Round numbers in the
+/// reader's own units — 100/200/300, or 4/8/12/16 mmol/L — not round numbers
+/// in the wire format.
+List<double> glucoseAxisGridlines(String units) =>
+    units == 'mmol/L' ? const [72, 144, 216, 288] : const [100, 200, 300];
+
+/// How an axis value reads, in the display units. Whole numbers both ways:
+/// the gridlines are chosen to be whole in either unit, and "16.0" up the
+/// side of a small chart is clutter.
+String glucoseAxisLabel(double mgdl, String units) =>
+    units == 'mmol/L' ? (mgdl / 18.0).round().toString() : mgdl.round().toString();
+
+/// How far apart the time labels sit for a chart spanning [span]: roughly
+/// three to four labels whatever the duration, so 48 hours does not mean a
+/// picket fence of unreadable text.
+Duration chartTimeTickInterval(Duration span) {
+  if (span.inHours <= 3) return const Duration(hours: 1);
+  if (span.inHours <= 6) return const Duration(hours: 2);
+  if (span.inHours <= 12) return const Duration(hours: 3);
+  if (span.inHours <= 24) return const Duration(hours: 6);
+  return const Duration(hours: 12);
+}
+
 /// Minimal dependency-free glucose sparkline for the readings pushed by the
 /// host (last few hours).
 ///
@@ -109,9 +155,15 @@ class GlucoseChart extends StatefulWidget {
     this.units = 'mg/dL',
     this.ranges = GlucoseRanges.defaults,
     this.treatments = const [],
+    this.duration,
   });
 
   final List<GlucoseReading> readings;
+
+  /// The window the chart spans, ending at the newest reading. Null spans
+  /// whatever the readings cover — the shape a chart with no duration picker
+  /// always had.
+  final Duration? duration;
 
   /// The host's display units: 'mg/dL' or 'mmol/L'. Readings themselves are
   /// always mg/dL; only the readout is converted.
@@ -133,7 +185,8 @@ class GlucoseChart extends StatefulWidget {
 }
 
 class _GlucoseChartState extends State<GlucoseChart> {
-  late GlucoseChartScale _scale = GlucoseChartScale(widget.readings);
+  late GlucoseChartScale _scale =
+      GlucoseChartScale(widget.readings, window: widget.duration);
 
   /// Treatments by the index of the reading they sit over. Worked out once per
   /// snapshot rather than per frame: scrubbing repaints constantly, and this
@@ -159,12 +212,13 @@ class _GlucoseChartState extends State<GlucoseChart> {
   @override
   void didUpdateWidget(covariant GlucoseChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final sameReadings = identical(oldWidget.readings, widget.readings);
+    final sameReadings =
+        identical(oldWidget.readings, widget.readings) && oldWidget.duration == widget.duration;
     final sameTreatments = identical(oldWidget.treatments, widget.treatments);
     if (sameReadings && sameTreatments) return;
 
     if (!sameReadings) {
-      _scale = GlucoseChartScale(widget.readings);
+      _scale = GlucoseChartScale(widget.readings, window: widget.duration);
       // A snapshot arriving mid-scrub reshapes the window; keep pointing at
       // something real rather than off the end of the new list.
       if (_selected != null) {
@@ -214,7 +268,8 @@ class _GlucoseChartState extends State<GlucoseChart> {
     final theme = Theme.of(context);
 
     return SizedBox(
-      height: 140,
+      // The old 140 of plot, plus room beneath it for the time labels.
+      height: 160,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
@@ -254,6 +309,8 @@ class _GlucoseChartState extends State<GlucoseChart> {
                   ),
                   readoutCaptionStyle: (theme.textTheme.labelSmall ?? const TextStyle(fontSize: 11))
                       .copyWith(color: theme.colorScheme.onInverseSurface),
+                  axisStyle: (theme.textTheme.labelSmall ?? const TextStyle(fontSize: 11))
+                      .copyWith(color: theme.colorScheme.outline, fontSize: 10),
                   formatValue: (reading) => glucoseReadoutValue(reading, units: widget.units),
                   unitsLabel: _unitsLabel,
                   textDirection: Directionality.of(context),
@@ -280,6 +337,7 @@ class _GlucosePainter extends CustomPainter {
     required this.readoutColor,
     required this.readoutStyle,
     required this.readoutCaptionStyle,
+    required this.axisStyle,
     required this.formatValue,
     required this.unitsLabel,
     required this.textDirection,
@@ -297,6 +355,7 @@ class _GlucosePainter extends CustomPainter {
   final Color readoutColor;
   final TextStyle readoutStyle;
   final TextStyle readoutCaptionStyle;
+  final TextStyle axisStyle;
   final String Function(GlucoseReading reading) formatValue;
   final String unitsLabel;
 
@@ -325,9 +384,16 @@ class _GlucosePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (scale.isEmpty) return;
 
+    // The bottom band belongs to the time labels; everything else draws in
+    // the plot above it.
+    final plot = Size(size.width, max(1.0, size.height - _timeAxisBand()));
+
     double x(GlucoseReading e) => scale.xFor(e, size.width);
     double y(double sgv) =>
-        size.height - ((sgv.clamp(_minSgv, _maxSgv) - _minSgv) / (_maxSgv - _minSgv) * size.height);
+        plot.height - ((sgv.clamp(_minSgv, _maxSgv) - _minSgv) / (_maxSgv - _minSgv) * plot.height);
+
+    _paintTimeAxis(canvas, plot);
+    _paintValueAxis(canvas, plot, y);
 
     final gridPaint = Paint()
       ..color = gridColor
@@ -349,7 +415,67 @@ class _GlucosePainter extends CustomPainter {
 
     final index = selected;
     if (index != null && index < scale.points.length) {
-      _paintSelection(canvas, size, scale.points[index], anchored[index] ?? const [], x, y);
+      _paintSelection(canvas, plot, scale.points[index], anchored[index] ?? const [], x, y);
+    }
+  }
+
+  TextPainter _axisText(String text) => TextPainter(
+        text: TextSpan(text: text, style: axisStyle),
+        textDirection: textDirection,
+        textScaler: textScaler,
+      )..layout();
+
+  /// The height the time labels need beneath the plot, at the reader's own
+  /// text size.
+  double _timeAxisBand() => _axisText('12 PM').height + 3;
+
+  /// Faint vertical lines at round local times across the window, each with
+  /// the time written beneath the plot.
+  void _paintTimeAxis(Canvas canvas, Size plot) {
+    final interval = chartTimeTickInterval(Duration(milliseconds: scale.span.round()));
+    final linePaint = Paint()
+      ..color = gridColor.withValues(alpha: 0.5)
+      ..strokeWidth = 1;
+
+    // The first round time at or before the window's start, aligned to a
+    // multiple of the interval within its day — so a six-hour spacing lands on
+    // midnight and 6 AM, not twenty past whatever hour the window opened.
+    final windowStart = DateTime.fromMillisecondsSinceEpoch(scale.start.round());
+    var tick = DateTime(windowStart.year, windowStart.month, windowStart.day, windowStart.hour);
+    tick = tick.subtract(Duration(hours: tick.hour % interval.inHours));
+
+    final end = scale.start + scale.span;
+    while (tick.millisecondsSinceEpoch <= end) {
+      final at = tick.millisecondsSinceEpoch.toDouble();
+      if (at >= scale.start) {
+        final dx = (at - scale.start) / scale.span * plot.width;
+        canvas.drawLine(Offset(dx, 0), Offset(dx, plot.height), linePaint);
+        final label = _axisText(DateFormat.j().format(tick));
+        // Centred under its line, but never past the chart's edges.
+        final left =
+            (dx - label.width / 2).clamp(0.0, max(0.0, plot.width - label.width)).toDouble();
+        label.paint(canvas, Offset(left, plot.height + 3));
+      }
+      tick = tick.add(interval);
+    }
+  }
+
+  /// Values up the right-hand edge, each written just above its own faint
+  /// gridline. Inside the plot rather than in a gutter of their own: a gutter
+  /// would shrink the plot the finger scrubs, and these are guide numbers, not
+  /// a column of data.
+  void _paintValueAxis(Canvas canvas, Size plot, double Function(double) y) {
+    final linePaint = Paint()
+      ..color = gridColor.withValues(alpha: 0.5)
+      ..strokeWidth = 1;
+
+    for (final mgdl in glucoseAxisGridlines(unitsLabel)) {
+      final dy = y(mgdl);
+      canvas.drawLine(Offset(0, dy), Offset(plot.width, dy), linePaint);
+      final label = _axisText(glucoseAxisLabel(mgdl, unitsLabel));
+      // Above the line, unless that would run off the top of the plot.
+      final top = dy - label.height - 1 >= 0 ? dy - label.height - 1 : dy + 1;
+      label.paint(canvas, Offset(plot.width - label.width - 2, top));
     }
   }
 
@@ -491,6 +617,7 @@ class _GlucosePainter extends CustomPainter {
       oldDelegate.gridColor != gridColor ||
       oldDelegate.readoutColor != readoutColor ||
       oldDelegate.readoutStyle != readoutStyle ||
+      oldDelegate.axisStyle != axisStyle ||
       oldDelegate.textScaler != textScaler ||
       oldDelegate.textDirection != textDirection;
 }
