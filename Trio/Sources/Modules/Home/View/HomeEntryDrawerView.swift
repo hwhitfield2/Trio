@@ -386,6 +386,30 @@ struct HomeEntryDrawer: View {
         amount = treatments.carbs
     }
 
+    /// The full editor uses its own StateModel, so everything entered here —
+    /// the stepper amount and any applied AI scan/search values — must be handed
+    /// over explicitly or "Full Editor" silently starts from zero.
+    private func handOffToFullEditor() {
+        var pending = Treatments.PendingEntry()
+        switch kind {
+        case .carbs:
+            pending.carbs = amount
+            if aiAnalysisApplied {
+                pending.fat = treatments.fat
+                pending.protein = treatments.protein
+                pending.note = treatments.note
+                pending.mealAbsorptionHours = treatments.mealAbsorptionHours
+                pending.useFattyMealCorrectionFactor = treatments.useFattyMealCorrectionFactor
+            }
+        case .bolus:
+            pending.bolusAmount = amount
+        case .basal,
+             .glucose:
+            break
+        }
+        Treatments.pendingEntry = pending.isEmpty ? nil : pending
+    }
+
     private var header: some View {
         ZStack {
             Text(title)
@@ -394,6 +418,7 @@ struct HomeEntryDrawer: View {
             HStack {
                 if kind == .carbs || kind == .bolus {
                     Button {
+                        handOffToFullEditor()
                         dismiss()
                         homeState.showModal(for: .treatmentView)
                     } label: {

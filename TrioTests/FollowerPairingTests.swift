@@ -395,6 +395,80 @@ import Testing
         #expect(legacyMessage.followerId == nil)
     }
 
+    @Test("AI food search credentials ride the bundle and snapshot as 'ai'") func aiConfigEncoding() throws {
+        // The follower app (FollowerApp/lib/models/pairing_bundle.dart) reads
+        // this exact shape from both places; these keys pin the wire format.
+        let ai = FollowerAIConfig(apiKey: "sk-ant-test123", model: "claude-sonnet-5")
+
+        let bundle = FollowerPairingBundle(
+            version: 1,
+            type: FollowerPairingBundle.pairingType,
+            followerId: "F00",
+            followerName: "Mom",
+            hostName: "Kid's iPhone",
+            secret: "secret",
+            apns: FollowerPairingBundle.APNSInfo(
+                deviceToken: "token",
+                bundleId: "org.example.trio",
+                teamId: "TEAM",
+                keyId: "KEY",
+                apnsKey: "-----BEGIN PRIVATE KEY-----",
+                production: true
+            ),
+            limits: FollowerPairingBundle.Limits(maxBolus: 6.5, maxCarbs: 120, units: "mg/dL"),
+            fcmAvailable: true,
+            ai: ai
+        )
+        let bundleJson = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(bundle)) as? [String: Any]
+        )
+        let bundleAi = try #require(bundleJson["ai"] as? [String: Any])
+        #expect(bundleAi["api_key"] as? String == "sk-ant-test123")
+        #expect(bundleAi["model"] as? String == "claude-sonnet-5")
+
+        var snapshot = budgetSnapshot(readings: [])
+        snapshot.ai = ai
+        let snapshotJson = try decoded(JSONEncoder().encode(snapshot))
+        let snapshotAi = try #require(snapshotJson["ai"] as? [String: Any])
+        #expect(snapshotAi["api_key"] as? String == "sk-ant-test123")
+
+        // Feature off: no key at all, so old followers and new ones agree on
+        // what absence means.
+        let withoutAi = budgetSnapshot(readings: [])
+        let plainJson = try decoded(JSONEncoder().encode(withoutAi))
+        #expect(plainJson["ai"] == nil)
+    }
+
+    @Test("Meal command decodes the note and absorption estimate") func mealNoteDecoding() throws {
+        // Sent by the follower's AI food search; keep field names in sync with
+        // FollowerApp/lib/models/command.dart.
+        let json = """
+        {
+            "user": "Mom",
+            "command_type": "meal",
+            "timestamp": 1723400000.0,
+            "sequence": 11,
+            "carbs": 74,
+            "fat": 30,
+            "protein": 25,
+            "note": "Chicken burrito bowl",
+            "absorption_hours": 5.5
+        }
+        """
+        let payload = try JSONDecoder().decode(CommandPayload.self, from: Data(json.utf8))
+        #expect(payload.commandType == .meal)
+        #expect(payload.note == "Chicken burrito bowl")
+        #expect(payload.absorptionHours == 5.5)
+
+        // Plain meals (and older followers) send neither.
+        let legacy = """
+        {"user": "Mom", "command_type": "meal", "timestamp": 1723400000.0, "carbs": 30}
+        """
+        let legacyPayload = try JSONDecoder().decode(CommandPayload.self, from: Data(legacy.utf8))
+        #expect(legacyPayload.note == nil)
+        #expect(legacyPayload.absorptionHours == nil)
+    }
+
     @Test("Command payload decodes the follower sequence number") func sequenceDecoding() throws {
         let json = """
         {

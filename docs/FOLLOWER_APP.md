@@ -95,7 +95,8 @@ the code is only rendered on the host's screen during pairing.
     "production": true
   },
   "limits": { "max_bolus": 6.5, "max_carbs": 120, "units": "mg/dL" },
-  "fcm_available": false
+  "fcm_available": false,
+  "ai": { "api_key": "sk-ant-…", "model": "claude-sonnet-5" }
 }
 ```
 
@@ -104,6 +105,22 @@ follower UI as a first gate — the host remains the authority and re-validates
 every command; every status snapshot carries the live limits, which take
 precedence on the follower. `fcm_available` tells Android followers whether
 the host can push status to them (see Status channel below).
+
+`ai` is present when the host has the AI meal analysis feature enabled and an
+API key stored. It lets the follower run the same text food search the host
+offers (search → review → scale quantities → send the carbs as a meal
+command). Status snapshots carry the live value, which takes precedence —
+including its absence, which means the host turned the feature off and the
+follower must stop using the credential. The follower keeps it in its secure
+store alongside the pairing bundle and strips it from any snapshot it
+persists to plain storage. Same security boundary as the APNS key riding the
+same QR/pushes.
+
+**Keep in sync:** `FollowerAIConfig` (host,
+`Trio/Sources/Services/RemoteControl/FollowerPairingManager.swift`) ↔
+`AiConfig` (follower, `FollowerApp/lib/models/pairing_bundle.dart`); the food
+search request/prompt/schema: `FoodSearchManager.swift` (host) ↔
+`FollowerApp/lib/services/food_search_service.dart` (follower).
 
 ### Verification code
 
@@ -145,6 +162,8 @@ Trio's existing `CommandPayload` JSON with one addition:
 | `command_type` | string | `bolus`, `meal`, `temp_target`, `cancel_temp_target`, `start_override`, `cancel_override`, `status_request`, `register_follower` |
 | `sequence` | int | **New.** Required on the follower path; strictly increasing per follower |
 | `bolus_amount`, `carbs`, `fat`, `protein`, `target`, `duration`, `overrideName`, `scheduled_time` | | As before (`target` in mg/dL, `duration` minutes) |
+| `note` | string | Optional, `meal` only: meal name (e.g. from the follower's AI food search); the host caps it at 25 characters and stores it on the carb entry |
+| `absorption_hours` | number | Optional, `meal` only: AI-estimated absorption duration; the host clamps it (≤ 10 h, ignored at or below the standard 3 h) and spreads the carbs the same way its own food search entries are spread |
 | `push_token`, `push_transport`, `push_bundle_id`, `push_environment` | string | `register_follower` only: where the host should deliver status pushes (`push_transport`: `apns` or `fcm`) |
 
 `status_request` and `register_follower` are follower-path only (they require
@@ -213,7 +232,8 @@ Encrypted exactly like commands, with the same per-follower key:
   "high": 180,
   "ranges": { "low": 70, "high": 180, "target": 100, "scheme": "staticColor" },
   "boluses": [ {"a": 1.25, "t": 1723399600, "s": true}, ... ],
-  "carbs": [ {"g": 30, "t": 1723399100}, ... ]
+  "carbs": [ {"g": 30, "t": 1723399100}, ... ],
+  "ai": { "api_key": "sk-ant-…", "model": "claude-sonnet-5" }
 }
 ```
 
@@ -235,6 +255,11 @@ matching that payload's chart points) and to its Live Activity (times in
 seconds, trimmed to the two hours the Lock Screen chart covers and to eight of
 each). A host pushing a Live Activity update directly builds them the same way,
 so a pushed Lock Screen and a locally built one draw the same markers.
+
+`ai` is the host's live AI food search configuration (see the pairing bundle
+above): present while the feature is configured on the host, absent when it
+is off, and always the version the follower should use. It costs ~150 bytes
+of the push budget and is not part of the trimming order.
 
 `low`/`high` are the glucose thresholds *this* follower is alerted on, and are
 substituted per follower. `ranges` is a different thing: how the host itself

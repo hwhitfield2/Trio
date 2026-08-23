@@ -92,6 +92,25 @@ struct PairedFollower: Codable, Identifiable, Equatable {
     }
 }
 
+/// The host's AI food search configuration, shared with followers so a
+/// caregiver can run the same text lookup (search, review, adjust quantities)
+/// and send the resulting carb data as a remote meal. Delivered in the pairing
+/// bundle and refreshed by every status snapshot, which takes precedence —
+/// same pattern as the command limits. The key rides the same E2E-encrypted
+/// channels as the APNS signing key, which is the more sensitive secret of
+/// the two.
+struct FollowerAIConfig: Codable, Equatable {
+    let apiKey: String
+    /// Model id used for text food search (the host's Meal Settings pick or
+    /// its default).
+    let model: String
+
+    enum CodingKeys: String, CodingKey {
+        case apiKey = "api_key"
+        case model
+    }
+}
+
 /// Everything a follower app needs to operate, delivered in a single QR code
 /// scan. Treat the encoded payload like a password: it contains the per-device
 /// secret and the APNS key.
@@ -139,6 +158,11 @@ struct FollowerPairingBundle: Codable {
     /// send commands but receive no data pushes.
     let fcmAvailable: Bool
 
+    /// AI food search credentials, present when the host has the feature
+    /// configured at pairing time. Status snapshots carry the live value,
+    /// which takes precedence on the follower.
+    var ai: FollowerAIConfig? = nil
+
     enum CodingKeys: String, CodingKey {
         case version = "v"
         case type
@@ -149,6 +173,7 @@ struct FollowerPairingBundle: Codable {
         case apns
         case limits
         case fcmAvailable = "fcm_available"
+        case ai
     }
 
     static let pairingType = "trio-follower-pairing"
@@ -434,6 +459,23 @@ final class FollowerPairingManager: Injectable {
         followers.filter { $0.needsHostUpdate == true }
     }
 
+    // MARK: - AI food search
+
+    /// The AI food search configuration shared with followers, or nil when the
+    /// host has the meal AI feature off or no API key stored. Used for the
+    /// pairing bundle and for every status snapshot (which keeps followers
+    /// current when the key or model changes after pairing).
+    var followerAIConfig: FollowerAIConfig? {
+        guard settings.settings.mealPhotoAnalysisEnabled else { return nil }
+        let key = stringValue(forKey: MealPhotoAnalysis.Config.apiKeyKey)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return nil }
+        return FollowerAIConfig(
+            apiKey: key,
+            model: MealPhotoAnalysis.foodSearchModel(from: settings.settings)
+        )
+    }
+
     // MARK: - Pairing bundle
 
     /// Builds the JSON string encoded into the pairing QR code for a follower.
@@ -465,7 +507,8 @@ final class FollowerPairingManager: Injectable {
                 maxCarbs: settings.settings.maxCarbs,
                 units: settings.settings.units.rawValue
             ),
-            fcmAvailable: hasFCMCredentials
+            fcmAvailable: hasFCMCredentials,
+            ai: followerAIConfig
         )
 
         let encoder = JSONEncoder()

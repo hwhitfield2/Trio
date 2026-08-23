@@ -24,6 +24,13 @@ struct CommandPayload: Decodable, Sendable {
     var fat: Int?
     var overrideName: String?
     var scheduledTime: TimeInterval?
+    /// Optional note for a meal command (e.g. the meal name from the follower's
+    /// AI food search). Length-capped when stored.
+    var note: String?
+    /// Optional AI-estimated absorption duration for a meal command, in hours.
+    /// Clamped on the host; storage spreads slow meals the same way a local
+    /// food search entry is spread.
+    var absorptionHours: Double?
     /// Monotonically increasing counter set by paired follower apps. Required
     /// on the follower command path, where it provides replay protection.
     var sequence: Int?
@@ -83,6 +90,8 @@ struct CommandPayload: Decodable, Sendable {
         case commandType = "command_type"
         case bolusAmount = "bolus_amount"
         case scheduledTime = "scheduled_time"
+        case note
+        case absorptionHours = "absorption_hours"
         case sequence
         case returnNotification = "return_notification"
         case pushToken = "push_token"
@@ -120,6 +129,9 @@ struct CommandPayload: Decodable, Sendable {
             let fatDesc = fat != nil ? "\(fat!)g fat" : "unknown fat"
             let proteinDesc = protein != nil ? "\(protein!)g protein" : "unknown protein"
             description += "Meal with \(carbsDesc), \(fatDesc), \(proteinDesc)."
+            if let note = note, !note.isEmpty {
+                description += " Note: \(note)."
+            }
         case .startOverride:
             if let override = overrideName {
                 description += "Start Override: \(override)."

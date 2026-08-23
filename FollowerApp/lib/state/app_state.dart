@@ -113,6 +113,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   double get maxCarbs => snapshot?.maxCarbs ?? bundle?.limits.maxCarbs ?? 250;
   String get units => snapshot?.units ?? bundle?.limits.units ?? 'mg/dL';
 
+  /// The host's AI food search configuration, or null when the host has the
+  /// feature off. Read from the securely stored bundle, which every incoming
+  /// snapshot keeps current (see [_syncAiConfig]) — snapshots persisted to
+  /// plain storage have the credentials stripped, so they are not the source.
+  AiConfig? get aiConfig => bundle?.ai;
+
   /// What glucose is coloured by everywhere this app draws it: the host's
   /// ranges, with whatever this device chose to see instead.
   GlucoseRanges get glucoseRanges =>
@@ -396,6 +402,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final updated = await statusService.handleEncryptedStatus(encrypted, current: snapshot);
     if (updated != null) {
       snapshot = updated;
+      // Keep the securely stored AI credentials current: the host may have
+      // added, rotated or removed them since pairing.
+      await _syncAiConfig(updated.ai);
       // Once the host reports insulin running again, the pending marker has
       // served its purpose; leaving it would make a resumed pump look pending.
       if (!updated.suspended && suspendRequestedAt != null && updated.suspendAcknowledged) {
@@ -410,6 +419,18 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       await WidgetBridge.publish(updated, preferences: displayPreferences);
       await _publishLiveActivity(updated);
     }
+  }
+
+  /// Folds the AI configuration a snapshot carried into the securely stored
+  /// pairing bundle. A snapshot without one means the host turned the feature
+  /// off (or removed its key), so the stored copy is cleared too — the
+  /// follower should not keep searching on a revoked credential.
+  Future<void> _syncAiConfig(AiConfig? ai) async {
+    final currentBundle = bundle;
+    if (currentBundle == null || currentBundle.ai == ai) return;
+    final newBundle = currentBundle.withAi(ai);
+    await _store.updatePairing(newBundle);
+    bundle = newBundle;
   }
 
   /// The paired host moved Trio to a new phone: point commands at the new

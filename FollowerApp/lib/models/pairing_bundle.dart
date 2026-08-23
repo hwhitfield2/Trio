@@ -17,6 +17,7 @@ class PairingBundle {
     required this.apns,
     required this.limits,
     this.fcmAvailable = false,
+    this.ai,
   });
 
   static const pairingType = 'trio-follower-pairing';
@@ -39,6 +40,11 @@ class PairingBundle {
   /// Whether the host has FCM configured. Android followers receive status
   /// pushes only when this is true; commands work regardless.
   final bool fcmAvailable;
+
+  /// The host's AI food search credentials, when the host had the feature
+  /// configured at pairing time. Status snapshots carry the live value, which
+  /// takes precedence — same rule as the limits.
+  final AiConfig? ai;
 
   /// Six-digit code derived from the secret, shown to the user after scanning
   /// so they can compare it against the code on the host screen.
@@ -88,6 +94,7 @@ class PairingBundle {
             ? CommandLimits.fromJson(limitsMap)
             : const CommandLimits(maxBolus: 10, maxCarbs: 250, units: 'mg/dL'),
         fcmAvailable: (map['fcm_available'] as bool?) ?? false,
+        ai: AiConfig.fromJson(map['ai']),
       );
     } catch (_) {
       throw const PairingParseException('The pairing code is incomplete or damaged. Generate a new one on the Trio host.');
@@ -104,7 +111,56 @@ class PairingBundle {
         'apns': apns.toJson(),
         'limits': limits.toJson(),
         'fcm_available': fcmAvailable,
+        if (ai != null) 'ai': ai!.toJson(),
       };
+
+  /// The same pairing with a different AI configuration — used when a status
+  /// snapshot reports that the host changed, added or removed it.
+  PairingBundle withAi(AiConfig? ai) => PairingBundle(
+        version: version,
+        followerId: followerId,
+        followerName: followerName,
+        hostName: hostName,
+        secret: secret,
+        apns: apns,
+        limits: limits,
+        fcmAvailable: fcmAvailable,
+        ai: ai,
+      );
+}
+
+/// The host's AI food search configuration — enough for this app to run the
+/// same text lookup the host offers and send the result as a remote meal.
+///
+/// The JSON shape is produced by `FollowerAIConfig` on the host (pairing
+/// bundle and status snapshots) — keep both sides in sync.
+class AiConfig {
+  const AiConfig({required this.apiKey, required this.model});
+
+  final String apiKey;
+
+  /// Model id the host uses for text food search.
+  final String model;
+
+  static AiConfig? fromJson(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    final key = json['api_key'];
+    final model = json['model'];
+    if (key is! String || key.trim().isEmpty) return null;
+    return AiConfig(
+      apiKey: key,
+      model: model is String && model.isNotEmpty ? model : 'claude-sonnet-5',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'api_key': apiKey, 'model': model};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AiConfig && other.apiKey == apiKey && other.model == model;
+
+  @override
+  int get hashCode => Object.hash(apiKey, model);
 }
 
 class ApnsInfo {

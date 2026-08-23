@@ -8,6 +8,29 @@ import SwiftUI
 import Swinject
 
 extension Treatments {
+    /// A meal/bolus entry started in the Home quick-entry drawer and handed to the
+    /// router-presented Treatments screen when the user taps "Full Editor". The
+    /// drawer and the full editor use separate StateModel instances, so without
+    /// this the switch would silently drop everything already entered — including
+    /// an applied AI food search or meal scan result.
+    struct PendingEntry {
+        var carbs: Decimal = 0
+        var fat: Decimal = 0
+        var protein: Decimal = 0
+        var note: String = ""
+        var mealAbsorptionHours: Decimal?
+        var useFattyMealCorrectionFactor: Bool = false
+        var bolusAmount: Decimal = 0
+
+        var isEmpty: Bool {
+            carbs <= 0 && fat <= 0 && protein <= 0 && note.isEmpty && bolusAmount <= 0
+        }
+    }
+
+    /// Set by the drawer right before it presents the full editor; consumed (and
+    /// cleared) by the next StateModel that finishes loading its settings.
+    @MainActor static var pendingEntry: PendingEntry?
+
     @Observable final class StateModel: BaseStateModel<Provider> {
         @ObservationIgnored @Injected() var unlockmanager: UnlockManager!
         @ObservationIgnored @Injected() var apsManager: APSManager!
@@ -336,6 +359,35 @@ extension Treatments {
             mealPhotoAnalysisEnabled = settingsManager.settings.mealPhotoAnalysisEnabled
             isSmoothingEnabled = settingsManager.settings.smoothGlucose
             glucoseColorScheme = settingsManager.settings.glucoseColorScheme
+
+            consumePendingEntry()
+        }
+
+        /// Applies an entry handed over from the Home quick-entry drawer's
+        /// "Full Editor" button. Runs after the limits above are loaded so the
+        /// clamps use real values, not the zero defaults.
+        @MainActor private func consumePendingEntry() {
+            guard let pending = Treatments.pendingEntry else { return }
+            Treatments.pendingEntry = nil
+            guard !pending.isEmpty else { return }
+
+            carbs = min(max(pending.carbs, 0), maxCarbs)
+            fat = min(max(pending.fat, 0), maxFat)
+            protein = min(max(pending.protein, 0), maxProtein)
+            note = pending.note
+            mealAbsorptionHours = pending.mealAbsorptionHours
+            if pending.useFattyMealCorrectionFactor, fattyMeals {
+                useFattyMealCorrectionFactor = true
+                useSuperBolus = false
+            }
+            if pending.bolusAmount > 0 {
+                amount = pending.bolusAmount
+            }
+
+            Task {
+                await updateForecasts()
+                insulinCalculated = await calculateInsulin()
+            }
         }
 
         private func getCurrentSettingValue(for type: SettingType) async {

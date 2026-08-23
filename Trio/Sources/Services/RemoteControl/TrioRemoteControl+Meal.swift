@@ -59,11 +59,29 @@ extension TrioRemoteControl {
 
         let actualDate = payload.scheduledTime.map { Date(timeIntervalSince1970: $0) }
 
+        // A follower's AI food search sends the meal name along; cap it the way
+        // the local note field is capped so remote entries can't flood history.
+        let trimmedNote = payload.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let note = trimmedNote.isEmpty ? "Remote meal command" : String(trimmedNote.prefix(25))
+
+        // Clamp a remote absorption estimate to the same window carb storage
+        // spreads over (extendedAbsorptionSplit clamps to 4-10 h itself, but a
+        // wild value should not be persisted either). Values at or below the
+        // standard absorption change nothing and are dropped.
+        let absorptionHours: Decimal? = payload.absorptionHours.flatMap { hours in
+            guard hours.isFinite, Decimal(hours) > BaseCarbsStorage.standardAbsorptionHours else { return nil }
+            return min(Decimal(hours), 10)
+        }
+
+        let needsFpuID = fatDecimal ?? 0 > 0 || proteinDecimal ?? 0 > 0 ||
+            (absorptionHours ?? 0) > BaseCarbsStorage.standardAbsorptionHours
+
         let mealEntry = CarbsEntry(
             id: UUID().uuidString, createdAt: Date(), actualDate: actualDate,
             carbs: carbsDecimal ?? 0, fat: fatDecimal, protein: proteinDecimal,
-            note: "Remote meal command", enteredBy: CarbsEntry.local, isFPU: false,
-            fpuID: fatDecimal ?? 0 > 0 || proteinDecimal ?? 0 > 0 ? UUID().uuidString : nil
+            note: note, enteredBy: CarbsEntry.local, isFPU: false,
+            fpuID: needsFpuID ? UUID().uuidString : nil,
+            absorptionHours: absorptionHours
         )
 
         try await carbsStorage.storeCarbs([mealEntry], areFetchedFromRemote: false)

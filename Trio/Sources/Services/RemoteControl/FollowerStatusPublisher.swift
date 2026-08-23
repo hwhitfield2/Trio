@@ -132,6 +132,13 @@ struct FollowerStatusSnapshot: Encodable {
     /// Whether someone holding the host phone has answered the alarm.
     var suspendAcknowledged: Bool = false
 
+    /// AI food search credentials, present while the host has the feature
+    /// configured. Fresher than the pairing-time copy, so the follower prefers
+    /// this — the same precedence rule as the limits above. Costs ~150 bytes
+    /// of the push budget, which the trimming below treats like any other
+    /// fixed field.
+    var ai: FollowerAIConfig? = nil
+
     enum CodingKeys: String, CodingKey {
         case type
         case timestamp
@@ -154,6 +161,7 @@ struct FollowerStatusSnapshot: Encodable {
         case suspendedBy = "suspended_by"
         case suspendedAt = "suspended_at"
         case suspendAcknowledged = "suspend_acknowledged"
+        case ai
     }
 }
 
@@ -404,7 +412,8 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
             suspended: suspended,
             suspendedBy: suspension?.followerName,
             suspendedAt: suspension?.requestedAt.timeIntervalSince1970.rounded(),
-            suspendAcknowledged: suspension?.acknowledgedAt != nil
+            suspendAcknowledged: suspension?.acknowledgedAt != nil,
+            ai: FollowerPairingManager.shared.followerAIConfig
         )
     }
 

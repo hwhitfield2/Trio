@@ -40,6 +40,7 @@ class HostUpdate {
         ),
         limits: current.limits,
         fcmAvailable: current.fcmAvailable,
+        ai: current.ai,
       );
 }
 
