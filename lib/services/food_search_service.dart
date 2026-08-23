@@ -103,13 +103,19 @@ class FoodSearchService {
   }
 
   static String _apiErrorMessage(int status, String body) {
+    // Spelled as nested ifs rather than a conditional expression: after
+    // `is Map<String, dynamic>` the parser reads a following `?` as a
+    // nullable type test, not as the ternary.
     try {
       final decoded = jsonDecode(body);
-      final message = decoded is Map<String, dynamic>
-          ? (decoded['error'] as Map<String, dynamic>?)?['message']
-          : null;
-      if (message is String && message.isNotEmpty) {
-        return 'The AI service returned an error ($status): $message';
+      if (decoded is Map<String, dynamic>) {
+        final error = decoded['error'];
+        if (error is Map<String, dynamic>) {
+          final message = error['message'];
+          if (message is String && message.isNotEmpty) {
+            return 'The AI service returned an error ($status): $message';
+          }
+        }
       }
     } catch (_) {}
     return 'The AI service returned an error ($status). Please try again.';
