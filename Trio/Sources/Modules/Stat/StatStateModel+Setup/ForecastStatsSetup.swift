@@ -1,15 +1,17 @@
 import CoreData
 import Foundation
 
-/// One scored oref forecast: what the algorithm predicted for a point in time vs what the CGM measured
+/// One scored forecast: what was predicted for a point in time vs what the CGM measured
 struct ForecastAccuracyPoint: Identifiable {
     var id = UUID()
     /// Time the forecast was made (determination deliverAt)
     let decisionDate: Date
-    /// Forecast horizon in minutes (30 or 60)
+    /// Forecast horizon in minutes (one of MLTrainer.horizons: 30/60 min, 2/4/6 h)
     let horizonMinutes: Int
-    /// oref's predicted glucose for decisionDate + horizon (mg/dL)
-    let predicted: Int
+    /// oref's predicted glucose for decisionDate + horizon (mg/dL); nil when
+    /// oref's stored curve does not reach this horizon (curves rarely extend
+    /// beyond ~4 h, so the 2/4/6 h checks are mostly ML vs persistence)
+    let orefPredicted: Int?
     /// Glucose at decision time — the persistence baseline forecast (mg/dL)
     let glucoseAtDecision: Int
     /// What the CGM actually measured at decisionDate + horizon (mg/dL)
@@ -19,7 +21,7 @@ struct ForecastAccuracyPoint: Identifiable {
     /// Shadow forecast from the bundled ML model, when one was recorded for this cycle (mg/dL)
     let mlPredicted: Int?
 
-    var orefError: Int { abs(predicted - actual) }
+    var orefError: Int? { orefPredicted.map { abs($0 - actual) } }
     var persistenceError: Int { abs(glucoseAtDecision - actual) }
     var mlError: Int? { mlPredicted.map { abs($0 - actual) } }
 }
@@ -28,12 +30,15 @@ struct ForecastAccuracyPoint: Identifiable {
 struct ForecastAccuracyStats: Identifiable {
     let situation: ForecastSituation
     let horizonMinutes: Int
-    let orefMAE: Double
+    /// Mean error of oref's forecasts; nil when its stored curves never reach this horizon.
+    /// Coverage can be partial, so compare against orefSampleCount, not sampleCount.
+    let orefMAE: Double?
     let persistenceMAE: Double
     /// Mean error of the shadow ML forecasts; nil when none were recorded in this window.
     /// Coverage can be partial, so compare against the mlSampleCount, not sampleCount.
     let mlMAE: Double?
     let sampleCount: Int
+    let orefSampleCount: Int
     let mlSampleCount: Int
     var id: String { "\(situation.rawValue)-\(horizonMinutes)" }
 }
@@ -80,7 +85,8 @@ extension Stat.StateModel {
     /// Matching tolerance when pairing a forecast target time with an actual CGM reading
     private static let matchTolerance: TimeInterval = 10 * 60
 
-    /// Scores oref's stored forecast curves against actual glucose and computes CGM delivery gaps.
+    /// Scores oref's stored forecast curves and the ML shadow forecasts against actual glucose
+    /// at every MLTrainer.horizons offset (30/60 min and 2/4/6 h), and computes CGM delivery gaps.
     /// Forecast curves are only retained for ~2 days (see TrioApp cleanup), so accuracy covers that window;
     /// gap statistics cover the last 7 days.
     func setupForecastStats() {
@@ -163,13 +169,15 @@ extension Stat.StateModel {
                       let bgAtDecision = det.glucose.map({ Int(truncating: $0) })
                 else { continue }
 
-                for horizon in [30, 60] {
-                    let index = horizon / 5
-                    guard curve.count > index else { continue }
+                for horizon in MLTrainer.horizons {
                     let targetDate = deliverAt.addingTimeInterval(TimeInterval(horizon * 60))
                     guard targetDate <= now,
                           let actual = Self.nearestReading(in: readings, to: targetDate, tolerance: Self.matchTolerance)
                     else { continue }
+
+                    // oref's stored curve covers this horizon only if it is long enough
+                    let index = horizon / 5
+                    let orefPredicted: Int? = curve.count > index ? Int(curve[index]) : nil
 
                     // ML shadow forecasts anchor on the CGM reading just before this decision
                     let mlPredicted = mlByHorizon[horizon]?
@@ -177,10 +185,13 @@ extension Stat.StateModel {
                         .min { abs($0.date.timeIntervalSince(deliverAt)) < abs($1.date.timeIntervalSince(deliverAt)) }?
                         .predicted
 
+                    // Score the horizon whenever any forecaster made a prediction for it
+                    guard orefPredicted != nil || mlPredicted != nil else { continue }
+
                     points.append(ForecastAccuracyPoint(
                         decisionDate: deliverAt,
                         horizonMinutes: horizon,
-                        predicted: Int(curve[index]),
+                        orefPredicted: orefPredicted,
                         glucoseAtDecision: bgAtDecision,
                         actual: actual,
                         hadCOB: det.cob > 0,
@@ -266,18 +277,20 @@ extension Stat.StateModel {
         }
 
         var stats: [ForecastAccuracyStats] = []
-        for horizon in [30, 60] {
+        for horizon in MLTrainer.horizons {
             for situation in ForecastSituation.allCases {
                 let subset = points.filter { $0.horizonMinutes == horizon && matches($0, situation) }
                 guard !subset.isEmpty else { continue }
+                let orefErrors = subset.compactMap(\.orefError)
                 let mlErrors = subset.compactMap(\.mlError)
                 stats.append(ForecastAccuracyStats(
                     situation: situation,
                     horizonMinutes: horizon,
-                    orefMAE: Double(subset.map(\.orefError).reduce(0, +)) / Double(subset.count),
+                    orefMAE: orefErrors.isEmpty ? nil : Double(orefErrors.reduce(0, +)) / Double(orefErrors.count),
                     persistenceMAE: Double(subset.map(\.persistenceError).reduce(0, +)) / Double(subset.count),
                     mlMAE: mlErrors.isEmpty ? nil : Double(mlErrors.reduce(0, +)) / Double(mlErrors.count),
                     sampleCount: subset.count,
+                    orefSampleCount: orefErrors.count,
                     mlSampleCount: mlErrors.count
                 ))
             }

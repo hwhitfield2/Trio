@@ -97,7 +97,7 @@ struct MLModelReviewSection: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            ForEach(report.horizons.sorted(by: { $0.key < $1.key }), id: \.key) { horizon, eval in
+            ForEach(report.horizons.sorted(by: { (Int($0.key) ?? 0) < (Int($1.key) ?? 0) }), id: \.key) { horizon, eval in
                 HStack {
                     Text("\(horizon) min")
                     Spacer()

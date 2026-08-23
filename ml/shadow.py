@@ -5,9 +5,10 @@ Usage:
     python3 ml/shadow.py <export.jsonl> [--outdir ml/output]
 
 Replays the export walk-forward by day: for each day, models are trained
-only on strictly earlier data, then score their +30/+60 min forecasts
-against what the CGM actually did. On the same timestamps, oref's
-`eventualBG` forecast and a persistence baseline are scored identically.
+only on strictly earlier data, then score their forecasts at every
+performance-check horizon (+30/+60 min and 2/4/6 h) against what the CGM
+actually did. On the same timestamps, oref's `eventualBG` forecast and a
+persistence baseline are scored identically.
 
 Caveat: the export carries only oref's eventualBG (where BG lands after all
 insulin/carb activity), not its predBG curves, so oref is answering a
@@ -69,8 +70,13 @@ def walk_forward_predictions(X, y, times):
             continue
         scored_days.append(day)
         for h in HORIZONS_MIN:
+            # Targets are per-horizon (NaN when the future reading is missing),
+            # so each horizon fits on its own labeled subset.
+            fit_idx = [i for i in train_idx if not np.isnan(y[h][i])]
+            if len(fit_idx) < MIN_TRAIN_SAMPLES:
+                continue
             for name, model in make_models().items():
-                model.fit(X[train_idx], y[h][train_idx])
+                model.fit(X[fit_idx], y[h][fit_idx])
                 for i, p in zip(test_idx, model.predict(X[test_idx])):
                     preds[h][name][i] = float(p)
     return preds, scored_days, skipped_days

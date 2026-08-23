@@ -15,8 +15,8 @@ EVENT_TYPES = ("header", "glucose", "carbs", "pump", "determination")
 # Training frame grid.
 FRAME_INTERVAL_MINUTES = 5
 HISTORY_MINUTES = 6 * 60           # model input window
-HORIZON_MINUTES = 4 * 60           # prediction horizon
-LABEL_HORIZONS_MINUTES = (30, 60, 120)  # backtest/gate evaluation points
+HORIZON_MINUTES = 6 * 60           # prediction horizon; must cover max(LABEL_HORIZONS_MINUTES)
+LABEL_HORIZONS_MINUTES = (30, 60, 120, 240, 360)  # backtest/gate evaluation points
 
 # Physiological bounds used for sanity filtering, mg/dL.
 GLUCOSE_MIN = 20

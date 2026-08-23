@@ -9,8 +9,9 @@ provides:
   and future-glucose labels
 - `trioml.insulin` — exponential insulin activity/IOB curves (oref-compatible)
 - `trioml.baseline` — naive predictors every candidate model must beat
-- `trioml.backtest` — frame-by-frame replay computing RMSE at 30/60/120-min
-  horizons plus low-glucose-region metrics
+- `trioml.backtest` — frame-by-frame replay computing RMSE at every
+  performance-check horizon (30/60/120/240/360 min — i.e. out to 6 h) plus
+  low-glucose-region metrics
 - `trioml.gates` — the promotion gate suite: a candidate model may only be
   promoted if it beats the champion on the newest held-out data AND does not
   degrade in the low region AND passes the hypo-safety replay
@@ -94,10 +95,12 @@ personal health data. Both are ignored via `ml/.gitignore`.
   from the most recent determination (≤30 min old), delivered temp-basal
   rate reconstructed from pump events, insulin delivered in the last hour,
   carbs entered in the last 1 h/3 h, and time of day.
-- Targets are the CGM readings at +30 and +60 minutes.
-- Samples are dropped rather than interpolated when the CGM history or
-  target window spans a gap, or when no recent determination exists; the
-  skip counts are reported per reason in `metrics.json`.
+- Targets are the CGM readings at +30 and +60 minutes and at the 2/4/6-hour
+  performance-check horizons. Targets are tracked per horizon: a sample whose
+  +6 h reading is missing still trains and scores the shorter horizons.
+- Samples are dropped rather than interpolated when the CGM history spans a
+  gap, when no recent determination exists, or when no target exists at any
+  horizon; the skip counts are reported per reason in `metrics.json`.
 - Chronological 80/20 train/test split (never random — adjacent CGM readings
   are heavily correlated).
 - Trains Ridge regression and a gradient-boosted tree model, and reports
@@ -120,8 +123,9 @@ along with what actually happened.
 
 Important caveat: the export contains only oref's `eventualBG` (where BG
 lands after all insulin/carb activity), which answers a longer-horizon
-question than the ML's +30/+60 min forecasts, so oref's MAE here is
-expected to look worse than it is. Exporting the determination `predBGs`
+question than the ML's short-horizon forecasts, so oref's MAE here is
+expected to look worse than it is at 30/60 min (and more comparable at the
+2/4/6 h checks). Exporting the determination `predBGs`
 arrays would make the comparison exact. Shadow mode observes and reports
 only — it changes nothing about dosing.
 
@@ -140,8 +144,9 @@ predictions exactly before writing anything. It also refreshes
 between Python and Swift fails the test suite, not the user.
 
 In the app the model runs in **shadow mode only** (`MLForecastService`):
-it records +30/+60 min forecasts after each loop cycle for retrospective
-comparison in Statistics → Forecasts, and has no influence on dosing.
+it records forecasts at every performance-check horizon (+30/+60 min and
++2/+4/+6 h) after each loop cycle for retrospective comparison in
+Statistics → Forecasts, and has no influence on dosing.
 
 ## Known limitations
 

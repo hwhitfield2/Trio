@@ -7,6 +7,15 @@ struct ForecastAccuracyChart: View {
     let stats: [ForecastAccuracyStats]
     @Binding var selectedHorizon: Int
 
+    /// Shared with the ML pipeline: 30/60 min plus the 2/4/6-hour performance checks.
+    static let horizonLabels: [(minutes: Int, label: String)] = [
+        (30, String(localized: "30 min")),
+        (60, String(localized: "60 min")),
+        (120, String(localized: "2 h")),
+        (240, String(localized: "4 h")),
+        (360, String(localized: "6 h"))
+    ]
+
     private var visibleStats: [ForecastAccuracyStats] {
         stats.filter { $0.horizonMinutes == selectedHorizon }
     }
@@ -14,23 +23,26 @@ struct ForecastAccuracyChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("Horizon", selection: $selectedHorizon) {
-                Text(String(localized: "30 min")).tag(30)
-                Text(String(localized: "60 min")).tag(60)
+                ForEach(Self.horizonLabels, id: \.minutes) { horizon in
+                    Text(horizon.label).tag(horizon.minutes)
+                }
             }
             .pickerStyle(.segmented)
 
             Chart {
                 ForEach(visibleStats) { stat in
-                    BarMark(
-                        x: .value("Error", stat.orefMAE),
-                        y: .value("Situation", stat.situation.displayName)
-                    )
-                    .foregroundStyle(by: .value("Series", String(localized: "oref forecast")))
-                    .position(by: .value("Series", String(localized: "oref forecast")))
-                    .annotation(position: .trailing, spacing: 4) {
-                        Text(stat.orefMAE.formatted(.number.precision(.fractionLength(0))))
-                            .font(.caption2)
-                            .foregroundStyle(Color.secondary)
+                    if let orefMAE = stat.orefMAE {
+                        BarMark(
+                            x: .value("Error", orefMAE),
+                            y: .value("Situation", stat.situation.displayName)
+                        )
+                        .foregroundStyle(by: .value("Series", String(localized: "oref forecast")))
+                        .position(by: .value("Series", String(localized: "oref forecast")))
+                        .annotation(position: .trailing, spacing: 4) {
+                            Text(orefMAE.formatted(.number.precision(.fractionLength(0))))
+                                .font(.caption2)
+                                .foregroundStyle(Color.secondary)
+                        }
                     }
 
                     BarMark(
@@ -87,12 +99,24 @@ struct ForecastAccuracyChart: View {
                     .font(.footnote)
                     .foregroundStyle(Color.secondary)
                 }
+
+                if all.orefSampleCount == 0 {
+                    Text(
+                        String(
+                            localized: "oref's stored prediction curves do not reach this horizon, so only the ML model and the no-change baseline are compared here."
+                        )
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(Color.secondary)
+                }
             }
         }
     }
 }
 
 /// Scatter of predicted vs actual glucose; points on the diagonal were perfect forecasts.
+/// oref and the ML shadow model are plotted as separate series — at the 2/4/6 h horizons
+/// oref's stored curves usually end, so those horizons are mostly ML-only.
 struct ForecastScatterChart: View {
     let points: [ForecastAccuracyPoint]
     let selectedHorizon: Int
@@ -102,7 +126,10 @@ struct ForecastScatterChart: View {
     }
 
     private var axisUpperBound: Int {
-        let maxValue = visiblePoints.flatMap { [$0.predicted, $0.actual] }.max() ?? 200
+        let maxValue = visiblePoints
+            .flatMap { [$0.orefPredicted, $0.mlPredicted, $0.actual] }
+            .compactMap { $0 }
+            .max() ?? 200
         return ((maxValue / 50) + 1) * 50
     }
 
@@ -120,19 +147,33 @@ struct ForecastScatterChart: View {
                 }
 
                 ForEach(visiblePoints) { point in
-                    PointMark(
-                        x: .value("Actual", point.actual),
-                        y: .value("Predicted", point.predicted)
-                    )
-                    .symbolSize(20)
-                    .foregroundStyle(Color.blue.opacity(0.55))
+                    if let orefPredicted = point.orefPredicted {
+                        PointMark(
+                            x: .value("Actual", point.actual),
+                            y: .value("Predicted", orefPredicted)
+                        )
+                        .symbolSize(20)
+                        .foregroundStyle(by: .value("Forecast", String(localized: "oref forecast")))
+                    }
+                    if let mlPredicted = point.mlPredicted {
+                        PointMark(
+                            x: .value("Actual", point.actual),
+                            y: .value("Predicted", mlPredicted)
+                        )
+                        .symbolSize(20)
+                        .foregroundStyle(by: .value("Forecast", String(localized: "ML (shadow)")))
+                    }
                 }
             }
+            .chartForegroundStyleScale([
+                String(localized: "oref forecast"): Color.blue.opacity(0.55),
+                String(localized: "ML (shadow)"): Color.orange.opacity(0.55)
+            ])
             .chartXScale(domain: 40 ... axisUpperBound)
             .chartYScale(domain: 40 ... axisUpperBound)
             .chartXAxisLabel(String(localized: "Actual glucose (mg/dL)"))
             .chartYAxisLabel(String(localized: "Predicted glucose (mg/dL)"))
-            .chartLegend(.hidden)
+            .chartLegend(position: .top, alignment: .leading)
             .aspectRatio(1, contentMode: .fit)
 
             Text(String(localized: "Points above the diagonal were forecast too high; below it, too low."))

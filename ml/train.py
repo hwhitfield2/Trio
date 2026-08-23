@@ -8,9 +8,11 @@ The export is the JSONL produced by Trio's training exporter: a `header`
 record followed by `glucose`, `determination`, `pump`, and `carbs` records.
 
 The pipeline builds one sample per CGM reading (features use only data
-available at that time), predicts BG at +30 and +60 minutes, and compares
-Ridge and gradient-boosting models against persistence and linear-trend
-baselines on a chronological train/test split.
+available at that time), predicts BG at +30 and +60 minutes plus the 2/4/6-hour
+performance-check horizons, and compares Ridge and gradient-boosting models
+against persistence and linear-trend baselines on a chronological train/test
+split. Targets are tracked per horizon: a sample missing the +6 h reading still
+trains and scores the shorter horizons.
 
 This is a research tool. Its output must not be used to dose insulin.
 """
@@ -24,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
-HORIZONS_MIN = (30, 60)
+HORIZONS_MIN = (30, 60, 120, 240, 360)
 
 # A sample is dropped rather than built from stale or interpolated-over-gap
 # data: CGM lookbacks tolerate small jitter, IOB/COB carry forward briefly.
@@ -152,7 +154,10 @@ def build_samples(records):
         if det is None:
             skipped["no_recent_determination"] += 1
             continue
-        if None in futures.values():
+        # Targets are per-horizon: a missing +4 h/+6 h reading must not throw
+        # away an otherwise usable +30 min sample. Only a sample with no
+        # target at any horizon is dropped entirely.
+        if all(f is None for f in futures.values()):
             skipped["cgm_target_gap"] += 1
             continue
 
@@ -178,7 +183,7 @@ def build_samples(records):
             np.cos(2 * np.pi * hour / 24),
         ])
         for h in HORIZONS_MIN:
-            targets[h].append(futures[h])
+            targets[h].append(np.nan if futures[h] is None else futures[h])
         times.append(t)
 
     feature_names = [
@@ -235,8 +240,17 @@ def main():
     }
 
     for h in HORIZONS_MIN:
-        X_train, X_test = X[:split], X[split:]
-        y_train, y_test = y[h][:split], y[h][split:]
+        # Keep only the samples that have a target at this horizon — long
+        # horizons naturally have fewer (overnight gaps, end of export).
+        train_valid = ~np.isnan(y[h][:split])
+        test_valid = ~np.isnan(y[h][split:])
+        X_train, X_test = X[:split][train_valid], X[split:][test_valid]
+        y_train, y_test = y[h][:split][train_valid], y[h][split:][test_valid]
+        if len(X_train) < 50 or len(X_test) < 20:
+            results["horizons"][f"{h}min"] = {
+                "skipped": f"only {len(X_train)} train / {len(X_test)} test samples with a target"
+            }
+            continue
 
         persistence = X_test[:, 0]
         trend = X_test[:, 0] + X_test[:, 3] * (h / 30.0)  # extrapolate delta_30m
@@ -248,6 +262,8 @@ def main():
             ),
         }
         horizon_report = {
+            "train_samples": int(len(X_train)),
+            "test_samples": int(len(X_test)),
             "baseline_persistence": evaluate(y_test, persistence),
             "baseline_trend": evaluate(y_test, trend),
         }

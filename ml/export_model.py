@@ -86,14 +86,22 @@ def main():
     fixtures = {"modelVersion": MODEL_VERSION, "cases": []}
 
     rng = np.random.RandomState(0)
-    fixture_idx = rng.choice(len(X), size=min(20, len(X)), replace=False)
 
     for h in HORIZONS_MIN:
+        # Targets are per-horizon (NaN when the future reading is missing);
+        # each horizon trains on its own labeled subset.
+        valid = ~np.isnan(y[h])
+        Xh, yh = X[valid], y[h][valid]
+        if len(Xh) < 100:
+            print(f"{h}min: only {len(Xh)} samples with targets — horizon skipped")
+            continue
+        fixture_idx = rng.choice(len(Xh), size=min(20, len(Xh)), replace=False)
+
         model = GradientBoostingRegressor(
             n_estimators=60, max_depth=2, learning_rate=0.03, subsample=0.7, random_state=0
         )
-        delta = y[h] - X[:, DELTA_FEATURE]
-        model.fit(X, delta)
+        delta = yh - Xh[:, DELTA_FEATURE]
+        model.fit(Xh, delta)
 
         model_json = {
             "learningRate": model.learning_rate,
@@ -103,8 +111,8 @@ def main():
         }
 
         # Prove the JSON reproduces the shrunk-delta prediction before shipping it
-        sk_pred = X[:, DELTA_FEATURE] + SHRINKAGE * model.predict(X)
-        json_pred = np.array([predict_from_json(model_json, x) for x in X])
+        sk_pred = Xh[:, DELTA_FEATURE] + SHRINKAGE * model.predict(Xh)
+        json_pred = np.array([predict_from_json(model_json, x) for x in Xh])
         max_dev = float(np.max(np.abs(sk_pred - json_pred)))
         if max_dev > 0.01:
             sys.exit(f"JSON evaluator deviates from sklearn by {max_dev} at {h}min — aborting")
@@ -114,9 +122,12 @@ def main():
         for i in fixture_idx:
             fixtures["cases"].append({
                 "horizon": h,
-                "features": [round(float(v), 6) for v in X[i]],
+                "features": [round(float(v), 6) for v in Xh[i]],
                 "expected": round(float(json_pred[i]), 4),
             })
+
+    if not bundle["horizons"]:
+        sys.exit("no horizon had enough labeled samples — nothing exported")
 
     out = Path(args.outfile)
     out.parent.mkdir(parents=True, exist_ok=True)

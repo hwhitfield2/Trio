@@ -10,7 +10,8 @@ mirrors it against the same schema version). A frame is one 5-minute grid slot:
         "bolus": units delivered during the slot (SMB + manual),
         "temp_basal_rate": U/hr active at slot end (None if no temp),
         "iob": bolus IOB at slot end,
-        "labels": {"30": bg, "60": bg, "120": bg}  # future glucose, when known
+        "labels": {"30": bg, "60": bg, ..., "360": bg}  # future glucose at each
+                                                        # LABEL_HORIZONS_MINUTES, when known
     }
 """
 

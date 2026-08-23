@@ -56,13 +56,25 @@ class BuildFramesTests(unittest.TestCase):
             self.assertEqual(later["t"] - earlier["t"], schema.FRAME_INTERVAL_MINUTES)
 
     def test_labels_attached_at_horizons(self):
-        frames = dataset.build_frames(self._glucose_series(30))
+        # 80 slots = 400 min of readings, enough to label the first frame at
+        # every horizon up to 6 h.
+        frames = dataset.build_frames(self._glucose_series(80))
         first = frames[0]
-        self.assertIn("30", first["labels"])
-        self.assertIn("60", first["labels"])
-        self.assertIn("120", first["labels"])
+        for horizon in schema.LABEL_HORIZONS_MINUTES:
+            self.assertIn(str(horizon), first["labels"])
         # Label equals the reading 6 slots later (value increments by slot).
         self.assertEqual(first["labels"]["30"], first["glucose"] + 6)
+        self.assertEqual(first["labels"]["360"], first["glucose"] + 72)
+
+    def test_long_horizon_labels_absent_when_future_not_recorded(self):
+        # 30 slots = 145 min: the first frame can be labeled at 30/60/120 but
+        # not at 240/360 — those labels must be absent, never fabricated.
+        frames = dataset.build_frames(self._glucose_series(30))
+        first = frames[0]
+        for horizon in (30, 60, 120):
+            self.assertIn(str(horizon), first["labels"])
+        for horizon in (240, 360):
+            self.assertNotIn(str(horizon), first["labels"])
 
     def test_carbs_and_bolus_summed_into_slot(self):
         events = self._glucose_series(4) + [

@@ -11,6 +11,12 @@ import Foundation
 /// Trained models are candidates only — they do nothing until a human promotes
 /// them, and even then they remain shadow-mode display models.
 enum MLTrainer {
+    /// Forecast horizons (minutes) the model is trained and performance-checked
+    /// at: the short 30/60-min forecasts plus the 2/4/6-hour checks. Shared by
+    /// the sample builder, retrain gate suite, shadow forecast recording, and
+    /// the Statistics accuracy views; mirrors ml/train.py HORIZONS_MIN.
+    static let horizons: [Int] = [30, 60, 120, 240, 360]
+
     struct Config {
         var treeCount = 60
         var maxDepth = 2
@@ -25,7 +31,8 @@ enum MLTrainer {
     struct Sample {
         let date: Date
         let features: [Double]
-        /// Actual glucose by horizon minutes (30, 60)
+        /// Actual glucose by horizon minutes (MLTrainer.horizons; a sample may
+        /// only have targets for the horizons the CGM record actually covers)
         let targets: [Int: Double]
     }
 
@@ -33,7 +40,7 @@ enum MLTrainer {
     /// Returns nil when there are no samples for a horizon.
     static func train(
         samples: [Sample],
-        horizons: [Int] = [30, 60],
+        horizons: [Int] = MLTrainer.horizons,
         config: Config = Config()
     ) -> [Int: MLForecastModel.Ensemble] {
         var result: [Int: MLForecastModel.Ensemble] = [:]

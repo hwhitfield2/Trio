@@ -202,7 +202,7 @@ final class MLRetrainService {
         // Champion is only scored on samples after its training cutoff —
         // comparing it on data it trained on would flatter it unfairly the
         // other way, and there is no honest score without a cutoff.
-        for horizon in [30, 60] {
+        for horizon in MLTrainer.horizons {
             let subset = scored.filter { $0.horizon == horizon }
             guard !subset.isEmpty else { continue }
             let low = subset.filter { $0.actual < lowRegionThreshold }
@@ -251,7 +251,7 @@ final class MLRetrainService {
             detail: "\(evaluation.days) walk-forward days (need \(minWalkForwardDays)) — one long day is not enough evidence"
         ))
 
-        for (horizon, eval) in evaluation.horizons.sorted(by: { $0.key < $1.key }) {
+        for (horizon, eval) in evaluation.horizons.sorted(by: { (Int($0.key) ?? 0) < (Int($1.key) ?? 0) }) {
             gates.append(MLEvalReport.GateResult(
                 name: "beats_persistence_\(horizon)min",
                 passed: eval.candidateMAE < eval.persistenceMAE,

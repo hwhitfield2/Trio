@@ -37,6 +37,29 @@ def synthetic_frames(count: int = 400) -> list[dict]:
     return frames
 
 
+def ramp_frames(count: int = 500) -> list[dict]:
+    """Slow steady climb: linear-trend extrapolation wins at every horizon,
+    including the 4-h and 6-h checks where a reversing series would sink it."""
+    values = [90.0 + 0.25 * i for i in range(count)]
+    frames = []
+    for i in range(count):
+        labels = {}
+        for horizon in schema.LABEL_HORIZONS_MINUTES:
+            j = i + horizon // schema.FRAME_INTERVAL_MINUTES
+            if j < count:
+                labels[str(horizon)] = values[j]
+        frames.append({
+            "t": float(i * schema.FRAME_INTERVAL_MINUTES),
+            "glucose": values[i],
+            "carbs": 0.0,
+            "bolus": 0.0,
+            "temp_basal_rate": None,
+            "iob": 0.0,
+            "labels": labels,
+        })
+    return frames
+
+
 class BacktestTests(unittest.TestCase):
     def test_metrics_shape(self):
         metrics = backtest.run_backtest(synthetic_frames(), baseline.last_value)
@@ -54,7 +77,7 @@ class BacktestTests(unittest.TestCase):
 
 class GateTests(unittest.TestCase):
     def test_candidate_beating_champion_passes(self):
-        frames = synthetic_frames()
+        frames = ramp_frames()
         champion = backtest.run_backtest(frames, baseline.last_value)
         candidate = backtest.run_backtest(frames, baseline.linear_trend)
         comparison = gates.compare_backtests(candidate, champion)

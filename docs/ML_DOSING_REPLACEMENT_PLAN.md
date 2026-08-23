@@ -280,8 +280,10 @@ golden-file parity tests.
 
 **Phase 2 — Offline model:** training repo under `ml/`; dataset builder; StateEstimator
 prototyped offline; dynamics model; backtest harness replaying history frame-by-frame.
-**Gate to proceed:** beats oref's stored `predBGs` at 30/60/120 min on held-out weeks,
-no degradation in the low-glucose region, low-quantile calibration conservative.
+**Gate to proceed:** beats oref's stored `predBGs` at 30/60/120 min on held-out weeks
+(model performance is additionally checked at the 2/4/6-hour horizons against the
+persistence baseline — oref's curves don't reach 6 h), no degradation in the
+low-glucose region, low-quantile calibration conservative.
 Simulator stress suite (simglucose/UVA-Padova-style cohort): meals, exercise,
 compression lows, dropouts, occlusions.
 

@@ -5,8 +5,10 @@ import Foundation
 ///
 /// Mirrors the offline pipeline (ml/train.py build_samples) exactly: one sample
 /// per CGM reading, features from data available at that moment, targets from
-/// the readings 30/60 minutes later. Samples are dropped rather than built from
-/// gaps, stale determinations, or physiologically invalid readings.
+/// the readings at each MLTrainer.horizons offset (30/60 min and 2/4/6 h).
+/// Samples are dropped rather than built from gaps, stale determinations, or
+/// physiologically invalid readings; targets are per-horizon, so a sample
+/// missing the +6 h reading still trains the shorter horizons.
 enum MLSampleBuilder {
     /// Same constants as MLForecastService.TrainingParity and ml/train.py
     static let cgmTolerance: TimeInterval = 6 * 60
@@ -189,7 +191,7 @@ enum MLSampleBuilder {
                 let det = dets[detIndex]
 
                 var targets: [Int: Double] = [:]
-                for horizon in [30, 60] {
+                for horizon in MLTrainer.horizons {
                     let targetTs = t + Double(horizon) * 60
                     guard targetTs <= nowTs,
                           let actual = nearestReading(to: targetTs, tolerance: targetTolerance)

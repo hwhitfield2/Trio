@@ -4,8 +4,9 @@ import Foundation
 /// Shadow-mode ML glucose forecaster.
 ///
 /// Evaluates the bundled gradient-boosted tree model (`json/defaults/TrioMLForecaster.json`)
-/// after each loop cycle and stores its +30/+60 minute forecasts so Statistics can compare
-/// them retrospectively against oref and actual CGM readings.
+/// after each loop cycle and stores its forecasts at every MLTrainer.horizons offset
+/// (+30/+60 min and +2/+4/+6 h) so Statistics can compare them retrospectively against
+/// oref and actual CGM readings. Horizons the active model was not trained for are skipped.
 ///
 /// This service is strictly observational: nothing it produces feeds back into
 /// dosing decisions, and any failure is swallowed after logging.
@@ -61,7 +62,7 @@ final class MLForecastService {
 
         let vector = features.vector
         try await context.perform {
-            for horizon in [30, 60] {
+            for horizon in MLTrainer.horizons {
                 guard let predicted = model.predict(features: vector, horizonMinutes: horizon) else { continue }
                 let stored = MLForecastStored(context: self.context)
                 stored.id = UUID()
