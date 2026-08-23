@@ -81,7 +81,7 @@ void main() {
       // a host that turned the feature off clears them.
       expect(bundle.withAi(null).ai, isNull);
       expect(bundle.withAi(null).secret, bundle.secret);
-      final rotated = const AiConfig(apiKey: 'sk-ant-new', model: 'claude-sonnet-5');
+      const rotated = AiConfig(apiKey: 'sk-ant-new', model: 'claude-sonnet-5');
       expect(bundle.withAi(rotated).ai, rotated);
     });
   });
