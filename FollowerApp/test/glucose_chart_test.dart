@@ -62,6 +62,67 @@ void main() {
     });
   });
 
+  group('fixed-duration window', () {
+    test('spans the chosen duration ending at the newest reading', () {
+      final scale = GlucoseChartScale(
+        readingsEndingAt(newest, [90, 100, 110, 120]),
+        window: const Duration(hours: 1),
+      );
+
+      // The newest reading sits at the right edge; the others sit where their
+      // time puts them, not spread to fill the width.
+      expect(scale.xFor(scale.points.last, 200), 200);
+      // 5 minutes before the end of a 60-minute window: 55/60 of the way.
+      expect(scale.xFor(scale.points[2], 200), closeTo(200 * 55 / 60, 0.001));
+    });
+
+    test('readings from before the window are left out', () {
+      final readings = [
+        ...readingsEndingAt(newest, [100, 110, 120]),
+        GlucoseReading(sgv: 90, date: newest.subtract(const Duration(hours: 2))),
+      ];
+      final scale = GlucoseChartScale(readings, window: const Duration(hours: 1));
+
+      expect(scale.points.map((reading) => reading.sgv).toList(), [100, 110, 120]);
+    });
+
+    test('a gap in the history stays a gap on the axis', () {
+      // Two readings three hours apart in a six-hour window: the older one
+      // belongs at the halfway mark, however few readings there are.
+      final scale = GlucoseChartScale(
+        [
+          GlucoseReading(sgv: 120, date: newest),
+          GlucoseReading(sgv: 100, date: newest.subtract(const Duration(hours: 3))),
+        ],
+        window: const Duration(hours: 6),
+      );
+
+      expect(scale.xFor(scale.points.first, 200), 100);
+      expect(scale.xFor(scale.points.last, 200), 200);
+    });
+  });
+
+  group('axis scale', () {
+    test('value gridlines are round numbers in the display units', () {
+      expect(glucoseAxisGridlines('mg/dL'), [100, 200, 300]);
+      // 4, 8, 12 and 16 mmol/L, carried as mg/dL like every other value.
+      expect(glucoseAxisGridlines('mmol/L'), [72, 144, 216, 288]);
+    });
+
+    test('axis labels read whole in either unit', () {
+      expect(glucoseAxisLabel(200, 'mg/dL'), '200');
+      expect(glucoseAxisLabel(144, 'mmol/L'), '8');
+    });
+
+    test('time labels thin out as the window grows', () {
+      expect(chartTimeTickInterval(const Duration(hours: 3)), const Duration(hours: 1));
+      expect(chartTimeTickInterval(const Duration(hours: 6)), const Duration(hours: 2));
+      expect(chartTimeTickInterval(const Duration(hours: 12)), const Duration(hours: 3));
+      expect(chartTimeTickInterval(const Duration(hours: 24)), const Duration(hours: 6));
+      expect(chartTimeTickInterval(const Duration(hours: 48)), const Duration(hours: 12));
+    });
+  });
+
   group('glucose readout', () {
     test('whole numbers for mg/dL', () {
       final reading = GlucoseReading(sgv: 120, date: newest);

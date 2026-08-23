@@ -64,6 +64,20 @@ void main() {
       expect(restored.items, LiveActivityItem.defaultItems);
     });
 
+    test('the chart span round-trips, and defaults to six hours', () {
+      expect(const DisplayPreferences().chartHours, 6);
+
+      const preferences = DisplayPreferences(chartHours: 24);
+      final restored = DisplayPreferences.fromJson(preferences.toJson());
+      expect(restored.chartHours, 24);
+    });
+
+    test('a chart span the picker never offered falls back to the default', () {
+      expect(DisplayPreferences.fromJson({'chart_hours': 7}).chartHours, 6);
+      expect(DisplayPreferences.fromJson({'chart_hours': 'lots'}).chartHours, 6);
+      expect(DisplayPreferences.fromJson({}).chartHours, 6);
+    });
+
     test('copyWith changes one choice and leaves the rest', () {
       const preferences = DisplayPreferences(lockScreenStyle: WidgetStyle.detailed);
       final updated = preferences.copyWith(watchStyle: WidgetStyle.detailed);

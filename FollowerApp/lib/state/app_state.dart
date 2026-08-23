@@ -14,6 +14,7 @@ import '../services/display_preferences_store.dart';
 import '../services/host_migration_service.dart';
 import '../services/pairing_store.dart';
 import '../services/push_service.dart';
+import '../services/reading_history_store.dart';
 import '../services/status_service.dart';
 import '../services/live_activity_bridge.dart';
 import '../services/sync_scheduler.dart';
@@ -38,6 +39,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Latest status received from the host device (the only data source).
   StatusSnapshot? snapshot;
+
+  /// Everything the host has pushed, folded into one rolling 48-hour window.
+  /// What the chart draws from: a single snapshot only carries a few hours,
+  /// and the longer chart durations show what this device has collected.
+  ReadingHistory readingHistory = ReadingHistory.empty;
 
   /// Whether this device can run Live Activities, and whether the user has left
   /// them switched on for the app in iOS Settings.
@@ -124,11 +130,25 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   GlucoseRanges get glucoseRanges =>
       displayPreferences.resolveRanges(snapshot?.glucoseRanges ?? GlucoseRanges.defaults);
 
+  /// The window the home screen chart spans.
+  Duration get chartDuration => Duration(hours: displayPreferences.chartHours);
+
+  /// Picks a chart span, remembering it with the other display choices.
+  Future<void> setChartHours(int hours) =>
+      setDisplayPreferences(displayPreferences.copyWith(chartHours: hours));
+
   Future<void> initialize() async {
     bundle = await _store.loadPairing();
     _rebuildServices();
     await _loadHistory();
     snapshot = await _statusService?.loadPersisted();
+    readingHistory = await ReadingHistoryStore.load();
+    // Folding the persisted snapshot in covers the first launch after an
+    // update from a build that kept no history: the chart starts with the
+    // snapshot's few hours rather than nothing.
+    if (snapshot != null) {
+      readingHistory = readingHistory.merge(snapshot!);
+    }
     liveActivitySupport = await LiveActivityBridge.support();
     liveActivityEnabled = await LiveActivityBridge.isEnabled();
     liveActivityRemoteUpdates = await LiveActivityBridge.remoteUpdatesEnabled();
@@ -194,6 +214,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await _store.savePairing(newBundle);
     bundle = newBundle;
     snapshot = null;
+    // A different host's readings have no business on this chart.
+    readingHistory = ReadingHistory.empty;
+    await ReadingHistoryStore.clear();
     await StatusService.clearPersisted();
     _rebuildServices();
     _scheduler.reset();
@@ -212,8 +235,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> unpair() async {
     await _store.clear();
     await StatusService.clearPersisted();
+    await ReadingHistoryStore.clear();
     bundle = null;
     snapshot = null;
+    readingHistory = ReadingHistory.empty;
     _rebuildServices();
     _scheduler.reset();
     _registeredLiveActivityToken = null;
@@ -402,6 +427,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final updated = await statusService.handleEncryptedStatus(encrypted, current: snapshot);
     if (updated != null) {
       snapshot = updated;
+      readingHistory = readingHistory.merge(updated);
+      await ReadingHistoryStore.save(readingHistory);
       // Keep the securely stored AI credentials current: the host may have
       // added, rotated or removed them since pairing.
       await _syncAiConfig(updated.ai);

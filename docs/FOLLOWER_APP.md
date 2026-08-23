@@ -241,6 +241,12 @@ Encrypted exactly like commands, with the same per-follower key:
 snapshots older than the one it already has (out-of-order pushes) and marks
 data stale in the UI when the newest snapshot is older than 15 minutes.
 
+The follower folds every snapshot it receives into a rolling 48-hour history
+of readings and treatments, kept on the device, and its home screen chart
+draws from that history at a chosen span (3, 6, 12, 24 or 48 hours). Hours
+where no push arrived stay visible as gaps; the history is cleared on
+unpairing or re-pairing.
+
 `boluses` and `carbs` cover the same window as `readings`, newest first, and
 are drawn on the follower's chart against the reading each happened nearest.
 Keys are short because they compete with glucose for the same 4 KB: `a` is

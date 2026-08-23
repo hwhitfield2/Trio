@@ -19,6 +19,7 @@ class DisplayPreferences {
     this.glucoseHigh,
     this.glucoseScheme = GlucoseSchemeChoice.followHost,
     this.items = LiveActivityItem.defaultItems,
+    this.chartHours = 6,
   });
 
   /// Lock Screen layout.
@@ -88,6 +89,13 @@ class DisplayPreferences {
 
   static const itemSlots = 4;
 
+  /// How many hours the home screen chart spans. Always one of
+  /// [chartHourChoices]; anything longer relies on the history this device has
+  /// collected, since a single snapshot never carries that much.
+  final int chartHours;
+
+  static const chartHourChoices = [3, 6, 12, 24, 48];
+
   /// [glucoseLow] and [glucoseHigh] are passed through as given — including
   /// null, which is a meaningful value here ("follow the host") rather than
   /// "leave it alone". [followHostRange] is how a caller says that for both at
@@ -101,6 +109,7 @@ class DisplayPreferences {
     bool followHostRange = false,
     GlucoseSchemeChoice? glucoseScheme,
     List<LiveActivityItem>? items,
+    int? chartHours,
   }) =>
       DisplayPreferences(
         lockScreenStyle: lockScreenStyle ?? this.lockScreenStyle,
@@ -110,6 +119,7 @@ class DisplayPreferences {
         glucoseHigh: followHostRange ? null : (glucoseHigh ?? this.glucoseHigh),
         glucoseScheme: glucoseScheme ?? this.glucoseScheme,
         items: items ?? this.items,
+        chartHours: chartHours ?? this.chartHours,
       );
 
   /// This device's own copy, in mg/dL like every other glucose value the app
@@ -122,6 +132,7 @@ class DisplayPreferences {
         'glucose_high': glucoseHigh,
         'glucose_scheme': glucoseScheme.id,
         'items': [for (final item in items) item.id],
+        'chart_hours': chartHours,
       };
 
   /// The copy the widget extension reads out of the shared app group.
@@ -155,7 +166,15 @@ class DisplayPreferences {
       glucoseHigh: _threshold(json['glucose_high']),
       glucoseScheme: GlucoseSchemeChoice.fromId(json['glucose_scheme'] as String?),
       items: items.isEmpty ? LiveActivityItem.defaultItems : items,
+      chartHours: _chartHours(json['chart_hours']),
     );
+  }
+
+  /// A stored chart span, or the default for anything the picker never offered.
+  static int _chartHours(Object? value) {
+    if (value is! num) return 6;
+    final hours = value.round();
+    return chartHourChoices.contains(hours) ? hours : 6;
   }
 
   /// A stored threshold, or null for anything that is not one this app could

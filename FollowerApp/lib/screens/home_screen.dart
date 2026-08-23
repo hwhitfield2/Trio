@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../models/display_preferences.dart';
 import '../models/status_snapshot.dart';
 import '../state/app_state.dart';
 import '../widgets/break_glass.dart';
@@ -250,11 +251,17 @@ class _StatusCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
+              const _ChartDurationPicker(),
+              const SizedBox(height: 8),
+              // Drawn from the rolling history rather than the snapshot: a
+              // snapshot only carries the last few hours, and the longer spans
+              // show everything this device has collected.
               GlucoseChart(
-                readings: snapshot.readings,
+                readings: state.readingHistory.readings,
+                duration: state.chartDuration,
                 units: state.units,
                 ranges: state.glucoseRanges,
-                treatments: snapshot.treatments,
+                treatments: state.readingHistory.treatments,
               ),
               if (snapshot.treatments.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -272,6 +279,35 @@ class _StatusCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// How far back the chart looks. The longer spans draw from the history this
+/// device has collected, so right after installing they only reach as far as
+/// the host has pushed since.
+class _ChartDurationPicker extends StatelessWidget {
+  const _ChartDurationPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final theme = Theme.of(context);
+
+    return SegmentedButton<int>(
+      segments: [
+        for (final hours in DisplayPreferences.chartHourChoices)
+          ButtonSegment(value: hours, label: Text('${hours}h')),
+      ],
+      selected: {state.displayPreferences.chartHours},
+      onSelectionChanged: (selection) => context.read<AppState>().setChartHours(selection.first),
+      showSelectedIcon: false,
+      // Five segments have to fit a phone-width card, so every point counts.
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        textStyle: WidgetStatePropertyAll(theme.textTheme.labelMedium),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 8)),
       ),
     );
   }
