@@ -88,7 +88,18 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   String? statusHint;
   List<CommandRecord> history = [];
 
+  /// A number to reach whoever is holding the host phone, as the follower
+  /// entered it.
+  ///
+  /// Kept here rather than taken from the pairing bundle because the host does
+  /// not know it: pairing carries push addresses and secrets, not a phone
+  /// number. It exists for exactly one moment — insulin is stopped and nobody
+  /// there has answered the alarm — when the useful thing this app can offer
+  /// is not another screen but a way to call.
+  String? hostContact;
+
   static const _historyKey = 'trio_follower.history';
+  static const _hostContactKey = 'trio_follower.host_contact';
 
   /// How often the app re-checks, while it is on screen, whether the status is
   /// still fresh. Also the cadence at which the "from host x min ago" label is
@@ -125,6 +136,32 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// plain storage have the credentials stripped, so they are not the source.
   AiConfig? get aiConfig => bundle?.ai;
 
+  /// The user asked for a Lock Screen and there is not one — dismissed, or
+  /// retired by the system after a few hours.
+  ///
+  /// Its own getter because the home screen has to know whether the notice
+  /// will draw anything *before* it lays the panels out: a panel that decides
+  /// for itself to render nothing still takes its gap of ground with it.
+  bool get liveActivityMissing =>
+      liveActivitySupport.available &&
+      liveActivityEnabled &&
+      !liveActivityRunning &&
+      snapshot?.latest != null;
+
+  /// Insulin on board as the screens write it, or null when the host has not
+  /// reported any. The command screens carry it in their title bar: a bolus
+  /// decided without knowing what is already working is a guess.
+  String? get iobLabel {
+    final iob = snapshot?.iob;
+    return iob == null ? null : '${iob.toStringAsFixed(2)} U';
+  }
+
+  /// Carbs on board, the same way.
+  String? get cobLabel {
+    final cob = snapshot?.cob;
+    return cob == null ? null : '${cob.toStringAsFixed(0)} g';
+  }
+
   /// What glucose is coloured by everywhere this app draws it: the host's
   /// ranges, with whatever this device chose to see instead.
   GlucoseRanges get glucoseRanges =>
@@ -141,6 +178,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     bundle = await _store.loadPairing();
     _rebuildServices();
     await _loadHistory();
+    await _loadHostContact();
     snapshot = await _statusService?.loadPersisted();
     readingHistory = await ReadingHistoryStore.load();
     // Folding the persisted snapshot in covers the first launch after an
@@ -239,6 +277,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     bundle = null;
     snapshot = null;
     readingHistory = ReadingHistory.empty;
+    // The number belonged to the host that was just unpaired; leaving it would
+    // offer to call a stranger from the next pairing's alarm banner.
+    await setHostContact(null);
     _rebuildServices();
     _scheduler.reset();
     _registeredLiveActivityToken = null;
@@ -694,6 +735,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     );
     _statusService = StatusService(currentBundle.secret);
     _hostMigrationService = HostMigrationService(currentBundle.secret);
+  }
+
+  /// Stores (or clears) the number the suspension banner offers to call.
+  Future<void> setHostContact(String? number) async {
+    final trimmed = number?.trim();
+    hostContact = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (hostContact == null) {
+      await prefs.remove(_hostContactKey);
+    } else {
+      await prefs.setString(_hostContactKey, hostContact!);
+    }
+  }
+
+  Future<void> _loadHostContact() async {
+    final prefs = await SharedPreferences.getInstance();
+    hostContact = prefs.getString(_hostContactKey);
   }
 
   Future<void> _loadHistory() async {

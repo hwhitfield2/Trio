@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/pair_screen.dart';
 import 'state/app_state.dart';
+import 'theme/trio_design.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,16 +21,17 @@ class TrioFollowerApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Trio Follower',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B2A86)),
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF5B2A86),
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
+        theme: trioThemeData(TrioColors.light, Brightness.light),
+        darkTheme: trioThemeData(TrioColors.dark, Brightness.dark),
+        // The palette is carried separately from ThemeData because the design
+        // names more roles than a ColorScheme has — three inks, three rules,
+        // two kinds of danger — and flattening them into the nearest Material
+        // slot is how a design system turns back into guesswork.
+        builder: (context, child) => TrioTheme(
+          colors: Theme.of(context).brightness == Brightness.dark
+              ? TrioColors.dark
+              : TrioColors.light,
+          child: child ?? const SizedBox.shrink(),
         ),
         home: const _Root(),
       ),
@@ -42,9 +44,22 @@ class _Root extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = TrioTheme.of(context);
     final state = context.watch<AppState>();
     if (!state.initialized) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: colors.ground,
+        body: Center(
+          child: SizedBox(
+            width: 120,
+            height: 2,
+            child: LinearProgressIndicator(
+              color: colors.accent,
+              backgroundColor: colors.hairline,
+            ),
+          ),
+        ),
+      );
     }
     return state.isPaired ? const HomeScreen() : const PairScreen();
   }

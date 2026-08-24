@@ -238,6 +238,54 @@ class TrioCommand {
         return commandType;
     }
   }
+
+  /// What this command *is*, with no numbers in it.
+  ///
+  /// The confirmation sheet sets the action and the amount in separate rows —
+  /// the amount in mono, at a size that can be read across a room — so it
+  /// needs the two halves apart rather than the one sentence [describe] makes
+  /// of them.
+  String get actionLabel {
+    switch (commandType) {
+      case 'bolus':
+        return 'Bolus';
+      case 'meal':
+        return 'Meal';
+      case 'temp_target':
+        return 'Temp target';
+      case 'cancel_temp_target':
+        return 'Cancel temp target';
+      case 'start_override':
+        return 'Override';
+      case 'cancel_override':
+        return 'Cancel override';
+      case 'suspend_insulin':
+        return 'Suspend all insulin';
+      default:
+        return describe();
+    }
+  }
+
+  /// The quantity this command carries, or null when it has none — a
+  /// cancellation is entirely described by its action.
+  String? get amountLabel {
+    switch (commandType) {
+      case 'bolus':
+        return '${bolusAmount?.toStringAsFixed(2) ?? '—'} U';
+      case 'meal':
+        final parts = <String>['$carbs g'];
+        if (fat != null && fat! > 0) parts.add('${fat}F');
+        if (protein != null && protein! > 0) parts.add('${protein}P');
+        if (bolusAmount != null) parts.add('${bolusAmount!.toStringAsFixed(2)} U');
+        return parts.join(' · ');
+      case 'temp_target':
+        return '$target for $duration m';
+      case 'start_override':
+        return overrideName;
+      default:
+        return null;
+    }
+  }
 }
 
 /// Result of one command submission, kept in the local history list.

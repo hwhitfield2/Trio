@@ -27,6 +27,8 @@ class StatusSnapshot {
     this.suspendedAt,
     this.suspendAcknowledged = false,
     this.ai,
+    this.overridePresets = const [],
+    this.tempTargetPresets = const [],
   });
 
   final DateTime timestamp;
@@ -106,6 +108,19 @@ class StatusSnapshot {
   /// — the same precedence rule as the limits.
   final AiConfig? ai;
 
+  /// The override presets defined on the host, as it reports them.
+  ///
+  /// A follower cannot invent an override: the host rejects any name it does
+  /// not know, so the only honest thing to offer is the list the host actually
+  /// has. Empty on hosts that predate reporting them, and the override screen
+  /// falls back to asking for a name by hand in that case.
+  final List<OverridePreset> overridePresets;
+
+  /// The temp target presets defined on the host. Unlike overrides, a temp
+  /// target is just a number and a duration, so these are a convenience rather
+  /// than the only way in — the screen always allows a target to be dialled.
+  final List<TempTargetPreset> tempTargetPresets;
+
   GlucoseReading? get latest => readings.isEmpty ? null : readings.first;
 
   int? get delta {
@@ -164,8 +179,91 @@ class StatusSnapshot {
           : null,
       suspendAcknowledged: json['suspend_acknowledged'] == true,
       ai: AiConfig.fromJson(json['ai']),
+      overridePresets: OverridePreset.listFrom(json['override_presets']),
+      tempTargetPresets: TempTargetPreset.listFrom(json['temp_target_presets']),
     );
   }
+}
+
+/// An override the host has defined, addressed by name.
+///
+/// Wire keys are short for the same reason the treatments' are: the whole
+/// snapshot has an APNS payload to fit inside. Keep in sync with the host's
+/// `FollowerStatusSnapshot`.
+class OverridePreset {
+  const OverridePreset({
+    required this.name,
+    this.percentage,
+    this.targetMgdl,
+    this.durationMinutes,
+  });
+
+  final String name;
+
+  /// Basal rate as a percentage of the usual one, when the host reports it.
+  final double? percentage;
+
+  /// The target the override holds, in mg/dL.
+  final double? targetMgdl;
+
+  /// How long it runs. Null or zero means indefinitely.
+  final int? durationMinutes;
+
+  static List<OverridePreset> listFrom(Object? json) {
+    if (json is! List) return const [];
+    return [
+      for (final entry in json)
+        if (entry is Map<String, dynamic>)
+          if (entry['n'] case final String name when name.isNotEmpty)
+            OverridePreset(
+              name: name,
+              percentage: _positive(entry['p']),
+              targetMgdl: _positive(entry['t']),
+              durationMinutes: _positive(entry['d'])?.round(),
+            ),
+    ];
+  }
+}
+
+/// A temp target the host has defined: a value and how long to hold it.
+class TempTargetPreset {
+  const TempTargetPreset({
+    required this.name,
+    required this.targetMgdl,
+    required this.durationMinutes,
+  });
+
+  final String name;
+
+  /// mg/dL, like every other glucose value on the wire.
+  final double targetMgdl;
+  final int durationMinutes;
+
+  static List<TempTargetPreset> listFrom(Object? json) {
+    if (json is! List) return const [];
+    return [
+      for (final entry in json)
+        if (entry is Map<String, dynamic>)
+          if (entry['n'] case final String name when name.isNotEmpty)
+            if (_positive(entry['t']) case final target?)
+              if (_positive(entry['d']) case final duration?)
+                TempTargetPreset(
+                  name: name,
+                  targetMgdl: target,
+                  durationMinutes: duration.round(),
+                ),
+    ];
+  }
+}
+
+/// A finite number greater than zero, or null. Shared by both preset kinds:
+/// a preset of no duration or a target of zero is not one, and drawing it
+/// would be a lie about what the host would do.
+double? _positive(Object? value) {
+  if (value is! num) return null;
+  final number = value.toDouble();
+  if (!number.isFinite || number <= 0) return null;
+  return number;
 }
 
 /// Something the host did that a follower can see on the chart.

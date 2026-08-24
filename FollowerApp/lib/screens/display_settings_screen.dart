@@ -4,368 +4,632 @@ import 'package:provider/provider.dart';
 import '../models/display_preferences.dart';
 import '../models/glucose_ranges.dart';
 import '../state/app_state.dart';
+import '../theme/trio_design.dart';
+import '../widgets/glucose_colors.dart';
+import '../widgets/trio_controls.dart';
 
-/// Layout choices for the Live Activity and the home screen widgets, mirroring
-/// Trio's own Live Activity settings.
+/// Layout, colour and range for the Live Activity and the home screen widgets.
 ///
-/// Unlike Trio's, these are stored on this device and read by the widget
-/// extension directly — the host builds Live Activity content when it pushes an
-/// update, and has no idea how this follower likes to see it.
+/// Unlike Trio's own version of this screen, these are stored on this device
+/// and read by the widget extension directly — the host builds Live Activity
+/// content when it pushes an update, and has no idea how this follower likes
+/// to see it. Which is also why the preview sits at the top: nothing else on
+/// this device shows the surface being configured.
 class DisplaySettingsScreen extends StatelessWidget {
   const DisplaySettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final colors = TrioTheme.of(context);
     final state = context.watch<AppState>();
     final preferences = state.displayPreferences;
-    final theme = Theme.of(context);
     // What the host currently reports, so the numbers here can be compared
     // with the ones they are overriding rather than guessed at.
     final hostRanges = state.snapshot?.glucoseRanges ?? GlucoseRanges.defaults;
+    final mmol = state.units == 'mmol/L';
+
+    String format(double mgdl) =>
+        mmol ? (mgdl / 18.0).toStringAsFixed(1) : mgdl.round().toString();
 
     void update(DisplayPreferences updated) {
       context.read<AppState>().setDisplayPreferences(updated);
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Live Activity & widgets')),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          _StylePicker(
-            title: 'Lock Screen style',
-            value: preferences.lockScreenStyle,
-            onChanged: (style) => update(preferences.copyWith(lockScreenStyle: style)),
-          ),
-          const Divider(),
-          _StylePicker(
-            title: 'Watch & CarPlay style',
-            subtitle: 'How the Live Activity looks in the Apple Watch Smart Stack and on '
-                'the CarPlay dashboard. Needs iOS 18 or later.',
-            value: preferences.watchStyle,
-            onChanged: (style) => update(preferences.copyWith(watchStyle: style)),
-          ),
-          const Divider(),
-          _Choice<GlucoseColorScheme>(
-            title: 'Glucose colour',
-            values: GlucoseColorScheme.values,
-            value: preferences.glucoseColorScheme,
-            labelFor: (scheme) => scheme.label,
-            descriptionFor: (scheme) => scheme.description,
-            onChanged: (scheme) => update(preferences.copyWith(glucoseColorScheme: scheme)),
-          ),
-          const Divider(),
-          _Choice<GlucoseSchemeChoice>(
-            title: 'Colour scheme',
-            subtitle: 'Which colouring to use. The host reports '
-                '${hostRanges.isDynamic ? 'dynamic' : 'static'} with its latest '
-                'status; this is where you disagree with it.',
-            values: GlucoseSchemeChoice.values,
-            value: preferences.glucoseScheme,
-            labelFor: (scheme) => scheme.label,
-            descriptionFor: (scheme) => scheme.description,
-            onChanged: (scheme) => update(preferences.copyWith(glucoseScheme: scheme)),
-          ),
-          const Divider(),
-          _RangePicker(
-            preferences: preferences,
-            hostRanges: hostRanges,
-            units: state.units,
-            onChanged: update,
-          ),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Text('Detailed layout', style: theme.textTheme.titleMedium),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Text(
-              'The four values shown beneath the chart, left to right. Only the '
-              'detailed styles above use them; the medium home screen widget '
-              'follows them too.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          for (var slot = 0; slot < DisplayPreferences.itemSlots; slot++)
-            _ItemPicker(
-              slot: slot,
-              value: slot < preferences.items.length
-                  ? preferences.items[slot]
-                  : LiveActivityItem.empty,
-              onChanged: (item) {
-                final items = [
-                  for (var index = 0; index < DisplayPreferences.itemSlots; index++)
-                    index < preferences.items.length
-                        ? preferences.items[index]
-                        : LiveActivityItem.empty,
-                ];
-                items[slot] = item;
-                update(preferences.copyWith(items: items));
-              },
-            ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-}
-
-/// The range glucose is coloured against: the host's, or this device's own.
-///
-/// Two sliders rather than typed numbers: the value only has to be roughly
-/// where the watcher wants it, and a keyboard over a dashboard is a poor
-/// trade. Steps are whole mg/dL, which is 0.1 mmol/L to the nearest tenth.
-class _RangePicker extends StatelessWidget {
-  const _RangePicker({
-    required this.preferences,
-    required this.hostRanges,
-    required this.units,
-    required this.onChanged,
-  });
-
-  final DisplayPreferences preferences;
-
-  /// What the host says, shown when following it and used as the starting
-  /// point when someone stops.
-  final GlucoseRanges hostRanges;
-  final String units;
-  final ValueChanged<DisplayPreferences> onChanged;
-
-  bool get _mmol => units == 'mmol/L';
-
-  String _format(double mgdl) =>
-      _mmol ? (mgdl / 18.0).toStringAsFixed(1) : mgdl.round().toString();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final following = preferences.glucoseLow == null && preferences.glucoseHigh == null;
+    final following = preferences.followsHostRange;
     final low = preferences.glucoseLow ?? hostRanges.low;
     final high = preferences.glucoseHigh ?? hostRanges.high;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return TrioScreen(
+      title: 'Layout, colour & range',
+      child: TrioPanelList(
         children: [
-          Text('Glucose range', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'The range everything on this device is coloured against — the chart, '
-            'the widgets and the Lock Screen. It changes nothing on the host, and '
-            'nothing about when you are alerted.',
-            style: theme.textTheme.bodySmall,
+          const _LockScreenPreview(),
+          TrioPanel(
+            child: Column(
+              children: [
+                const TrioSectionHeader(label: 'Layout'),
+                _SegmentedField<WidgetStyle>(
+                  label: 'Lock Screen',
+                  selected: preferences.lockScreenStyle,
+                  segments: [
+                    for (final style in WidgetStyle.values) (style, style.label),
+                  ],
+                  onChanged: (style) =>
+                      update(preferences.copyWith(lockScreenStyle: style)),
+                  divider: true,
+                ),
+                _SegmentedField<WidgetStyle>(
+                  label: 'Watch & CarPlay',
+                  caption: 'iOS 18+',
+                  selected: preferences.watchStyle,
+                  segments: [
+                    for (final style in WidgetStyle.values) (style, style.label),
+                  ],
+                  onChanged: (style) => update(preferences.copyWith(watchStyle: style)),
+                  divider: false,
+                ),
+              ],
+            ),
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text("Use the host's range"),
-            subtitle: Text(
-              '${_format(hostRanges.low)} – ${_format(hostRanges.high)} $units, '
-              'as the host reports it',
-            ),
-            value: following,
-            onChanged: (value) => onChanged(
-              value
-                  ? preferences.copyWith(followHostRange: true)
-                  // Starting from the host's numbers rather than from a guess:
-                  // whoever turns this off wants to adjust what they can see,
-                  // not to start over.
-                  : preferences.copyWith(glucoseLow: low, glucoseHigh: high),
+          TrioPanel(
+            child: Column(
+              children: [
+                const TrioSectionHeader(label: 'Colour'),
+                _SegmentedField<GlucoseSchemeChoice>(
+                  label: 'Scheme',
+                  selected: preferences.glucoseScheme,
+                  segments: [
+                    for (final scheme in GlucoseSchemeChoice.values)
+                      (scheme, scheme.label),
+                  ],
+                  onChanged: (scheme) =>
+                      update(preferences.copyWith(glucoseScheme: scheme)),
+                  divider: true,
+                  footer: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Row(
+                      children: [
+                        Text(
+                          'HOST REPORTS',
+                          style: TrioType.micro(
+                            color: colors.inkFaint,
+                            size: 10,
+                            weight: FontWeight.w400,
+                            tracking: 0.1,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          hostRanges.isDynamic ? 'DYNAMIC' : 'STATIC',
+                          style: TrioType.micro(
+                            color: colors.ink,
+                            size: 10,
+                            tracking: 0.1,
+                          ),
+                        ),
+                        const Spacer(),
+                        // The three colours the chosen scheme would actually
+                        // paint, at this host's own bounds: a legend that is
+                        // read off the same code that draws the chart.
+                        for (final sgv in [
+                          hostRanges.low - 10,
+                          (hostRanges.low + hostRanges.high) / 2,
+                          hostRanges.high + 10,
+                        ])
+                          Padding(
+                            padding: const EdgeInsets.only(left: 3),
+                            child: Container(
+                              width: 16,
+                              height: 8,
+                              color: glucoseColorFor(
+                                sgv,
+                                preferences.resolveRanges(hostRanges),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                _SegmentedField<GlucoseColorScheme>(
+                  label: 'Widget glucose',
+                  caption: preferences.glucoseColorScheme.label,
+                  selected: preferences.glucoseColorScheme,
+                  segments: [
+                    for (final scheme in GlucoseColorScheme.values)
+                      (scheme, scheme == GlucoseColorScheme.dynamicColor
+                          ? 'By range'
+                          : 'One colour'),
+                  ],
+                  onChanged: (scheme) =>
+                      update(preferences.copyWith(glucoseColorScheme: scheme)),
+                  divider: true,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    TrioMetrics.inset,
+                    14,
+                    TrioMetrics.inset,
+                    14,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Follow the host's range",
+                                  style: TrioType.label(color: colors.ink),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  following
+                                      ? '${format(hostRanges.low)} – ${format(hostRanges.high)} '
+                                          '${state.units.toUpperCase()}, AS REPORTED'
+                                      : 'OVERRIDDEN ON THIS DEVICE',
+                                  style: TrioType.micro(
+                                    color: colors.inkFaint,
+                                    size: 10,
+                                    weight: FontWeight.w400,
+                                    tracking: 0.08,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          TrioToggle(
+                            value: following,
+                            label: "Follow the host's range",
+                            onChanged: (value) => update(
+                              value
+                                  ? preferences.copyWith(followHostRange: true)
+                                  // Starting from the host's numbers rather
+                                  // than from a guess: whoever turns this off
+                                  // wants to adjust what they can see, not to
+                                  // start over.
+                                  : preferences.copyWith(
+                                      glucoseLow: low,
+                                      glucoseHigh: high,
+                                      glucoseScheme: preferences.glucoseScheme,
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (!following) ...[
+                        const SizedBox(height: 12),
+                        _ThresholdRow(
+                          label: 'Low',
+                          display: format(low),
+                          units: state.units,
+                          onChanged: (delta) => update(
+                            preferences.copyWith(
+                              glucoseLow: (low + delta).clamp(
+                                DisplayPreferences.thresholdFloor,
+                                // Never at or above the high: a range that
+                                // crosses itself would colour every reading at
+                                // once.
+                                high - 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                        _ThresholdRow(
+                          label: 'High',
+                          display: format(high),
+                          units: state.units,
+                          divider: false,
+                          onChanged: (delta) => update(
+                            preferences.copyWith(
+                              glucoseHigh: (high + delta).clamp(
+                                low + 1,
+                                DisplayPreferences.thresholdCeiling,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'Overriding it changes nothing on the host and nothing about '
+                        'when you are alerted — it only decides what this device '
+                        'calls trouble.',
+                        style: TrioType.body(color: colors.inkMuted, size: 12.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          if (!following) ...[
-            _ThresholdSlider(
-              label: 'Low',
-              value: low,
-              min: DisplayPreferences.thresholdFloor,
-              // Never above the high: a range that crosses itself would colour
-              // every reading at once.
-              max: high - 1,
-              format: _format,
-              units: units,
-              onChanged: (value) => onChanged(preferences.copyWith(glucoseLow: value)),
+          TrioPanel(
+            child: Column(
+              children: [
+                const TrioSectionHeader(label: 'Detailed layout · four slots'),
+                for (var slot = 0; slot < DisplayPreferences.itemSlots; slot++)
+                  _SlotRow(
+                    slot: slot,
+                    value: slot < preferences.items.length
+                        ? preferences.items[slot]
+                        : LiveActivityItem.empty,
+                    divider: slot != DisplayPreferences.itemSlots - 1,
+                    onChanged: (item) {
+                      final items = [
+                        for (var index = 0;
+                            index < DisplayPreferences.itemSlots;
+                            index++)
+                          index < preferences.items.length
+                              ? preferences.items[index]
+                              : LiveActivityItem.empty,
+                      ];
+                      items[slot] = item;
+                      update(preferences.copyWith(items: items));
+                    },
+                  ),
+              ],
             ),
-            _ThresholdSlider(
-              label: 'High',
-              value: high,
-              min: low + 1,
-              max: DisplayPreferences.thresholdCeiling,
-              format: _format,
-              units: units,
-              onChanged: (value) => onChanged(preferences.copyWith(glucoseHigh: value)),
-            ),
-          ],
+          ),
+          const TrioNote(
+            text: 'These four are what the detailed layouts show beneath the chart, '
+                'left to right. The medium home screen widget follows them too.',
+          ),
         ],
       ),
     );
   }
 }
 
-class _ThresholdSlider extends StatelessWidget {
-  const _ThresholdSlider({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.format,
-    required this.units,
-    required this.onChanged,
-  });
-
-  final String label;
-  final double value;
-  final double min;
-  final double max;
-  final String Function(double) format;
-  final String units;
-  final ValueChanged<double> onChanged;
+/// The Lock Screen as it would look, on the dark it would look it against.
+class _LockScreenPreview extends StatelessWidget {
+  const _LockScreenPreview();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    // A value already outside its bounds — a range narrowed from the other end
-    // — would assert inside Slider rather than simply draw at the edge.
-    final clamped = value.clamp(min, max).toDouble();
+    final state = context.watch<AppState>();
+    final snapshot = state.snapshot;
+    final latest = snapshot?.latest;
+    final mmol = state.units == 'mmol/L';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: theme.textTheme.bodyMedium),
-            Text('${format(clamped)} $units', style: theme.textTheme.titleSmall),
-          ],
-        ),
-        Slider(
-          value: clamped,
-          min: min,
-          max: max,
-          divisions: (max - min).round().clamp(1, 400),
-          label: format(clamped),
-          onChanged: (selected) => onChanged(selected.roundToDouble()),
-        ),
-      ],
+    String glucose(num mgdl) =>
+        mmol ? (mgdl / 18.0).toStringAsFixed(1) : mgdl.round().toString();
+
+    // Fallbacks so the preview is a preview even before the first push. Chosen
+    // to be obviously in range, so nothing here reads as a live alarm.
+    final value = latest == null ? glucose(142) : glucose(latest.sgv);
+    final arrow = latest?.trendArrow ?? '→';
+    final iob = snapshot?.iob?.toStringAsFixed(2) ?? '1.45';
+    final cob = snapshot?.cob?.toStringAsFixed(0) ?? '18';
+    final tint = glucoseColorFor(
+      (latest?.sgv ?? 142).toDouble(),
+      state.glucoseRanges,
+    );
+
+    return TrioPanel(
+      color: const Color(0xFF16151A),
+      padding: const EdgeInsets.all(TrioMetrics.inset),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'PREVIEW · LOCK SCREEN',
+            style: TrioType.micro(color: const Color(0xFF86828E)),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.10),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: const BoxDecoration(
+                        color: TrioColors.inRange,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'TRIO FOLLOWER · ${(state.bundle?.hostName ?? 'TRIO').toUpperCase()}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TrioType.micro(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          size: 8.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      value,
+                      style: TrioType.numeral(
+                        size: 42,
+                        color: tint,
+                        tracking: -0.05,
+                        height: 0.86,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text(
+                        arrow,
+                        style: const TextStyle(
+                          fontFamily: TrioType.sans,
+                          fontSize: 19,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    _PreviewStat(caption: 'IOB', value: iob),
+                    const SizedBox(width: 14),
+                    _PreviewStat(caption: 'COB', value: cob),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _StylePicker extends StatelessWidget {
-  const _StylePicker({
-    required this.title,
-    required this.value,
-    required this.onChanged,
-    this.subtitle,
-  });
+class _PreviewStat extends StatelessWidget {
+  const _PreviewStat({required this.caption, required this.value});
 
-  final String title;
-  final String? subtitle;
-  final WidgetStyle value;
-  final ValueChanged<WidgetStyle> onChanged;
+  final String caption;
+  final String value;
 
   @override
-  Widget build(BuildContext context) => _Choice<WidgetStyle>(
-        title: title,
-        subtitle: subtitle,
-        values: WidgetStyle.values,
-        value: value,
-        labelFor: (style) => style.label,
-        descriptionFor: (style) => style.description,
-        onChanged: onChanged,
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              caption,
+              style: TrioType.micro(
+                color: Colors.white.withValues(alpha: 0.6),
+                size: 8,
+                weight: FontWeight.w400,
+                tracking: 0.14,
+              ),
+            ),
+            Text(value, style: TrioType.numeral(size: 13, color: Colors.white)),
+          ],
+        ),
       );
 }
 
-/// A titled row of mutually exclusive options, with the chosen one explained
-/// underneath.
-///
-/// A segmented control rather than a list of radios: the replacement for the
-/// deprecated `RadioListTile` API needs a newer Flutter than this app declares
-/// support for, and two options read better side by side anyway.
-class _Choice<T> extends StatelessWidget {
-  const _Choice({
-    required this.title,
-    required this.values,
-    required this.value,
-    required this.labelFor,
-    required this.descriptionFor,
+/// A named choice made with a segmented control.
+class _SegmentedField<T> extends StatelessWidget {
+  const _SegmentedField({
+    required this.label,
+    required this.selected,
+    required this.segments,
     required this.onChanged,
-    this.subtitle,
+    required this.divider,
+    this.caption,
+    this.footer,
   });
 
-  final String title;
-  final String? subtitle;
-  final List<T> values;
-  final T value;
-  final String Function(T) labelFor;
-  final String Function(T) descriptionFor;
+  final String label;
+  final T selected;
+  final List<(T, String)> segments;
   final ValueChanged<T> onChanged;
+  final bool divider;
+  final String? caption;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = TrioTheme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    return Container(
+      decoration: divider
+          ? BoxDecoration(border: Border(bottom: BorderSide(color: colors.hairlineSoft)))
+          : null,
+      padding: const EdgeInsets.symmetric(horizontal: TrioMetrics.inset, vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: theme.textTheme.titleMedium),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(subtitle!, style: theme.textTheme.bodySmall),
-          ],
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<T>(
-              segments: [
-                for (final option in values)
-                  ButtonSegment<T>(value: option, label: Text(labelFor(option))),
-              ],
-              selected: {value},
-              showSelectedIcon: false,
-              onSelectionChanged: (selection) {
-                if (selection.isNotEmpty) onChanged(selection.first);
-              },
-            ),
+          Row(
+            children: [
+              Expanded(child: Text(label, style: TrioType.label(color: colors.ink))),
+              if (caption != null)
+                Text(
+                  caption!.toUpperCase(),
+                  style: TrioType.micro(
+                    color: colors.inkFaint,
+                    size: 9.5,
+                    weight: FontWeight.w400,
+                    tracking: 0.1,
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(descriptionFor(value), style: theme.textTheme.bodySmall),
+          const SizedBox(height: 8),
+          TrioSegmented<T>(
+            selected: selected,
+            segments: segments,
+            onChanged: onChanged,
+          ),
+          if (footer != null) footer!,
         ],
       ),
     );
   }
 }
 
-class _ItemPicker extends StatelessWidget {
-  const _ItemPicker({
+/// One end of this device's own glucose range.
+class _ThresholdRow extends StatelessWidget {
+  const _ThresholdRow({
+    required this.label,
+    required this.display,
+    required this.units,
+    required this.onChanged,
+    this.divider = true,
+  });
+
+  final String label;
+  final String display;
+  final String units;
+
+  /// Called with the change in mg/dL, which is what everything is stored in.
+  final ValueChanged<double> onChanged;
+  final bool divider;
+
+  /// Whole mg/dL is finer than anyone needs; five is one step of the slider
+  /// this replaced, and 0.3 mmol/L on a host that displays those.
+  static const _step = 5.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = TrioTheme.of(context);
+
+    return Container(
+      height: 48,
+      decoration: divider
+          ? BoxDecoration(border: Border(bottom: BorderSide(color: colors.hairlineSoft)))
+          : null,
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TrioType.label(color: colors.ink, size: 14))),
+          Text(
+            '$display ${units.toUpperCase()}',
+            style: TrioType.numeral(size: 14, color: colors.ink),
+          ),
+          const SizedBox(width: 14),
+          _NudgeButton(
+            icon: Icons.remove,
+            label: 'Lower the $label threshold',
+            onPressed: () => onChanged(-_step),
+          ),
+          const SizedBox(width: 6),
+          _NudgeButton(
+            icon: Icons.add,
+            label: 'Raise the $label threshold',
+            onPressed: () => onChanged(_step),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NudgeButton extends StatelessWidget {
+  const _NudgeButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = TrioTheme.of(context);
+
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(border: Border.all(color: colors.hairline)),
+          child: Icon(icon, size: 17, color: colors.ink),
+        ),
+      ),
+    );
+  }
+}
+
+/// One of the four values a detailed layout shows beneath its chart.
+class _SlotRow extends StatelessWidget {
+  const _SlotRow({
     required this.slot,
     required this.value,
+    required this.divider,
     required this.onChanged,
   });
 
   final int slot;
   final LiveActivityItem value;
+  final bool divider;
   final ValueChanged<LiveActivityItem> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: CircleAvatar(
-        radius: 14,
-        child: Text('${slot + 1}', style: const TextStyle(fontSize: 13)),
-      ),
-      title: DropdownButton<LiveActivityItem>(
-        value: value,
-        isExpanded: true,
-        underline: const SizedBox.shrink(),
-        onChanged: (selected) {
-          if (selected != null) onChanged(selected);
-        },
-        items: [
-          for (final item in LiveActivityItem.values)
-            DropdownMenuItem(value: item, child: Text(item.label)),
+    final colors = TrioTheme.of(context);
+
+    return Container(
+      height: TrioMetrics.rowHeight,
+      decoration: divider
+          ? BoxDecoration(border: Border(bottom: BorderSide(color: colors.hairlineSoft)))
+          : null,
+      padding: const EdgeInsets.symmetric(horizontal: TrioMetrics.inset),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 16,
+            child: Text(
+              '${slot + 1}',
+              style: TrioType.numeral(
+                size: 11,
+                weight: FontWeight.w600,
+                color: colors.inkFaint,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<LiveActivityItem>(
+                value: value,
+                isExpanded: true,
+                isDense: true,
+                borderRadius: TrioMetrics.radius,
+                dropdownColor: colors.panel,
+                icon: Icon(Icons.unfold_more, size: 20, color: colors.inkFaint),
+                style: TrioType.label(color: colors.ink),
+                items: [
+                  for (final item in LiveActivityItem.values)
+                    DropdownMenuItem(
+                      value: item,
+                      child: Text(item.label, style: TrioType.label(color: colors.ink)),
+                    ),
+                ],
+                onChanged: (item) {
+                  if (item != null) onChanged(item);
+                },
+              ),
+            ),
+          ),
         ],
       ),
     );

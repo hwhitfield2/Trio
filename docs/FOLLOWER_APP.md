@@ -233,6 +233,8 @@ Encrypted exactly like commands, with the same per-follower key:
   "ranges": { "low": 70, "high": 180, "target": 100, "scheme": "staticColor" },
   "boluses": [ {"a": 1.25, "t": 1723399600, "s": true}, ... ],
   "carbs": [ {"g": 30, "t": 1723399100}, ... ],
+  "override_presets": [ {"n": "Sports", "p": 70, "t": 140, "d": 120}, ... ],
+  "temp_target_presets": [ {"n": "Exercise", "t": 140, "d": 120}, ... ],
   "ai": { "api_key": "sk-ant-…", "model": "claude-sonnet-5" }
 }
 ```
@@ -266,6 +268,18 @@ so a pushed Lock Screen and a locally built one draw the same markers.
 above): present while the feature is configured on the host, absent when it
 is off, and always the version the follower should use. It costs ~150 bytes
 of the push budget and is not part of the trimming order.
+
+`override_presets` and `temp_target_presets` are the presets defined on the
+host. Short keys again, for the same reason: `n` is the name, `t` the target in
+mg/dL, `d` the duration in minutes, and `p` (overrides only) the basal
+percentage. They matter most for overrides, which the follower can only address
+*by name* — the host rejects a name it does not know — so without them the
+follower has nothing to offer but a text field and a guess. A host that sends
+neither array leaves the follower's override screen asking for a name by hand,
+which is what every host did before this existed; the temp target screen always
+allows a target to be dialled, so presets there are a convenience. Any preset
+without a name is dropped, as are targets and durations of zero, which no
+preset can really have.
 
 `low`/`high` are the glucose thresholds *this* follower is alerted on, and are
 substituted per follower. `ranges` is a different thing: how the host itself

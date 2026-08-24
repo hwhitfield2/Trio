@@ -10,6 +10,12 @@ therapy actions from anywhere:
 - **Temporary targets** (start and cancel)
 - **Overrides** (start and cancel presets defined on the host)
 
+Hosts that report their **override and temp target presets** turn the override
+screen into a list of exactly what that phone has — which matters, because an
+override can only be addressed by name and the host rejects a name it does not
+know. A host that reports none leaves the screen asking for a name by hand, the
+way every host worked before.
+
 It also shows live glucose, IOB, COB, loop state and active targets/overrides
 — **pushed end-to-end encrypted straight from the host device**. There is no
 Nightscout and no other third-party data service anywhere in the loop.
@@ -39,6 +45,38 @@ The same data is available on the **home screen**, on both platforms: an iOS
 widget (small, medium, and the three lock screen sizes) and an Android app
 widget. Both are redrawn whenever a status push arrives, including while the
 app is in the background — see [Home screen widgets](#home-screen-widgets).
+
+## The interface
+
+The app is laid out as an instrument panel rather than a stack of cards:
+full-bleed panels separated by hairlines, and every number — glucose, insulin,
+carbs, times, durations, verification codes — set in IBM Plex Mono with tabular
+figures, so a reading that changes never shifts the ones beside it and a glance
+lands in the same place every time. The fonts are bundled, not fetched: this is
+read on a lock screen in a corridor and on a phone with no signal.
+
+Trio's own glucose, insulin and carb colours are carried through unchanged. A
+reading is the same colour here as on the host's chart, so a follower comparing
+two screens never has to translate.
+
+The home screen is read top to bottom in the order the questions actually come:
+is anything wrong, what is the number, where is it heading, what is already on
+board, what has been given. Controls sit at the foot, out of the way of the
+reading — one **Send to host** button that opens every command in a single
+sheet, and, permanently beside it in a slot of its own shape, the emergency
+stop. An insulin stop that has to be found is not one.
+
+Every command leaves the app the same way: **press and hold** while a fill
+crosses the button, then Face ID (or the device's passcode). The hold is what
+makes the button its own confirmation, so an ordinary command takes one
+deliberate gesture rather than a tap and then a dialog — and a brush against
+the screen in a pocket sends nothing. Suspending insulin holds for three
+seconds, behind a sheet that spells out what stays stopped and for how long.
+
+Bolus, meal and temp target amounts are **dialled rather than typed**: a
+stepper cannot exceed the host's limit in the first place, and it works
+one-handed, in the dark, without a keyboard covering the amount about to be
+sent.
 
 ## How it works
 
@@ -120,6 +158,13 @@ by calling or going there, rather than trusting this to sort itself out.
 Each follower can be allowed or refused this individually, on the host, under
 Settings → Remote Control → tap a follower → **Allow Suspending Insulin**.
 Followers paired before this existed are allowed by default.
+
+While insulin is stopped and nobody on the host has answered the alarm, the
+banner offers to **call or message** whoever is holding that phone. The number
+is entered on this device (Settings → Pairing → *Number to call*) and kept only
+here: pairing carries push addresses and secrets, not a phone number, so the
+host has none to send. It exists for exactly that moment — the one where the
+useful thing this app can offer is not another screen.
 
 ### Versions and update notices
 
