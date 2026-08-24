@@ -27,6 +27,13 @@ The last few are also listed under the chart with their amount and time, and a
 bolus the loop gave itself is marked `auto`. A follower watching glucose climb
 should not have to guess whether anyone has already answered it.
 
+The chart spans 3, 6, 12, 24 or 48 hours. A status push only carries a few
+hours, so the longer spans are filled in by asking the host for the readings
+behind them — thinned to one per 15 minutes and sent as a short run of pushes.
+Until that arrives (or when the host is too old to answer), the chart says how
+much it has rather than drawing an empty stretch that could be mistaken for
+hours without readings.
+
 **Touch and hold the glucose chart** — or drag sideways across it — to read a
 single reading's value and time, and what was given or eaten at it; the
 readings are five minutes apart and the chart is small, so there is otherwise

@@ -495,11 +495,13 @@ class _ChartPanel extends StatelessWidget {
             ],
             onChanged: (hours) => context.read<AppState>().setChartHours(hours),
           ),
+          const _ChartCoverageNote(),
           Padding(
             padding: const EdgeInsets.fromLTRB(TrioMetrics.inset, 10, TrioMetrics.inset, 0),
             // Drawn from the rolling history rather than the snapshot: a
             // snapshot only carries the last few hours, and the longer spans
-            // show everything this device has collected.
+            // show everything this device has collected, plus whatever the
+            // host has been asked to fill in behind it.
             child: GlucoseChart(
               readings: state.readingHistory.readings,
               duration: state.chartDuration,
@@ -513,6 +515,59 @@ class _ChartPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Says so when the chosen span reaches further back than this device can
+/// draw.
+///
+/// A status push carries only a few hours, so a span the phone has not been
+/// collecting for is genuinely empty until the host fills it in. Without this
+/// line the chart just looks broken — and worse, a follower could read the
+/// empty stretch as hours with no readings rather than hours with no data.
+class _ChartCoverageNote extends StatelessWidget {
+  const _ChartCoverageNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = TrioTheme.of(context);
+    final state = context.watch<AppState>();
+    final span = Duration(hours: state.displayPreferences.chartHours);
+    final covered = state.readingHistory.coverage;
+    if (!state.backfilling && covered + const Duration(minutes: 10) >= span) {
+      return const SizedBox.shrink();
+    }
+
+    final label = state.backfilling
+        ? 'ASKING THE HOST FOR OLDER READINGS'
+        : 'COLLECTED ${_hours(covered)} OF ${state.displayPreferences.chartHours}H';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(TrioMetrics.inset, 8, TrioMetrics.inset, 0),
+      child: Row(
+        children: [
+          TrioTick(color: state.backfilling ? colors.accent : colors.hairline, height: 10),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: TrioType.micro(
+                color: colors.inkFaint,
+                size: 9.5,
+                weight: FontWeight.w500,
+                tracking: 0.12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A coverage of two and a half hours reads as "2H", not "2.5H": this is a
+  /// reassurance that data is accumulating, not a measurement.
+  static String _hours(Duration covered) =>
+      covered.inHours >= 1 ? '${covered.inHours}H' : '${covered.inMinutes}M';
 }
 
 /// What the host is running that this app can see — and, more to the point,

@@ -14,6 +14,7 @@ class TrioCommand {
     this.scheduledTime,
     this.note,
     this.absorptionHours,
+    this.historyHours,
     this.pushToken,
     this.pushTransport,
     this.pushBundleId,
@@ -45,6 +46,10 @@ class TrioCommand {
   /// AI-estimated carb absorption duration in hours. The host clamps it and
   /// spreads slow meals the way its own food search entries are spread.
   final double? absorptionHours;
+
+  /// How far back a history request reaches, in hours. The host clamps it to
+  /// what it is willing to send.
+  final int? historyHours;
 
   final String? pushToken;
   final String? pushTransport;
@@ -97,6 +102,15 @@ class TrioCommand {
 
   /// Asks the host to push a fresh status snapshot to this follower.
   factory TrioCommand.statusRequest() => TrioCommand._(commandType: 'status_request');
+
+  /// Asks the host for the readings behind the chart's longer spans.
+  ///
+  /// A status snapshot only carries the few hours that fit an APNS push, so
+  /// without this the 12, 24 and 48 hour spans can only ever show what this
+  /// device happened to be awake for. The host answers with a short run of
+  /// history pushes covering [hours].
+  factory TrioCommand.historyRequest({required int hours}) =>
+      TrioCommand._(commandType: 'history_request', historyHours: hours);
 
   /// Emergency stop: asks the host to suspend all insulin delivery.
   ///
@@ -157,6 +171,7 @@ class TrioCommand {
       if (scheduledTime != null) 'scheduled_time': scheduledTime,
       if (note != null) 'note': note,
       if (absorptionHours != null) 'absorption_hours': absorptionHours,
+      if (historyHours != null) 'hours': historyHours,
       if (pushToken != null) 'push_token': pushToken,
       if (pushTransport != null) 'push_transport': pushTransport,
       if (pushBundleId != null) 'push_bundle_id': pushBundleId,
@@ -180,6 +195,7 @@ class TrioCommand {
   bool get changesSomething {
     switch (commandType) {
       case 'status_request':
+      case 'history_request':
       case 'register_follower':
       case 'register_live_activity':
         return false;
@@ -226,6 +242,8 @@ class TrioCommand {
         return 'Cancel override';
       case 'status_request':
         return 'Status refresh';
+      case 'history_request':
+        return 'History for the last $historyHours h';
       case 'suspend_insulin':
         return 'Suspend all insulin delivery';
       case 'register_follower':

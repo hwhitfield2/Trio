@@ -110,6 +110,23 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool _observingLifecycle = false;
   bool _statusRequestInFlight = false;
 
+  /// When a history backfill was last asked for, and how many slices of the
+  /// answer are still outstanding.
+  ///
+  /// The request is throttled because a follower flicking between 12, 24 and
+  /// 48 hours would otherwise ask the host for the same readings three times
+  /// in as many seconds, and every answer is a push someone else's phone has
+  /// to send.
+  DateTime? _historyRequestedAt;
+  int _historySlicesOutstanding = 0;
+
+  static const _historyThrottle = Duration(minutes: 5);
+
+  /// Whether a backfill is in flight, for the line under the chart's span
+  /// picker. A span the device cannot fill yet should say so rather than draw
+  /// an empty chart and let the user conclude the app is broken.
+  bool get backfilling => _historySlicesOutstanding > 0;
+
   /// Last Live Activity token the host acknowledged, so a token that has not
   /// changed is not re-sent on every activity update.
   String? _registeredLiveActivityToken;
@@ -170,9 +187,50 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// The window the home screen chart spans.
   Duration get chartDuration => Duration(hours: displayPreferences.chartHours);
 
-  /// Picks a chart span, remembering it with the other display choices.
-  Future<void> setChartHours(int hours) =>
-      setDisplayPreferences(displayPreferences.copyWith(chartHours: hours));
+  /// Picks a chart span, remembering it with the other display choices — and
+  /// asks the host to fill it in when this device has not collected that far
+  /// back itself.
+  Future<void> setChartHours(int hours) async {
+    await setDisplayPreferences(displayPreferences.copyWith(chartHours: hours));
+    await requestHistoryIfNeeded();
+  }
+
+  /// Asks the host for the readings the chosen span needs and this device does
+  /// not have.
+  ///
+  /// A status snapshot carries only the few hours that fit an APNS push, so
+  /// the longer spans are otherwise limited to whatever this phone happened to
+  /// be awake for — and a re-pair, which clears the history, empties them
+  /// outright. No-op when the span is already covered.
+  Future<void> requestHistoryIfNeeded({bool force = false}) async {
+    if (!isPaired) return;
+    final wanted = Duration(hours: displayPreferences.chartHours);
+    // A little slack: readings are five minutes apart and the newest is
+    // seconds old, so a window is never covered to the exact second.
+    if (!force && readingHistory.coverage + const Duration(minutes: 10) >= wanted) return;
+
+    final now = DateTime.now();
+    final lastAsked = _historyRequestedAt;
+    if (!force && lastAsked != null && now.difference(lastAsked) < _historyThrottle) return;
+    _historyRequestedAt = now;
+
+    final record = await sendCommand(
+      TrioCommand.historyRequest(hours: displayPreferences.chartHours),
+    );
+    if (record == null) return;
+    if (!record.accepted) {
+      // Let the next span change try again rather than sitting out the
+      // throttle on a request that never reached the host.
+      _historyRequestedAt = null;
+      statusHint = 'Could not ask the host for older readings: ${record.detail}';
+      notifyListeners();
+      return;
+    }
+    // The host answers with one push per slice; the count is only known when
+    // the first arrives. One is enough to show the backfill as running.
+    _historySlicesOutstanding = 1;
+    notifyListeners();
+  }
 
   Future<void> initialize() async {
     bundle = await _store.loadPairing();
@@ -218,6 +276,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       // A registration also triggers a status push from the host; when the
       // token was already registered, ask explicitly so the UI is fresh.
       await requestStatus();
+      // And fill in the chart behind it. A phone that was off overnight, or
+      // one that has just been paired, has nothing for the longer spans until
+      // the host is asked.
+      await requestHistoryIfNeeded();
     }
   }
 
@@ -466,27 +528,50 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (encrypted is! String || encrypted.isEmpty) return;
 
     final updated = await statusService.handleEncryptedStatus(encrypted, current: snapshot);
-    if (updated != null) {
-      snapshot = updated;
-      readingHistory = readingHistory.merge(updated);
-      await ReadingHistoryStore.save(readingHistory);
-      // Keep the securely stored AI credentials current: the host may have
-      // added, rotated or removed them since pairing.
-      await _syncAiConfig(updated.ai);
-      // Once the host reports insulin running again, the pending marker has
-      // served its purpose; leaving it would make a resumed pump look pending.
-      if (!updated.suspended && suspendRequestedAt != null && updated.suspendAcknowledged) {
-        suspendRequestedAt = null;
-      }
-      statusHint = null;
-      // Pushes are getting through; no need to ask the host for anything.
-      _scheduler.recordSuccess();
-      notifyListeners();
-      // Pushes are also delivered in the background, so the widgets and the
-      // Live Activity stay current without the app being opened.
-      await WidgetBridge.publish(updated, preferences: displayPreferences);
-      await _publishLiveActivity(updated);
+    if (updated == null) {
+      // Not a status. A history slice rides the same field, so that a host
+      // sending one to a follower that predates the backfill is ignored rather
+      // than misread.
+      await _handleHistorySlice(statusService, encrypted);
+      return;
     }
+    snapshot = updated;
+    readingHistory = readingHistory.merge(updated);
+    await ReadingHistoryStore.save(readingHistory);
+    // Keep the securely stored AI credentials current: the host may have
+    // added, rotated or removed them since pairing.
+    await _syncAiConfig(updated.ai);
+    // Once the host reports insulin running again, the pending marker has
+    // served its purpose; leaving it would make a resumed pump look pending.
+    if (!updated.suspended && suspendRequestedAt != null && updated.suspendAcknowledged) {
+      suspendRequestedAt = null;
+    }
+    statusHint = null;
+    // Pushes are getting through; no need to ask the host for anything.
+    _scheduler.recordSuccess();
+    notifyListeners();
+    // Pushes are also delivered in the background, so the widgets and the
+    // Live Activity stay current without the app being opened.
+    await WidgetBridge.publish(updated, preferences: displayPreferences);
+    await _publishLiveActivity(updated);
+  }
+
+  /// Folds one slice of a backfill into the rolling history.
+  ///
+  /// Slices are merged by timestamp and carry no state, so they can arrive out
+  /// of order, late, or partially without leaving the chart inconsistent — the
+  /// worst a lost slice costs is a gap, which the chart already draws honestly.
+  Future<void> _handleHistorySlice(StatusService statusService, String encrypted) async {
+    final slice = await statusService.handleEncryptedHistory(encrypted);
+    if (slice == null) return;
+
+    _historySlicesOutstanding = slice.isLast ? 0 : slice.total - slice.sequence;
+
+    if (slice.readings.isNotEmpty) {
+      readingHistory = readingHistory.mergeHistory(slice.readings);
+      await ReadingHistoryStore.save(readingHistory);
+    }
+    notifyListeners();
   }
 
   /// Folds the AI configuration a snapshot carried into the securely stored
