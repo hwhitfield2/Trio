@@ -153,6 +153,29 @@ with open(path, 'w') as f:
 print('AndroidManifest.xml patched')
 PY
   fi
+
+  # Android 11 hides other apps from this one unless they are declared here,
+  # so without this the suspension banner's call and message buttons quietly
+  # do nothing on a modern phone - which is the one moment they exist for.
+  if ! grep -q '<queries>' "$MANIFEST"; then
+    echo "==> Declaring the dialer and messaging intents in AndroidManifest.xml"
+    python3 - <<'QUERIES_PY'
+import re
+
+path = 'android/app/src/main/AndroidManifest.xml'
+with open(path) as f:
+    content = f.read()
+
+queries = (
+    '    <queries>\n        <intent>\n            <action android:name="android.intent.action.DIAL" />\n            <data android:scheme="tel" />\n        </intent>\n        <intent>\n            <action android:name="android.intent.action.VIEW" />\n            <data android:scheme="tel" />\n        </intent>\n        <intent>\n            <action android:name="android.intent.action.VIEW" />\n            <data android:scheme="sms" />\n        </intent>\n        <intent>\n            <action android:name="android.intent.action.SENDTO" />\n            <data android:scheme="smsto" />\n        </intent>\n    </queries>\n'
+)
+content = re.sub(r'(<manifest[^>]*>\n)', lambda m: m.group(1) + queries, content, count=1)
+
+with open(path, 'w') as f:
+    f.write(content)
+print('AndroidManifest.xml queries patched')
+QUERIES_PY
+  fi
 fi
 
 # --- Android widget -----------------------------------------------------------

@@ -452,12 +452,27 @@ class _UnansweredPanel extends StatelessWidget {
       await state.setHostContact(number);
     }
     final uri = Uri(scheme: sms ? 'sms' : 'tel', path: number);
-    if (!await launchUrl(uri)) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('This device cannot ${sms ? 'send messages' : 'place calls'}.')),
-      );
+    // A device with no dialer answers either by returning false or by throwing
+    // from the platform channel, depending on the platform and the Android
+    // version. Neither may take down the banner: this runs while insulin is
+    // stopped, and the rest of the screen is what the follower is here for.
+    var launched = false;
+    try {
+      launched = await launchUrl(uri);
+    } catch (_) {
+      launched = false;
     }
+    if (launched || !context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'This device cannot ${sms ? 'send messages' : 'place calls'}. '
+          'The number is $number.',
+        ),
+        duration: const Duration(seconds: 8),
+      ),
+    );
   }
 
   Future<String?> _askForNumber(BuildContext context) {
