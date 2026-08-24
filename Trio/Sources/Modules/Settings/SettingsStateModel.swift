@@ -20,6 +20,8 @@ extension Settings {
         @Published var debugOptions = false
         @Published var serviceUIType: ServiceUI.Type?
         @Published var setupTidepool = false
+        @Published var isBackfillingTidepool = false
+        @Published var tidepoolBackfillStatus: String?
 
         private(set) var buildNumber = ""
         private(set) var versionNumber = ""
@@ -60,6 +62,36 @@ extension Settings {
 
         func hideSettingsModal() {
             hideModal()
+        }
+
+        /// Backfills the full Nightscout history (glucose, carbs, boluses,
+        /// temp basals) into Tidepool, going back as far as Nightscout has data.
+        func backfillTidepoolFromNightscout() {
+            guard !isBackfillingTidepool else { return }
+            isBackfillingTidepool = true
+            tidepoolBackfillStatus = String(localized: "Starting backfill…")
+
+            Task {
+                do {
+                    let summary = try await provider.tidepoolManager
+                        .backfillFromNightscout(startDate: nil) { [weak self] message in
+                            Task { @MainActor in
+                                self?.tidepoolBackfillStatus = message
+                            }
+                        }
+                    await MainActor.run {
+                        self.tidepoolBackfillStatus = String(
+                            localized: "Backfill complete: \(summary.glucoseCount) glucose readings, \(summary.carbCount) carb entries, \(summary.bolusCount) boluses, \(summary.tempBasalCount) temp basals."
+                        )
+                        self.isBackfillingTidepool = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.tidepoolBackfillStatus = String(localized: "Backfill failed: \(error.localizedDescription)")
+                        self.isBackfillingTidepool = false
+                    }
+                }
+            }
         }
 
         // Commenting this out for now, as not needed and possibly dangerous for users to be able to nuke their pump pairing informations via the debug menu

@@ -20,6 +20,33 @@ protocol TidepoolManager {
     func uploadGlucose() async
     func uploadSettings() async
     func forceTidepoolDataUpload()
+    func backfillFromNightscout(startDate: Date?, progress: ((String) -> Void)?) async throws -> TidepoolBackfillSummary
+}
+
+/// Result of a Nightscout → Tidepool history backfill.
+struct TidepoolBackfillSummary {
+    var glucoseCount = 0
+    var carbCount = 0
+    var bolusCount = 0
+    var tempBasalCount = 0
+    var oldestDate: Date?
+}
+
+enum TidepoolBackfillError: LocalizedError {
+    case tidepoolNotConnected
+    case nightscoutNotConfigured
+    case alreadyRunning
+
+    var errorDescription: String? {
+        switch self {
+        case .tidepoolNotConnected:
+            return String(localized: "Tidepool is not connected. Connect to Tidepool first.")
+        case .nightscoutNotConfigured:
+            return String(localized: "Nightscout is not configured. Set up a Nightscout URL first.")
+        case .alreadyRunning:
+            return String(localized: "A Tidepool backfill is already running.")
+        }
+    }
 }
 
 final class BaseTidepoolManager: TidepoolManager, Injectable {
@@ -31,6 +58,12 @@ final class BaseTidepoolManager: TidepoolManager, Injectable {
     @Injected() private var pumpHistoryStorage: PumpHistoryStorage!
     @Injected() private var apsManager: APSManager!
     @Injected() private var settingsManager: SettingsManager!
+    @Injected() private var keychain: Keychain!
+
+    /// Guards against two concurrent Nightscout backfill runs.
+    /// - Important: Only access via `backfillStateLock`.
+    private var isBackfillRunning = false
+    private let backfillStateLock = NSLock()
 
     // Lazy access to avoid circular dependency (TidepoolManager ↔ FetchGlucoseManager)
     private var resolver: Resolver?
@@ -955,6 +988,306 @@ extension BaseTidepoolManager {
             model: device.model,
             modelIdentifier: device.getDeviceId
         )
+    }
+}
+
+/// Nightscout → Tidepool History Backfill
+extension BaseTidepoolManager {
+    /// How many records to request from Nightscout per page.
+    private static let backfillPageSize = 1000
+
+    /// Backfills glucose, carbs, boluses and temp basals from Nightscout into
+    /// Tidepool, paging backwards from now until Nightscout has no older data
+    /// (or until `startDate`, when given).
+    ///
+    /// Uploads use the Nightscout `_id` as sync identifier, so re-running the
+    /// backfill produces the same origin IDs and Tidepool deduplicates
+    /// server-side instead of creating duplicates.
+    ///
+    /// - Parameters:
+    ///   - startDate: Oldest date to backfill to. `nil` means as far back as
+    ///     Nightscout has data.
+    ///   - progress: Optional callback with a human-readable progress message,
+    ///     invoked as pages complete.
+    /// - Returns: Counts of the uploaded records and the oldest date reached.
+    func backfillFromNightscout(
+        startDate: Date? = nil,
+        progress: ((String) -> Void)? = nil
+    ) async throws -> TidepoolBackfillSummary {
+        guard let tidepoolService = self.tidepoolService else {
+            throw TidepoolBackfillError.tidepoolNotConnected
+        }
+
+        guard let urlString = keychain.getValue(String.self, forKey: NightscoutConfig.Config.urlKey),
+              let url = URL(string: urlString)
+        else {
+            throw TidepoolBackfillError.nightscoutNotConfigured
+        }
+        let secret = keychain.getValue(String.self, forKey: NightscoutConfig.Config.secretKey)
+        let nightscoutAPI = NightscoutAPI(url: url, secret: secret)
+
+        backfillStateLock.lock()
+        guard !isBackfillRunning else {
+            backfillStateLock.unlock()
+            throw TidepoolBackfillError.alreadyRunning
+        }
+        isBackfillRunning = true
+        backfillStateLock.unlock()
+
+        defer {
+            backfillStateLock.lock()
+            isBackfillRunning = false
+            backfillStateLock.unlock()
+        }
+
+        var summary = TidepoolBackfillSummary()
+
+        debug(.service, "Starting Nightscout → Tidepool backfill")
+        progress?(String(localized: "Backfilling glucose…"))
+
+        let glucoseResult = try await backfillGlucose(
+            from: nightscoutAPI,
+            to: tidepoolService,
+            startDate: startDate,
+            progress: progress
+        )
+        summary.glucoseCount = glucoseResult.count
+        summary.oldestDate = glucoseResult.oldestDate
+
+        progress?(String(localized: "Backfilling treatments…"))
+
+        let treatmentResult = try await backfillTreatments(
+            from: nightscoutAPI,
+            to: tidepoolService,
+            startDate: startDate,
+            progress: progress
+        )
+        summary.carbCount = treatmentResult.carbs
+        summary.bolusCount = treatmentResult.boluses
+        summary.tempBasalCount = treatmentResult.tempBasals
+        if let treatmentOldest = treatmentResult.oldestDate {
+            summary.oldestDate = min(summary.oldestDate ?? treatmentOldest, treatmentOldest)
+        }
+
+        debug(
+            .service,
+            "Nightscout → Tidepool backfill finished: \(summary.glucoseCount) glucose, \(summary.carbCount) carbs, " +
+                "\(summary.bolusCount) boluses, \(summary.tempBasalCount) temp basals, oldest: \(String(describing: summary.oldestDate))"
+        )
+
+        return summary
+    }
+
+    /// Pages backwards through Nightscout glucose entries and uploads each page.
+    private func backfillGlucose(
+        from nightscoutAPI: NightscoutAPI,
+        to tidepoolService: RemoteDataService,
+        startDate: Date?,
+        progress: ((String) -> Void)?
+    ) async throws -> (count: Int, oldestDate: Date?) {
+        var before = Date()
+        var count = 0
+        var oldestSeen: Date?
+
+        while true {
+            let page = try await nightscoutAPI.fetchGlucoseBackfill(before: before, count: Self.backfillPageSize)
+            guard !page.isEmpty, let oldest = page.map(\.dateString).min() else { break }
+
+            let samples = page
+                .filter { ($0.glucose ?? 0) > 0 }
+                .map { $0.convertStoredGlucoseSample(isManualGlucose: false) }
+
+            try await uploadGlucoseChunked(samples, to: tidepoolService)
+
+            count += samples.count
+            oldestSeen = min(oldestSeen ?? oldest, oldest)
+
+            progress?(
+                String(
+                    localized: "Backfilled \(count) glucose readings (back to \(oldest.formatted(date: .abbreviated, time: .omitted)))…"
+                )
+            )
+
+            // Advance the cursor; bail out if it didn't move to avoid looping forever.
+            guard oldest < before else { break }
+            before = oldest
+
+            if let startDate, before <= startDate { break }
+        }
+
+        return (count, oldestSeen)
+    }
+
+    /// Pages backwards through Nightscout treatments, converting carbs, boluses
+    /// and temp basals to their Tidepool representations and uploading each page.
+    private func backfillTreatments(
+        from nightscoutAPI: NightscoutAPI,
+        to tidepoolService: RemoteDataService,
+        startDate: Date?,
+        progress: ((String) -> Void)?
+    ) async throws -> (carbs: Int, boluses: Int, tempBasals: Int, oldestDate: Date?) {
+        var before = Date()
+        var carbCount = 0
+        var bolusCount = 0
+        var tempBasalCount = 0
+        var oldestSeen: Date?
+
+        while true {
+            let page = try await nightscoutAPI.fetchTreatmentsBackfill(before: before, count: Self.backfillPageSize)
+            guard !page.isEmpty, let oldest = page.compactMap(\.createdAt).min() else { break }
+
+            let carbObjects = page.compactMap { convertBackfillCarbs($0) }
+            let doseEntries = page.compactMap { convertBackfillDose($0) }
+
+            try await uploadCarbsChunked(carbObjects, to: tidepoolService)
+            try await uploadDosesChunked(doseEntries.map { $0.dose }, to: tidepoolService)
+
+            carbCount += carbObjects.count
+            bolusCount += doseEntries.filter { $0.isBolus }.count
+            tempBasalCount += doseEntries.filter { !$0.isBolus }.count
+            oldestSeen = min(oldestSeen ?? oldest, oldest)
+
+            progress?(
+                String(
+                    localized: "Backfilled \(carbCount) carb and \(bolusCount + tempBasalCount) insulin entries (back to \(oldest.formatted(date: .abbreviated, time: .omitted)))…"
+                )
+            )
+
+            guard oldest < before else { break }
+            before = oldest
+
+            if let startDate, before <= startDate { break }
+        }
+
+        return (carbCount, bolusCount, tempBasalCount, oldestSeen)
+    }
+
+    /// Converts a Nightscout carb treatment to a Tidepool `SyncCarbObject`.
+    /// Returns nil for treatments without carbs.
+    private func convertBackfillCarbs(_ treatment: NightscoutBackfillTreatment) -> SyncCarbObject? {
+        guard let id = treatment.id, let createdAt = treatment.createdAt,
+              let carbs = treatment.carbs, carbs > 0
+        else { return nil }
+
+        return SyncCarbObject(
+            absorptionTime: nil,
+            createdByCurrentApp: true,
+            foodType: treatment.foodType,
+            grams: Double(carbs),
+            startDate: createdAt,
+            uuid: UUID(uuidString: id),
+            provenanceIdentifier: treatment.enteredBy ?? "Nightscout",
+            syncIdentifier: id,
+            syncVersion: nil,
+            userCreatedDate: nil,
+            userUpdatedDate: nil,
+            userDeletedDate: nil,
+            operation: LoopKit.Operation.create,
+            addedDate: nil,
+            supercededDate: nil
+        )
+    }
+
+    /// Converts a Nightscout bolus or temp basal treatment to a Tidepool `DoseEntry`.
+    /// Returns nil for treatments that carry no insulin dose.
+    private func convertBackfillDose(_ treatment: NightscoutBackfillTreatment) -> (dose: DoseEntry, isBolus: Bool)? {
+        guard let id = treatment.id, let createdAt = treatment.createdAt else { return nil }
+
+        if treatment.eventType == "Temp Basal" {
+            // Percent-only temp basals (no absolute rate) can't be converted
+            // without the underlying basal schedule, so they are skipped.
+            guard let rate = treatment.absolute ?? treatment.rate,
+                  let duration = treatment.duration, duration > 0
+            else { return nil }
+
+            let durationMinutes = Double(duration)
+            let units = Double(rate) * durationMinutes / 60.0
+            let dose = DoseEntry(
+                type: .tempBasal,
+                startDate: createdAt,
+                endDate: createdAt.addingTimeInterval(TimeInterval(minutes: durationMinutes)),
+                value: units,
+                unit: .units,
+                deliveredUnits: units,
+                syncIdentifier: id,
+                insulinType: nil,
+                automatic: true,
+                manuallyEntered: false,
+                isMutable: false
+            )
+            return (dose, false)
+        }
+
+        guard let insulin = treatment.insulin, insulin > 0 else { return nil }
+
+        let dose = DoseEntry(
+            type: .bolus,
+            startDate: createdAt,
+            endDate: createdAt,
+            value: Double(insulin),
+            unit: .units,
+            deliveredUnits: nil,
+            syncIdentifier: id,
+            insulinType: nil,
+            automatic: treatment.eventType == "SMB",
+            manuallyEntered: treatment.eventType == "External Insulin"
+        )
+        return (dose, true)
+    }
+
+    /// Uploads glucose samples in service-sized chunks, awaiting each chunk so
+    /// the backfill doesn't flood Tidepool with concurrent requests.
+    private func uploadGlucoseChunked(_ samples: [StoredGlucoseSample], to tidepoolService: RemoteDataService) async throws {
+        guard !samples.isEmpty else { return }
+
+        for chunk in samples.chunks(ofCount: tidepoolService.glucoseDataLimit ?? 100) {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                tidepoolService.uploadGlucoseData(chunk) { result in
+                    switch result {
+                    case .success:
+                        continuation.resume()
+                    case let .failure(error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Uploads carb objects in service-sized chunks, awaiting each chunk.
+    private func uploadCarbsChunked(_ carbs: [SyncCarbObject], to tidepoolService: RemoteDataService) async throws {
+        guard !carbs.isEmpty else { return }
+
+        for chunk in carbs.chunks(ofCount: tidepoolService.carbDataLimit ?? 100) {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                tidepoolService.uploadCarbData(created: chunk, updated: [], deleted: []) { result in
+                    switch result {
+                    case .success:
+                        continuation.resume()
+                    case let .failure(error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Uploads dose entries in service-sized chunks, awaiting each chunk.
+    private func uploadDosesChunked(_ doses: [DoseEntry], to tidepoolService: RemoteDataService) async throws {
+        guard !doses.isEmpty else { return }
+
+        for chunk in doses.chunks(ofCount: tidepoolService.doseDataLimit ?? 100) {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                tidepoolService.uploadDoseData(created: chunk, deleted: []) { result in
+                    switch result {
+                    case .success:
+                        continuation.resume()
+                    case let .failure(error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -72,6 +72,49 @@ struct TidepoolStartView: BaseView {
                     }.padding(.vertical)
                 }
             ).listRowBackground(Color.chart)
+
+            if state.provider.tidepoolManager.getTidepoolServiceUI() != nil {
+                Section(
+                    header: Text("History Backfill"),
+                    content: {
+                        VStack(alignment: .leading) {
+                            Button {
+                                state.backfillTidepoolFromNightscout()
+                            }
+                            label: {
+                                HStack {
+                                    if state.isBackfillingTidepool {
+                                        ProgressView()
+                                            .padding(.trailing, 4)
+                                    }
+                                    Text(
+                                        state.isBackfillingTidepool
+                                            ? "Backfilling…"
+                                            : "Backfill from Nightscout"
+                                    ).font(.title3)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .buttonStyle(.bordered)
+                            .disabled(state.isBackfillingTidepool)
+
+                            if let status = state.tidepoolBackfillStatus {
+                                Text(status)
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                    .padding(.top, 4)
+                            }
+
+                            Text(
+                                "Uploads your entire Nightscout history — glucose, carbs, boluses, and temp basals — to Tidepool, going back as far as Nightscout has data. Safe to run again: already-uploaded records are not duplicated."
+                            )
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .padding(.top)
+                        }.padding(.vertical)
+                    }
+                ).listRowBackground(Color.chart)
+            }
         }
         .sheet(isPresented: $state.setupTidepool) {
             if let serviceUIType = state.serviceUIType,

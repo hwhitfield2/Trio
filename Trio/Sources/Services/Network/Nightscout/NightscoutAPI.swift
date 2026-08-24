@@ -4,6 +4,46 @@ import Foundation
 import JavaScriptCore
 import Swinject
 
+/// A minimal, lenient representation of a Nightscout treatment used for the
+/// Tidepool backfill. Unlike `NightscoutTreatment`, `eventType` is a plain
+/// string so that treatments written by any uploader (AndroidAPS, Loop,
+/// xDrip+, careportal, …) decode without a known enum case.
+struct NightscoutBackfillTreatment: Decodable {
+    let id: String?
+    let eventType: String?
+    let createdAt: Date?
+    let enteredBy: String?
+    let carbs: Decimal?
+    let insulin: Decimal?
+    let duration: Decimal?
+    let rate: Decimal?
+    let absolute: Decimal?
+    let foodType: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case eventType
+        case createdAt = "created_at"
+        case enteredBy
+        case carbs
+        case insulin
+        case duration
+        case rate
+        case absolute
+        case foodType
+    }
+}
+
+/// Wrapper that swallows per-element decoding errors so one malformed
+/// treatment doesn't abort a whole backfill page.
+private struct FailableDecodable<T: Decodable>: Decodable {
+    let value: T?
+
+    init(from decoder: Decoder) {
+        value = try? T(from: decoder)
+    }
+}
+
 class NightscoutAPI {
     init(url: URL, secret: String? = nil) {
         self.url = url
@@ -104,6 +144,89 @@ extension NightscoutAPI {
             warning(.nightscout, "Glucose fetching error: \(error)")
             return []
         }
+    }
+
+    /// Fetches glucose entries strictly older than the given date, newest first.
+    /// Used by the Tidepool backfill to page backwards through the full history.
+    /// Unlike `fetchLastGlucose`, errors are thrown so the caller can tell
+    /// "no more data" apart from a failed request.
+    func fetchGlucoseBackfill(before date: Date, count: Int) async throws -> [BloodGlucose] {
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = url.host
+        components.port = url.port
+        components.path = Config.entriesPath
+        components.queryItems = [
+            URLQueryItem(name: "count", value: "\(count)"),
+            URLQueryItem(
+                name: "find[dateString][$lt]",
+                value: Formatter.iso8601withFractionalSeconds.string(from: date)
+            )
+        ]
+
+        guard let url = components.url else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.allowsConstrainedNetworkAccess = false
+        request.timeoutInterval = Config.timeout
+
+        if let secret = secret {
+            request.addValue(secret.sha1(), forHTTPHeaderField: "api-secret")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, (200 ... 299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let glucose = try JSONCoding.decoder.decode([BloodGlucose].self, from: data)
+        return glucose.map {
+            var reading = $0
+            reading.glucose = $0.sgv
+            return reading
+        }
+    }
+
+    /// Fetches treatments strictly older than the given date, newest first.
+    /// Returns every treatment regardless of who uploaded it — the backfill
+    /// wants the complete history, including Trio's own uploads.
+    func fetchTreatmentsBackfill(before date: Date, count: Int) async throws -> [NightscoutBackfillTreatment] {
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = url.host
+        components.port = url.port
+        components.path = Config.treatmentsPath
+        components.queryItems = [
+            URLQueryItem(name: "count", value: "\(count)"),
+            URLQueryItem(
+                name: "find[created_at][$lt]",
+                value: Formatter.iso8601withFractionalSeconds.string(from: date)
+            )
+        ]
+
+        guard let url = components.url else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.allowsConstrainedNetworkAccess = false
+        request.timeoutInterval = Config.timeout
+
+        if let secret = secret {
+            request.addValue(secret.sha1(), forHTTPHeaderField: "api-secret")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, (200 ... 299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let treatments = try JSONCoding.decoder.decode([FailableDecodable<NightscoutBackfillTreatment>].self, from: data)
+        return treatments.compactMap(\.value)
     }
 
     private func makeNeQueryItems() -> [URLQueryItem] {
