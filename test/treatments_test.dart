@@ -137,6 +137,29 @@ void main() {
     });
   });
 
+  // Trio's insulin blue and its carb orange, the colours the host's own chart
+  // uses. A follower comparing the two screens should not have to learn a
+  // second scheme.
+  const insulinBlue = Color(0xFF1E96FC);
+  const carbOrange = Color(0xFFFF9800);
+
+  /// Matches one treatment bar of [color], optionally handing back its
+  /// rectangle.
+  ///
+  /// `something` rather than `rect`, because the chart fills its in-range band
+  /// with a rectangle first and `rect` has to match the very next draw of its
+  /// kind. Colours are compared as packed ARGB rather than with `==`: a Paint
+  /// keeps its colour as 32-bit floats, so the Color read back out of one is
+  /// a few ulps from the Color that went in.
+  bool Function(Symbol, List<dynamic>) bar(Color color, {void Function(Rect)? onMatch}) {
+    return (Symbol method, List<dynamic> arguments) {
+      if (method != #drawRect) return false;
+      if ((arguments[1] as Paint).color.toARGB32() != color.toARGB32()) return false;
+      onMatch?.call(arguments[0] as Rect);
+      return true;
+    };
+  }
+
   group('drawing them', () {
     Future<void> pumpChart(WidgetTester tester, List<TreatmentEvent> treatments) =>
         tester.pumpWidget(
@@ -163,14 +186,36 @@ void main() {
       ]);
 
       // Trio's insulin blue and its carb orange, so the two screens read the
-      // same way. A Paint reports a plain Color, never the MaterialColor it
-      // was set from.
+      // same way. Flat bars rather than triangles: at the dot sizes the longer
+      // spans use, a triangle is a smudge, and a bar's length still reads as
+      // an amount.
       expect(
         find.byType(GlucoseChart),
         paints
-          ..path(color: const Color(0xFF1E96FC))
-          ..path(color: Color(Colors.orange.toARGB32())),
+          ..something(bar(insulinBlue))
+          ..something(bar(carbOrange)),
       );
+    });
+
+    testWidgets('insulin is drawn above its reading and carbs below', (tester) async {
+      await pumpChart(tester, [
+        BolusEvent(date: newest, units: 2),
+        CarbEvent(date: newest, grams: 30),
+      ]);
+
+      // Both sit against the same reading, and which side of it they are on is
+      // the only thing saying which is which — the same arrangement the host's
+      // own chart uses.
+      Rect? insulin;
+      Rect? carbs;
+      expect(
+        find.byType(GlucoseChart),
+        paints
+          ..something(bar(insulinBlue, onMatch: (rect) => insulin = rect))
+          ..something(bar(carbOrange, onMatch: (rect) => carbs = rect)),
+      );
+
+      expect(insulin!.bottom, lessThan(carbs!.top));
     });
 
     testWidgets('a treatment from outside the window is not drawn', (tester) async {
@@ -178,7 +223,10 @@ void main() {
         BolusEvent(date: newest.add(const Duration(hours: 2)), units: 2),
       ]);
 
-      expect(find.byType(GlucoseChart), isNot(paints..path()));
+      // The chart still fills its in-range band, so this has to name the
+      // treatment colours rather than simply asking for no rectangles.
+      expect(find.byType(GlucoseChart), isNot(paints..something(bar(insulinBlue))));
+      expect(find.byType(GlucoseChart), isNot(paints..something(bar(carbOrange))));
     });
 
     testWidgets('the readout names what was given at the reading', (tester) async {

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/food_search_result.dart';
 import '../models/pairing_bundle.dart';
 import '../services/food_search_service.dart';
+import '../theme/trio_design.dart';
+import '../widgets/trio_controls.dart';
 
 /// Text-based AI food lookup, mirroring the host's Food Search: describe what
 /// is being eaten, review the structured estimate, scale each item to what was
@@ -112,9 +114,28 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(_title)),
-      body: switch (_phase) {
+    return TrioScreen(
+      title: _title,
+      action: switch (_phase) {
+        _Phase.input => TrioButton(
+            label: 'Search',
+            icon: Icons.search,
+            onPressed: () {
+              final trimmed = _query.text.trim();
+              if (trimmed.isNotEmpty) _search(trimmed);
+            },
+          ),
+        _Phase.searching => null,
+        _Phase.result => TrioButton(
+            label: 'Use these values',
+            onPressed: _everythingExcluded ? null : _accept,
+          ),
+        _Phase.failed => TrioButton(
+            label: 'Try again',
+            onPressed: () => _search(_searchedQuery),
+          ),
+      },
+      child: switch (_phase) {
         _Phase.input => _inputView(),
         _Phase.searching => _searchingView(),
         _Phase.result => _resultView(),
@@ -124,52 +145,54 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
   }
 
   String get _title => switch (_phase) {
-        _Phase.input => 'Food Search',
+        _Phase.input => 'Food search',
         _Phase.searching => 'Searching',
-        _Phase.result => 'Food Estimate',
-        _Phase.failed => 'Search Failed',
+        _Phase.result => 'Food estimate',
+        _Phase.failed => 'Search failed',
       };
 
   Widget _inputView() {
-    return ListView(
-      padding: const EdgeInsets.all(24),
+    final colors = TrioTheme.of(context);
+    return TrioPanelList(
       children: [
-        Text(
-          'Describe what is being eaten. Include the restaurant name and portion '
-          'details when you can.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _query,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 5,
-          textInputAction: TextInputAction.search,
-          onSubmitted: (value) {
-            final trimmed = value.trim();
-            if (trimmed.isNotEmpty) _search(trimmed);
-          },
-          decoration: const InputDecoration(
-            hintText: 'e.g. Chipotle chicken burrito bowl with white rice, '
-                'black beans, and cheese',
-            border: OutlineInputBorder(),
+        TrioPanel(
+          padding: const EdgeInsets.all(TrioMetrics.inset),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Describe what is being eaten. Include the restaurant name and '
+                'portion details when you can.',
+                style: TrioType.body(color: colors.inkMuted, size: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _query,
+                autofocus: true,
+                minLines: 3,
+                maxLines: 6,
+                textInputAction: TextInputAction.search,
+                style: TrioType.body(color: colors.ink, size: 14.5, height: 1.4),
+                onSubmitted: (value) {
+                  final trimmed = value.trim();
+                  if (trimmed.isNotEmpty) _search(trimmed);
+                },
+                decoration: InputDecoration(
+                  hintText: 'e.g. Chipotle chicken burrito bowl with white rice, '
+                      'black beans, and cheese',
+                  hintStyle: TrioType.body(color: colors.inkFaint, size: 14),
+                  border: const OutlineInputBorder(borderRadius: TrioMetrics.radius),
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: () {
-            final trimmed = _query.text.trim();
-            if (trimmed.isNotEmpty) _search(trimmed);
-          },
-          icon: const Icon(Icons.search),
-          label: const Text('Search'),
         ),
       ],
     );
   }
 
   Widget _searchingView() {
+    final colors = TrioTheme.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -178,16 +201,23 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
           children: [
             Text(
               '“$_searchedQuery”',
-              style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
+              style: TrioType.body(color: colors.ink, size: 14),
             ),
             const SizedBox(height: 20),
-            const CircularProgressIndicator(),
+            SizedBox(
+              width: 140,
+              height: 2,
+              child: LinearProgressIndicator(
+                color: colors.accent,
+                backgroundColor: colors.hairline,
+              ),
+            ),
             const SizedBox(height: 20),
             Text(
-              'Looking up nutrition information and estimating carbs...',
-              style: Theme.of(context).textTheme.bodySmall,
+              'LOOKING UP NUTRITION AND ESTIMATING CARBS',
               textAlign: TextAlign.center,
+              style: TrioType.micro(color: colors.inkFaint, size: 10, tracking: 0.12),
             ),
           ],
         ),
@@ -196,122 +226,199 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
   }
 
   Widget _failedView() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.warning_amber_rounded, size: 40, color: Colors.orange.shade700),
-            const SizedBox(height: 12),
-            Text(_error, textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: () => _search(_searchedQuery),
-              child: const Text('Try Again'),
-            ),
-            TextButton(
-              onPressed: () => setState(() => _phase = _Phase.input),
-              child: const Text('Edit Search'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _resultView() {
-    final result = _result!;
-    final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    final colors = TrioTheme.of(context);
+    return TrioPanelList(
       children: [
-        Text(result.mealName, style: theme.textTheme.titleLarge),
-        const SizedBox(height: 4),
-        Text('Confidence: ${result.overallConfidence}', style: theme.textTheme.bodySmall),
-        if (result.scaleReferenceNote.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(result.scaleReferenceNote, style: theme.textTheme.bodySmall),
-        ],
-        if (result.mealSourceRationale.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text('Source: ${result.mealSource}. ${result.mealSourceRationale}',
-              style: theme.textTheme.bodySmall),
-        ],
-        const Divider(height: 24),
-        for (var i = 0; i < result.components.length; i++) _componentRow(i, result.components[i]),
-        if (result.components.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 8),
-            child: Text(
-              'Adjust the quantity of each item to match what was ordered. '
-              'Set an item to ×0 to leave it out.',
-              style: theme.textTheme.bodySmall,
-            ),
+        TrioPanel(
+          padding: const EdgeInsets.all(TrioMetrics.inset),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TrioTick(color: colors.danger, height: 34),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SEARCH FAILED',
+                      style: TrioType.micro(color: colors.danger, size: 10.5),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(_error, style: TrioType.body(color: colors.ink, size: 13.5)),
+                  ],
+                ),
+              ),
+            ],
           ),
-        _totalRow('Total carbs', _adjustedCarbs, bold: true),
-        _totalRow('Total fat', _adjustedFat),
-        _totalRow('Total protein', _adjustedProtein),
-        const Divider(height: 24),
-        Text(
-          'Carb absorption: about ${result.absorptionHours.toStringAsFixed(1)} h'
-          '${result.slowAbsorptionMeal ? ' — slow-absorbing meal' : ''}',
-          style: theme.textTheme.bodyMedium,
         ),
-        if (result.absorptionHours > _standardAbsorptionHours)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              'When logged, the host spreads the carbs across this duration so '
-              'its dosing follows the slower absorption.',
-              style: theme.textTheme.bodySmall,
-            ),
+        TrioPanel(
+          child: TrioRow(
+            label: 'Edit the search',
+            labelColor: colors.accent,
+            divider: false,
+            trailing: const TrioChevron(),
+            onTap: () => setState(() => _phase = _Phase.input),
           ),
-        if (result.absorptionRationale.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(result.absorptionRationale, style: theme.textTheme.bodySmall),
-          ),
-        for (final warning in result.warnings)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade700),
-                const SizedBox(width: 6),
-                Expanded(child: Text(warning, style: theme.textTheme.bodySmall)),
-              ],
-            ),
-          ),
-        const SizedBox(height: 20),
-        FilledButton(
-          onPressed: _everythingExcluded ? null : _accept,
-          child: const Text('Use These Values'),
-        ),
-        TextButton(
-          onPressed: () => setState(() => _phase = _Phase.input),
-          child: const Text('Edit Search'),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'AI estimates can be wrong. Portions at restaurants vary - always '
-          'review the values before they are sent to the host.',
-          style: theme.textTheme.bodySmall,
-          textAlign: TextAlign.center,
         ),
       ],
     );
   }
 
-  Widget _componentRow(int index, FoodComponent component) {
-    final theme = Theme.of(context);
+  Widget _resultView() {
+    final colors = TrioTheme.of(context);
+    final result = _result!;
+
+    return TrioPanelList(
+      children: [
+        TrioPanel(
+          padding: const EdgeInsets.all(TrioMetrics.inset),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(result.mealName, style: TrioType.title(color: colors.ink, size: 20)),
+              const SizedBox(height: 6),
+              Text(
+                'CONFIDENCE ${result.overallConfidence.toUpperCase()}',
+                style: TrioType.micro(
+                  color: colors.inkFaint,
+                  size: 10,
+                  weight: FontWeight.w400,
+                  tracking: 0.1,
+                ),
+              ),
+              if (result.scaleReferenceNote.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  result.scaleReferenceNote,
+                  style: TrioType.body(color: colors.inkMuted, size: 12.5),
+                ),
+              ],
+              if (result.mealSourceRationale.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Source: ${result.mealSource}. ${result.mealSourceRationale}',
+                  style: TrioType.body(color: colors.inkMuted, size: 12.5),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (result.components.isNotEmpty)
+          TrioPanel(
+            child: Column(
+              children: [
+                const TrioSectionHeader(label: 'Items'),
+                for (var i = 0; i < result.components.length; i++)
+                  _componentRow(i, result.components[i],
+                      divider: i != result.components.length - 1),
+              ],
+            ),
+          ),
+        TrioPanel(
+          padding: const EdgeInsets.symmetric(horizontal: TrioMetrics.inset),
+          child: Column(
+            children: [
+              const TrioSectionHeader(label: 'Totals'),
+              _totalRow('Carbs', _adjustedCarbs, emphasise: true),
+              _totalRow('Fat', _adjustedFat),
+              _totalRow('Protein', _adjustedProtein, divider: false),
+            ],
+          ),
+        ),
+        TrioPanel(
+          padding: const EdgeInsets.all(TrioMetrics.inset),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'CARB ABSORPTION',
+                      style: TrioType.micro(color: colors.inkFaint, tracking: 0.14),
+                    ),
+                  ),
+                  Text(
+                    '${result.absorptionHours.toStringAsFixed(1)} H'
+                    '${result.slowAbsorptionMeal ? ' · SLOW' : ''}',
+                    style: TrioType.numeral(size: 13, color: colors.ink),
+                  ),
+                ],
+              ),
+              if (result.absorptionHours > _standardAbsorptionHours) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'When logged, the host spreads the carbs across this duration so '
+                  'its dosing follows the slower absorption.',
+                  style: TrioType.body(color: colors.inkMuted, size: 12.5),
+                ),
+              ],
+              if (result.absorptionRationale.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  result.absorptionRationale,
+                  style: TrioType.body(color: colors.inkMuted, size: 12.5),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (result.warnings.isNotEmpty)
+          TrioPanel(
+            padding: const EdgeInsets.symmetric(horizontal: TrioMetrics.inset),
+            child: Column(
+              children: [
+                const TrioSectionHeader(label: 'Warnings'),
+                for (final warning in result.warnings)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const TrioTick(color: TrioColors.high),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            warning,
+                            style: TrioType.body(color: colors.ink, size: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        TrioPanel(
+          child: TrioRow(
+            label: 'Edit the search',
+            labelColor: colors.accent,
+            divider: false,
+            trailing: const TrioChevron(),
+            onTap: () => setState(() => _phase = _Phase.input),
+          ),
+        ),
+        const TrioNote(
+          text: 'AI estimates can be wrong, and restaurant portions vary. Review '
+              'the values before they are sent to the host.',
+        ),
+      ],
+    );
+  }
+
+  Widget _componentRow(int index, FoodComponent component, {required bool divider}) {
+    final colors = TrioTheme.of(context);
     final factor = _quantity(index);
     final excluded = factor == 0;
     final quantityLabel =
         '×${factor == factor.roundToDouble() ? factor.toStringAsFixed(0) : factor.toStringAsFixed(1)}';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+
+    return Container(
+      decoration: divider
+          ? BoxDecoration(border: Border(bottom: BorderSide(color: colors.hairlineSoft)))
+          : null,
+      padding: const EdgeInsets.symmetric(horizontal: TrioMetrics.inset, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -320,56 +427,77 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
               Expanded(
                 child: Text(
                   component.name,
-                  style: excluded
-                      ? theme.textTheme.bodyLarge?.copyWith(
-                          decoration: TextDecoration.lineThrough,
-                          color: theme.disabledColor,
-                        )
-                      : theme.textTheme.bodyLarge,
+                  style: TrioType.label(
+                    color: excluded ? colors.inkFaint : colors.ink,
+                    size: 15,
+                  ).copyWith(
+                    decoration: excluded ? TextDecoration.lineThrough : null,
+                  ),
                 ),
               ),
-              Text('${(component.carbsGrams * factor).round()} g carbs',
-                  style: theme.textTheme.bodyMedium),
+              const SizedBox(width: 12),
+              Text(
+                '${(component.carbsGrams * factor).round()} g',
+                style: TrioType.numeral(
+                  size: 14,
+                  color: excluded ? colors.inkFaint : TrioColors.carbs,
+                ),
+              ),
             ],
           ),
+          const SizedBox(height: 4),
           Row(
             children: [
-              Expanded(child: Text(component.portionEstimate, style: theme.textTheme.bodySmall)),
+              Expanded(
+                child: Text(
+                  component.portionEstimate,
+                  style: TrioType.body(color: colors.inkFaint, size: 12),
+                ),
+              ),
               if (!excluded)
                 Text(
-                  'Fat ${(component.fatGrams * factor).round()} g · '
-                  'Protein ${(component.proteinGrams * factor).round()} g',
-                  style: theme.textTheme.bodySmall,
+                  'F ${(component.fatGrams * factor).round()} · '
+                  'P ${(component.proteinGrams * factor).round()}',
+                  style: TrioType.numeral(size: 11, color: colors.inkFaint),
                 ),
             ],
           ),
+          const SizedBox(height: 8),
           Row(
             children: [
-              Text('Quantity', style: theme.textTheme.bodySmall),
+              Text(
+                'QUANTITY',
+                style: TrioType.micro(
+                  color: colors.inkFaint,
+                  size: 9.5,
+                  weight: FontWeight.w400,
+                  tracking: 0.12,
+                ),
+              ),
               const Spacer(),
-              IconButton(
+              _QuantityButton(
+                icon: Icons.remove,
+                label: 'Less ${component.name}',
                 onPressed: factor <= 0
                     ? null
                     : () => setState(() => _quantities[index] =
                         (factor - _quantityStep).clamp(0.0, _maxQuantity).toDouble()),
-                icon: const Icon(Icons.remove_circle_outline),
-                visualDensity: VisualDensity.compact,
               ),
               SizedBox(
-                width: 44,
+                width: 48,
                 child: Text(
                   quantityLabel,
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.titleSmall,
+                  style: TrioType.numeral(size: 14, color: colors.ink),
                 ),
               ),
-              IconButton(
+              _QuantityButton(
+                icon: Icons.add,
+                label: 'More ${component.name}',
                 onPressed: factor >= _maxQuantity
                     ? null
                     : () => setState(() => _quantities[index] =
                         (factor + _quantityStep).clamp(0.0, _maxQuantity).toDouble()),
-                icon: const Icon(Icons.add_circle_outline),
-                visualDensity: VisualDensity.compact,
               ),
             ],
           ),
@@ -378,17 +506,73 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
     );
   }
 
-  Widget _totalRow(String label, double grams, {bool bold = false}) {
-    final style = bold
-        ? Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)
-        : Theme.of(context).textTheme.bodyLarge;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+  Widget _totalRow(String label, double grams, {bool emphasise = false, bool divider = true}) {
+    final colors = TrioTheme.of(context);
+
+    return Container(
+      height: 44,
+      decoration: divider
+          ? BoxDecoration(border: Border(bottom: BorderSide(color: colors.hairlineSoft)))
+          : null,
       child: Row(
         children: [
-          Expanded(child: Text(label, style: style)),
-          Text('${grams.round()} g', style: style),
+          Expanded(
+            child: Text(
+              label,
+              style: TrioType.label(
+                color: colors.ink,
+                size: 14,
+                weight: emphasise ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ),
+          Text(
+            '${grams.round()} g',
+            style: TrioType.numeral(
+              size: emphasise ? 18 : 15,
+              weight: emphasise ? FontWeight.w600 : FontWeight.w500,
+              color: emphasise ? TrioColors.carbs : colors.ink,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuantityButton extends StatelessWidget {
+  const _QuantityButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = TrioTheme.of(context);
+    final enabled = onPressed != null;
+
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.45,
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(border: Border.all(color: colors.hairline)),
+            child: Icon(icon, size: 17, color: colors.ink),
+          ),
+        ),
       ),
     );
   }

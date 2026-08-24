@@ -8,6 +8,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 
 import '../models/glucose_ranges.dart';
 import '../models/status_snapshot.dart';
+import '../theme/trio_design.dart';
 import 'glucose_colors.dart';
 
 /// Maps readings onto the chart's horizontal axis, and back again.
@@ -57,6 +58,11 @@ class GlucoseChartScale {
 
   double xFor(GlucoseReading reading, double width) =>
       (reading.date.millisecondsSinceEpoch - start) / span * width;
+
+  /// Where a moment in time falls across [width], whether or not a reading
+  /// sits there. What the suspension marker is drawn against.
+  double xForDate(DateTime date, double width) =>
+      (date.millisecondsSinceEpoch - start) / span * width;
 
   /// The index of the reading a treatment sits over, or null when it happened
   /// outside the window the chart covers.
@@ -142,8 +148,20 @@ Duration chartTimeTickInterval(Duration span) {
   return const Duration(hours: 12);
 }
 
+/// How big a dot is on a chart spanning [span].
+///
+/// A 48-hour window holds eight times the readings a six-hour one does in the
+/// same width; drawn at the same size they merge into a band and stop being
+/// readings at all.
+double glucosePointRadius(Duration? span) {
+  final hours = span?.inHours ?? 6;
+  if (hours <= 6) return 3;
+  if (hours <= 12) return 2.2;
+  return 1.6;
+}
+
 /// Minimal dependency-free glucose sparkline for the readings pushed by the
-/// host (last few hours).
+/// host.
 ///
 /// Touch and hold — or drag across it — to read off a single reading's value
 /// and time. The readings are five minutes apart and the chart is small, so
@@ -156,6 +174,7 @@ class GlucoseChart extends StatefulWidget {
     this.ranges = GlucoseRanges.defaults,
     this.treatments = const [],
     this.duration,
+    this.suspendedAt,
   });
 
   final List<GlucoseReading> readings;
@@ -179,6 +198,14 @@ class GlucoseChart extends StatefulWidget {
   /// own chart — a bolus means nothing except against the glucose it was
   /// given for.
   final List<TreatmentEvent> treatments;
+
+  /// When insulin was stopped, if it is stopped now. Ruled onto the chart so
+  /// the fall after it — or the absence of one — can be read against it.
+  final DateTime? suspendedAt;
+
+  /// The plot's own height. The time labels are drawn in a band beneath it, so
+  /// the widget is a little taller than this.
+  static const plotHeight = 174.0;
 
   @override
   State<GlucoseChart> createState() => _GlucoseChartState();
@@ -265,11 +292,11 @@ class _GlucoseChartState extends State<GlucoseChart> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = TrioTheme.of(context);
 
     return SizedBox(
-      // The old 140 of plot, plus room beneath it for the time labels.
-      height: 160,
+      // The plot, plus room beneath it for the time labels.
+      height: GlucoseChart.plotHeight + 18,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
@@ -299,18 +326,30 @@ class _GlucoseChartState extends State<GlucoseChart> {
                   selected: _selected,
                   anchored: _anchored,
                   ranges: widget.ranges,
-                  gridColor: theme.colorScheme.outlineVariant,
-                  crosshairColor: theme.colorScheme.outline,
-                  readoutColor: theme.colorScheme.inverseSurface,
-                  readoutStyle: (theme.textTheme.labelLarge ?? const TextStyle(fontSize: 14))
-                      .copyWith(
-                    color: theme.colorScheme.onInverseSurface,
-                    fontWeight: FontWeight.bold,
+                  suspendedAt: widget.suspendedAt,
+                  pointRadius: glucosePointRadius(widget.duration),
+                  gridColor: colors.hairline,
+                  boundColor: colors.rule,
+                  crosshairColor: colors.inkFaint,
+                  suspendColor: colors.dangerDeep,
+                  readoutColor: colors.ink,
+                  readoutStyle: TrioType.numeral(
+                    size: 15,
+                    weight: FontWeight.w600,
+                    color: colors.panel,
                   ),
-                  readoutCaptionStyle: (theme.textTheme.labelSmall ?? const TextStyle(fontSize: 11))
-                      .copyWith(color: theme.colorScheme.onInverseSurface),
-                  axisStyle: (theme.textTheme.labelSmall ?? const TextStyle(fontSize: 11))
-                      .copyWith(color: theme.colorScheme.outline, fontSize: 10),
+                  readoutCaptionStyle: TrioType.micro(
+                    color: colors.panel,
+                    size: 10,
+                    weight: FontWeight.w500,
+                    tracking: 0.08,
+                  ),
+                  axisStyle: TrioType.numeral(
+                    size: 9.5,
+                    weight: FontWeight.w400,
+                    tracking: 0.08,
+                    color: colors.inkFaint,
+                  ),
                   formatValue: (reading) => glucoseReadoutValue(reading, units: widget.units),
                   unitsLabel: _unitsLabel,
                   textDirection: Directionality.of(context),
@@ -332,8 +371,12 @@ class _GlucosePainter extends CustomPainter {
     required this.selected,
     required this.anchored,
     required this.ranges,
+    required this.suspendedAt,
+    required this.pointRadius,
     required this.gridColor,
+    required this.boundColor,
     required this.crosshairColor,
+    required this.suspendColor,
     required this.readoutColor,
     required this.readoutStyle,
     required this.readoutCaptionStyle,
@@ -350,8 +393,16 @@ class _GlucosePainter extends CustomPainter {
   /// Treatments by the index of the reading they are drawn against.
   final Map<int, List<TreatmentEvent>> anchored;
   final GlucoseRanges ranges;
+  final DateTime? suspendedAt;
+  final double pointRadius;
+
+  /// The faint ruling: the time lines and the dashed value gridlines.
   final Color gridColor;
+
+  /// The heavier ruling: the two bounds of the in-range band.
+  final Color boundColor;
   final Color crosshairColor;
+  final Color suspendColor;
   final Color readoutColor;
   final TextStyle readoutStyle;
   final TextStyle readoutCaptionStyle;
@@ -370,15 +421,16 @@ class _GlucosePainter extends CustomPainter {
 
   /// Trio's own insulin blue, and the orange it draws carbs in. A follower
   /// looking at both screens should not have to learn two colour schemes; the
-  /// shapes — one pointing down, one up — are what tell them apart from the
-  /// glucose dots.
-  static const _bolusColor = Color(0xFF1E96FC);
-  static const _carbColor = Colors.orange;
+  /// side of the reading a bar sits on — insulin above, carbs below — is what
+  /// tells them apart from each other.
+  static const _bolusColor = TrioColors.insulin;
+  static const _carbColor = TrioColors.carbs;
 
-  /// How far off the reading a marker's tip sits, and how far each further
-  /// marker at the same reading is stacked beyond it.
-  static const _markerGap = 5.0;
-  static const _markerStep = 4.0;
+  /// A treatment bar's width, how far off the reading it starts, and how far
+  /// each further bar at the same reading is stacked beyond it.
+  static const _markerWidth = 3.0;
+  static const _markerGap = 6.0;
+  static const _markerStep = 3.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -392,31 +444,47 @@ class _GlucosePainter extends CustomPainter {
     double y(double sgv) =>
         plot.height - ((sgv.clamp(_minSgv, _maxSgv) - _minSgv) / (_maxSgv - _minSgv) * plot.height);
 
+    _paintInRangeBand(canvas, plot, y);
     _paintTimeAxis(canvas, plot);
     _paintValueAxis(canvas, plot, y);
 
-    final gridPaint = Paint()
-      ..color = gridColor
+    // The bounds of the band, drawn over its fill and over the gridlines: they
+    // are the two numbers the whole chart is read against.
+    final boundPaint = Paint()
+      ..color = boundColor
       ..strokeWidth = 1;
     for (final line in [ranges.low, ranges.high]) {
-      canvas.drawLine(Offset(0, y(line)), Offset(size.width, y(line)), gridPaint);
+      canvas.drawLine(Offset(0, y(line)), Offset(size.width, y(line)), boundPaint);
     }
 
     for (final reading in scale.points) {
       final sgv = reading.sgv.toDouble();
       canvas.drawCircle(
         Offset(x(reading), y(sgv)),
-        2.5,
+        pointRadius,
         Paint()..color = _colorFor(sgv),
       );
     }
 
     _paintTreatments(canvas, x, y);
+    _paintSuspension(canvas, plot);
 
     final index = selected;
     if (index != null && index < scale.points.length) {
       _paintSelection(canvas, plot, scale.points[index], anchored[index] ?? const [], x, y);
     }
+  }
+
+  /// The host's in-range window as a tinted band, so "in range" is somewhere a
+  /// reading *is* rather than something to work out from two lines.
+  void _paintInRangeBand(Canvas canvas, Size plot, double Function(double) y) {
+    final top = y(ranges.high);
+    final bottom = y(ranges.low);
+    if (bottom <= top) return;
+    canvas.drawRect(
+      Rect.fromLTRB(0, top, plot.width, bottom),
+      Paint()..color = TrioColors.inRange.withValues(alpha: 0.055),
+    );
   }
 
   TextPainter _axisText(String text) => TextPainter(
@@ -427,14 +495,14 @@ class _GlucosePainter extends CustomPainter {
 
   /// The height the time labels need beneath the plot, at the reader's own
   /// text size.
-  double _timeAxisBand() => _axisText('12 PM').height + 3;
+  double _timeAxisBand() => _axisText('12 PM').height + 4;
 
-  /// Faint vertical lines at round local times across the window, each with
-  /// the time written beneath the plot.
+  /// Vertical lines at round local times across the window, each with the time
+  /// written beneath the plot.
   void _paintTimeAxis(Canvas canvas, Size plot) {
     final interval = chartTimeTickInterval(Duration(milliseconds: scale.span.round()));
     final linePaint = Paint()
-      ..color = gridColor.withValues(alpha: 0.5)
+      ..color = gridColor
       ..strokeWidth = 1;
 
     // The first round time at or before the window's start, aligned to a
@@ -450,28 +518,27 @@ class _GlucosePainter extends CustomPainter {
       if (at >= scale.start) {
         final dx = (at - scale.start) / scale.span * plot.width;
         canvas.drawLine(Offset(dx, 0), Offset(dx, plot.height), linePaint);
-        final label = _axisText(DateFormat.j().format(tick));
+        final label = _axisText(DateFormat.j().format(tick).toUpperCase());
         // Centred under its line, but never past the chart's edges.
         final left =
             (dx - label.width / 2).clamp(0.0, max(0.0, plot.width - label.width)).toDouble();
-        label.paint(canvas, Offset(left, plot.height + 3));
+        label.paint(canvas, Offset(left, plot.height + 4));
       }
       tick = tick.add(interval);
     }
   }
 
-  /// Values up the right-hand edge, each written just above its own faint
-  /// gridline. Inside the plot rather than in a gutter of their own: a gutter
-  /// would shrink the plot the finger scrubs, and these are guide numbers, not
-  /// a column of data.
+  /// Values up the right-hand edge, each written just above its own dashed
+  /// gridline. Dashed rather than solid so they read as scaffolding and the
+  /// two solid range bounds stay the lines that mean something.
   void _paintValueAxis(Canvas canvas, Size plot, double Function(double) y) {
     final linePaint = Paint()
-      ..color = gridColor.withValues(alpha: 0.5)
+      ..color = gridColor
       ..strokeWidth = 1;
 
     for (final mgdl in glucoseAxisGridlines(unitsLabel)) {
       final dy = y(mgdl);
-      canvas.drawLine(Offset(0, dy), Offset(plot.width, dy), linePaint);
+      _dashedLine(canvas, Offset(0, dy), Offset(plot.width, dy), linePaint);
       final label = _axisText(glucoseAxisLabel(mgdl, unitsLabel));
       // Above the line, unless that would run off the top of the plot.
       final top = dy - label.height - 1 >= 0 ? dy - label.height - 1 : dy + 1;
@@ -479,10 +546,22 @@ class _GlucosePainter extends CustomPainter {
     }
   }
 
-  /// Boluses above the reading they were given for, carbs below it, each
-  /// pointing at it — the same arrangement the host's own chart uses, and the
-  /// only one that says which reading a treatment belongs to on a chart this
-  /// small.
+  /// A horizontal dashed run: one point on, three off, the way the design
+  /// rules its gridlines.
+  void _dashedLine(Canvas canvas, Offset from, Offset to, Paint paint) {
+    const dash = 1.0;
+    const gap = 3.0;
+    for (var x = from.dx; x < to.dx; x += dash + gap) {
+      canvas.drawLine(Offset(x, from.dy), Offset(min(x + dash, to.dx), to.dy), paint);
+    }
+  }
+
+  /// Boluses above the reading they were given for, carbs below it — the same
+  /// arrangement the host's own chart uses, and the only one that says which
+  /// reading a treatment belongs to on a chart this small.
+  ///
+  /// Flat bars rather than triangles: at 1.6 points per dot a triangle is a
+  /// smudge, and a bar's length still reads as an amount.
   void _paintTreatments(
     Canvas canvas,
     double Function(GlucoseReading) x,
@@ -498,44 +577,62 @@ class _GlucosePainter extends CustomPainter {
       var below = py + _markerGap;
       for (final event in events) {
         if (event is BolusEvent) {
-          // 1 U is a small mark and 10 U a conspicuous one; beyond that the
-          // size stops meaning anything on a chart this size.
-          final size = (5 + event.units * 1.2).clamp(5.0, 12.0).toDouble();
-          _paintMarker(canvas, Offset(px, above), size, _bolusColor, pointsDown: true);
-          above -= size + _markerStep;
+          // A unit is a short mark and three a tall one; past about three the
+          // length stops meaning anything on a chart this size.
+          final length = (event.units * 5).clamp(5.0, 16.0).toDouble();
+          canvas.drawRect(
+            Rect.fromLTWH(px - _markerWidth / 2, above - length, _markerWidth, length),
+            Paint()..color = _bolusColor,
+          );
+          above -= length + _markerStep;
         } else if (event is CarbEvent) {
-          final size = (5 + event.grams * 0.08).clamp(5.0, 12.0).toDouble();
-          _paintMarker(canvas, Offset(px, below), size, _carbColor, pointsDown: false);
-          below += size + _markerStep;
+          final length = (event.grams * 0.3).clamp(5.0, 16.0).toDouble();
+          canvas.drawRect(
+            Rect.fromLTWH(px - _markerWidth / 2, below, _markerWidth, length),
+            Paint()..color = _carbColor,
+          );
+          below += length + _markerStep;
         }
       }
     });
   }
 
-  /// A triangle with its tip at [tip], pointing at the reading it belongs to.
-  void _paintMarker(
-    Canvas canvas,
-    Offset tip,
-    double size,
-    Color color, {
-    required bool pointsDown,
-  }) {
-    final half = size / 2;
-    final base = pointsDown ? tip.dy - size : tip.dy + size;
-    final path = Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(tip.dx - half, base)
-      ..lineTo(tip.dx + half, base)
-      ..close();
-    canvas.drawPath(path, Paint()..color = color);
+  /// The moment insulin stopped, ruled across the plot and labelled.
+  ///
+  /// Without it the fall after a suspension is just a fall; with it, whoever
+  /// is watching can see whether the stop came before or after the drop, which
+  /// is the first thing anyone asks.
+  void _paintSuspension(Canvas canvas, Size plot) {
+    final at = suspendedAt;
+    if (at == null) return;
+    final dx = scale.xForDate(at, plot.width);
+    if (dx < 0 || dx > plot.width) return;
+
+    canvas.drawRect(
+      Rect.fromLTWH(dx - 0.75, 0, 1.5, plot.height),
+      Paint()..color = suspendColor,
+    );
+
+    final label = TextPainter(
+      text: TextSpan(
+        text: 'SUSPENDED',
+        style: axisStyle.copyWith(color: suspendColor, fontWeight: FontWeight.w600),
+      ),
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout();
+    // To the left of its own line where there is room, so it never runs off
+    // the right-hand edge of a chart the suspension happened near the end of.
+    final left = (dx - label.width - 3) >= 0 ? dx - label.width - 3 : dx + 3;
+    label.paint(canvas, Offset(min(left, max(0.0, plot.width - label.width)), 1));
   }
 
   /// What the host would have painted this reading, from the ranges it
   /// reported — which is the whole point of the dots being coloured at all.
   Color _colorFor(double sgv) => glucoseColorFor(sgv, ranges);
 
-  /// Crosshair, an enlarged marker, and the value and time in a bubble that
-  /// stays inside the chart however close to an edge the finger is.
+  /// Crosshair, an enlarged dot, and the value and time in a bubble that stays
+  /// inside the chart however close to an edge the finger is.
   void _paintSelection(
     Canvas canvas,
     Size size,
@@ -556,27 +653,27 @@ class _GlucosePainter extends CustomPainter {
         ..color = crosshairColor
         ..strokeWidth = 1,
     );
-    canvas.drawCircle(Offset(px, py), 7, Paint()..color = color.withValues(alpha: 0.25));
-    canvas.drawCircle(Offset(px, py), 4, Paint()..color = color);
+    canvas.drawCircle(Offset(px, py), pointRadius + 4, Paint()..color = color.withValues(alpha: 0.25));
+    canvas.drawCircle(Offset(px, py), pointRadius + 1.5, Paint()..color = color);
 
     final label = TextPainter(
       text: TextSpan(
         children: [
           TextSpan(text: formatValue(reading), style: readoutStyle),
-          TextSpan(text: ' $unitsLabel', style: readoutCaptionStyle),
+          TextSpan(text: ' ${unitsLabel.toUpperCase()}', style: readoutCaptionStyle),
           TextSpan(
-            text: '\n${DateFormat.jm().format(reading.date)}',
+            text: '\n${DateFormat.jm().format(reading.date).toUpperCase()}',
             style: readoutCaptionStyle,
           ),
           // What was given or eaten at this reading, in the marker's own
-          // colour: the triangles say something happened, and this is where
-          // the reader finds out what.
+          // colour: the bars say something happened, and this is where the
+          // reader finds out what.
           for (final treatment in treatments)
             TextSpan(
               text: '\n${treatment.label}',
               style: readoutCaptionStyle.copyWith(
                 color: treatment is BolusEvent ? _bolusColor : _carbColor,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w600,
               ),
             ),
         ],
@@ -586,7 +683,7 @@ class _GlucosePainter extends CustomPainter {
       textScaler: textScaler,
     )..layout();
 
-    const padding = EdgeInsets.symmetric(horizontal: 8, vertical: 5);
+    const padding = EdgeInsets.symmetric(horizontal: 9, vertical: 6);
     final bubble = Size(label.width + padding.horizontal, label.height + padding.vertical);
     // Clamped rather than centred: at either end of the chart the finger is
     // already at the edge, and half a bubble hanging off it reads as nothing.
@@ -597,10 +694,9 @@ class _GlucosePainter extends CustomPainter {
     final above = py - bubble.height - 10;
     final top = above >= 0 ? above : min(py + 10, max(0.0, size.height - bubble.height));
 
-    final rect = Rect.fromLTWH(left, top, bubble.width, bubble.height);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(8)),
-      Paint()..color = readoutColor.withValues(alpha: 0.92),
+    canvas.drawRect(
+      Rect.fromLTWH(left, top, bubble.width, bubble.height),
+      Paint()..color = readoutColor.withValues(alpha: 0.94),
     );
     label.paint(canvas, Offset(left + padding.left, top + padding.top));
   }
@@ -611,10 +707,13 @@ class _GlucosePainter extends CustomPainter {
       oldDelegate.selected != selected ||
       oldDelegate.anchored != anchored ||
       oldDelegate.ranges != ranges ||
+      oldDelegate.suspendedAt != suspendedAt ||
+      oldDelegate.pointRadius != pointRadius ||
       oldDelegate.unitsLabel != unitsLabel ||
       // A theme, text size or writing direction change redraws too; none of
       // them touch the readings, and all of them change what is on screen.
       oldDelegate.gridColor != gridColor ||
+      oldDelegate.boundColor != boundColor ||
       oldDelegate.readoutColor != readoutColor ||
       oldDelegate.readoutStyle != readoutStyle ||
       oldDelegate.axisStyle != axisStyle ||
