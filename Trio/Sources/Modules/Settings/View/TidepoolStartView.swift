@@ -73,7 +73,12 @@ struct TidepoolStartView: BaseView {
                 }
             ).listRowBackground(Color.chart)
 
-            if state.provider.tidepoolManager.getTidepoolServiceUI() != nil {
+            // Guard on serviceUIType first: it only becomes non-nil after the
+            // state model's provider is set up, so it's not safe to touch
+            // state.provider on the first body evaluation (before onAppear).
+            if state.serviceUIType != nil,
+               state.provider.tidepoolManager.getTidepoolServiceUI() != nil
+            {
                 Section(
                     header: Text("History Backfill"),
                     content: {
