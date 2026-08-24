@@ -266,6 +266,67 @@ double? _positive(Object? value) {
   return number;
 }
 
+/// Older readings, sent by the host in answer to a history request.
+///
+/// A status snapshot carries only the few hours that fit an APNS push, so the
+/// chart's longer spans could otherwise never be filled — a follower installed
+/// this morning has nothing to draw for yesterday, and re-pairing throws away
+/// what it did have. The host answers a request with a short run of these,
+/// each a slice of the window, and the follower folds them into the same
+/// rolling history the snapshots feed.
+///
+/// Deliberately sent on the same `encrypted_status` channel: a follower that
+/// predates this reads `type` and drops anything that is not a status, so an
+/// updated host talking to an older follower is silently harmless.
+class GlucoseHistory {
+  const GlucoseHistory({
+    required this.readings,
+    required this.sequence,
+    required this.total,
+  });
+
+  /// Newest first, like every other list of readings on the wire.
+  final List<GlucoseReading> readings;
+
+  /// Which slice this is, and how many the host is sending. Only used to tell
+  /// the user how far along a backfill is; the readings are merged by
+  /// timestamp, so slices may arrive in any order or be missed entirely
+  /// without corrupting anything.
+  final int sequence;
+  final int total;
+
+  bool get isLast => sequence >= total;
+
+  static GlucoseHistory? fromJson(Map<String, dynamic> json) {
+    if (json['type'] != 'history') return null;
+
+    final readings = <GlucoseReading>[];
+    final raw = json['readings'];
+    if (raw is List) {
+      for (final entry in raw) {
+        if (entry is! Map<String, dynamic>) continue;
+        final sgv = entry['sgv'];
+        final date = entry['date'];
+        if (sgv is! num || date is! num) continue;
+        readings.add(GlucoseReading(
+          sgv: sgv.round(),
+          date: DateTime.fromMillisecondsSinceEpoch((date * 1000).round()),
+          direction: entry['direction'] as String?,
+        ));
+      }
+    }
+    // A slice with nothing in it says the host had nothing for that stretch,
+    // which is worth knowing (it ends the backfill) but is not a reading.
+    final sequence = json['seq'];
+    final total = json['of'];
+    return GlucoseHistory(
+      readings: readings,
+      sequence: sequence is num ? sequence.round() : 1,
+      total: total is num ? total.round() : 1,
+    );
+  }
+}
+
 /// Something the host did that a follower can see on the chart.
 ///
 /// Wire keys are short — `t` for the time, `a`/`g` for the amount — because a

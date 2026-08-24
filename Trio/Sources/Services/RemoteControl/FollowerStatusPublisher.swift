@@ -165,6 +165,37 @@ struct FollowerStatusSnapshot: Encodable {
     }
 }
 
+/// One slice of a history backfill.
+///
+/// A status snapshot carries only the few hours that fit an APNS push, so a
+/// follower's 12, 24 and 48 hour charts can otherwise show nothing but the
+/// stretch that phone happened to be awake for — and re-pairing, which clears
+/// its history, empties them outright. On request the host sends the rest as a
+/// short run of these.
+///
+/// Readings only. Everything else in a snapshot — IOB, treatments, the pump's
+/// state — describes *now*, and re-sending a stale copy of it two days late is
+/// worse than sending none.
+///
+/// Deliberately carried in the same `encrypted_status` push field: a follower
+/// that predates the backfill reads `type`, finds it is not `status`, and
+/// drops the message.
+struct FollowerHistorySlice: Encodable {
+    let type = "history"
+    /// Which slice this is, from 1, and how many the host is sending.
+    let seq: Int
+    let of: Int
+    /// Newest first, like every other list of readings on the wire.
+    let readings: [FollowerStatusSnapshot.Reading]
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case seq
+        case of
+        case readings
+    }
+}
+
 // MARK: - Push size budget
 
 extension FollowerStatusSnapshot {
@@ -256,6 +287,9 @@ protocol FollowerStatusPublisher {
     /// Publishes to one follower (used for status_request and right after
     /// push registration).
     func publish(toFollowerId followerId: String) async
+    /// Sends one follower the older readings behind its chart's longer spans
+    /// (used for history_request).
+    func publishHistory(toFollowerId followerId: String, hours: Int) async
 }
 
 /// Observes glucose and loop updates on the host and pushes encrypted status
@@ -308,6 +342,153 @@ final class BaseFollowerStatusPublisher: FollowerStatusPublisher, Injectable {
               follower.isPushRegistered || follower.isLiveActivityRegistered
         else { return }
         await publish(to: [follower])
+    }
+
+    // MARK: - History backfill
+
+    /// The furthest back a backfill will reach — the longest span the
+    /// follower's chart offers.
+    static let maximumHistoryHours = 48
+
+    /// One reading per quarter hour. The chart is a few hundred points wide,
+    /// so five-minute resolution across two days is detail nobody can see and
+    /// three times the pushes to send it. The recent hours keep their full
+    /// resolution regardless: the follower already has them from ordinary
+    /// status pushes, and merging is by timestamp, so the coarse copy of a
+    /// reading it already holds costs nothing.
+    static let historyResolution: TimeInterval = 15 * 60
+
+    /// A backfill is answered with at most this many pushes, however long a
+    /// window was asked for. A bound on what one request can cost the host.
+    static let maximumHistorySlices = 6
+
+    func publishHistory(toFollowerId followerId: String, hours: Int) async {
+        guard let follower = FollowerPairingManager.shared.follower(withId: followerId),
+              follower.isPushRegistered,
+              let messenger = SecureMessenger(sharedSecret: follower.secret)
+        else { return }
+
+        let window = min(max(hours, 1), Self.maximumHistoryHours)
+        do {
+            let readings = try await fetchHistoryReadings(hours: window)
+            guard !readings.isEmpty else { return }
+
+            let encoder = JSONEncoder()
+            let slices = try Self.slicedForPush(readings, using: encoder)
+            guard !slices.isEmpty else { return }
+
+            for (index, slice) in slices.enumerated() {
+                let payload = FollowerHistorySlice(
+                    seq: index + 1,
+                    of: slices.count,
+                    readings: slice
+                )
+                do {
+                    let sliceData = try encoder.encode(payload)
+                    let encrypted = try messenger.encrypt(data: sliceData)
+                    try await FollowerPushSender.shared.sendStatus(encryptedStatus: encrypted, to: follower)
+                } catch {
+                    // Each slice stands alone — the follower merges them by
+                    // timestamp — so one that fails to send costs a gap in the
+                    // chart rather than the whole backfill.
+                    debug(
+                        .remoteControl,
+                        "Failed to push history slice \(index + 1)/\(slices.count) to follower \(follower.name): \(error)"
+                    )
+                }
+            }
+            debug(
+                .remoteControl,
+                "Pushed \(slices.count) history slice(s) covering \(window) h to follower \(follower.name)"
+            )
+        } catch {
+            debug(.remoteControl, "Failed to build follower history: \(error)")
+        }
+    }
+
+    /// The readings over the last `hours`, newest first, thinned to
+    /// `historyResolution`.
+    private func fetchHistoryReadings(hours: Int) async throws -> [FollowerStatusSnapshot.Reading] {
+        let end = Date()
+        let start = end.addingTimeInterval(-Double(hours) * 3600)
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: GlucoseStored.self,
+            onContext: context,
+            predicate: NSPredicate.predicateForDateBetween(start: start, end: end),
+            key: "date",
+            ascending: false,
+            // 48 h at a 5-minute cadence, before thinning. Bounded so a corrupt
+            // or enormous store cannot pull the whole table into memory.
+            fetchLimit: 640
+        )
+
+        return await context.perform {
+            guard let glucoseResults = results as? [GlucoseStored] else { return [] }
+
+            var thinned: [FollowerStatusSnapshot.Reading] = []
+            var lastKept: TimeInterval?
+            // Newest first, so this walks backwards in time and keeps the
+            // first reading in each quarter hour it reaches.
+            for stored in glucoseResults {
+                let date = (stored.date ?? Date()).timeIntervalSince1970.rounded()
+                if let previous = lastKept, previous - date < Self.historyResolution {
+                    continue
+                }
+                lastKept = date
+                thinned.append(
+                    FollowerStatusSnapshot.Reading(
+                        sgv: Int(stored.glucose),
+                        date: date,
+                        // Dropped: a trend arrow describes the moment it was
+                        // taken, the follower only draws one for the newest
+                        // reading, and it is ~20 bytes of every entry.
+                        direction: nil
+                    )
+                )
+            }
+            return thinned
+        }
+    }
+
+    /// Splits readings into as few pushes as each will hold.
+    ///
+    /// Measured rather than estimated: the payload is encrypted and base64'd
+    /// before it is sent, and APNS answers anything over 4 KB with a 413 that
+    /// the follower only ever sees as a push that never arrived.
+    static func slicedForPush(
+        _ readings: [FollowerStatusSnapshot.Reading],
+        using encoder: JSONEncoder
+    ) throws -> [[FollowerStatusSnapshot.Reading]] {
+        var slices: [[FollowerStatusSnapshot.Reading]] = []
+        var current: [FollowerStatusSnapshot.Reading] = []
+
+        func fits(_ candidate: [FollowerStatusSnapshot.Reading]) throws -> Bool {
+            // Probed with two-digit counters so the measurement is never
+            // smaller than the slice actually sent.
+            let probe = FollowerHistorySlice(seq: 99, of: 99, readings: candidate)
+            let size = FollowerStatusSnapshot.projectedPayloadSize(
+                plaintextBytes: try encoder.encode(probe).count
+            )
+            return size <= FollowerStatusSnapshot.apnsPayloadLimit
+        }
+
+        for reading in readings {
+            current.append(reading)
+            if try fits(current) { continue }
+
+            current.removeLast()
+            // A single reading that will not fit means the budget is gone;
+            // nothing further can be sent either.
+            guard !current.isEmpty else { return slices }
+            slices.append(current)
+            if slices.count == maximumHistorySlices { return slices }
+            current = [reading]
+        }
+
+        if !current.isEmpty, slices.count < maximumHistorySlices {
+            slices.append(current)
+        }
+        return slices
     }
 
     private func publish(to followers: [PairedFollower]) async {

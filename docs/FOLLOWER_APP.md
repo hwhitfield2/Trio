@@ -249,6 +249,46 @@ draws from that history at a chosen span (3, 6, 12, 24 or 48 hours). Hours
 where no push arrived stay visible as gaps; the history is cleared on
 unpairing or re-pairing.
 
+### History backfill
+
+A snapshot carries at most ~4 hours, so the 12, 24 and 48 hour spans would
+otherwise show only the stretch the follower's phone happened to be awake for
+— and re-pairing, which clears the history, empties them outright. The
+follower asks for the rest with a `history_request`:
+
+```json
+{ "command_type": "history_request", "hours": 24 }
+```
+
+The host answers with a short run of pushes, carried in the same
+`encrypted_status` field:
+
+```json
+{ "type": "history", "seq": 1, "of": 3,
+  "readings": [ {"sgv": 104, "date": 1723399700}, ... ] }
+```
+
+Readings only. Everything else in a snapshot — IOB, treatments, the pump's
+state — describes *now*, and a stale copy of it two days late is worse than
+none. The host clamps the window to 48 hours, thins the readings to one per
+15 minutes (the chart is a few hundred points wide; five-minute resolution
+across two days is detail nobody can see and three times the pushes to send
+it), and sends at most 6 slices, each measured against the same 4 KB budget
+the snapshot uses. Trend arrows are dropped: the follower only draws one for
+the newest reading.
+
+Slices are merged by timestamp, so they may arrive out of order, late, or not
+at all — a lost slice costs a gap, which the chart already draws honestly, and
+ground the follower already had is deduplicated rather than doubled. The
+follower asks when a span is chosen that its history does not cover and once
+after pairing, throttled to one request per 5 minutes so that flicking between
+12, 24 and 48 hours does not ask the host three times.
+
+Because `type` is checked on both sides, a follower that predates this drops
+history pushes it did not ask for, and a host that predates it simply never
+answers the request — in which case the follower's chart says what it has
+collected rather than pretending.
+
 `boluses` and `carbs` cover the same window as `readings`, newest first, and
 are drawn on the follower's chart against the reading each happened nearest.
 Keys are short because they compete with glucose for the same 4 KB: `a` is

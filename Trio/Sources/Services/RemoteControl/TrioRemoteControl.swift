@@ -198,6 +198,21 @@ class TrioRemoteControl: Injectable {
             }
             // The follower-path caller publishes a snapshot after dispatch,
             // which is exactly what a status request asks for.
+        case .historyRequest:
+            guard let followerId = followerId else {
+                await logError(
+                    "History request rejected: only paired followers can request history.",
+                    payload: commandPayload
+                )
+                return
+            }
+            // Sent here rather than left to the snapshot after dispatch: this
+            // is a run of pushes, not the single fresh status every other
+            // command ends with. The host clamps the window it was asked for.
+            await statusPublisher.publishHistory(
+                toFollowerId: followerId,
+                hours: commandPayload.historyHours ?? BaseFollowerStatusPublisher.maximumHistoryHours
+            )
         case .registerFollower:
             guard let followerId = followerId else {
                 await logError(

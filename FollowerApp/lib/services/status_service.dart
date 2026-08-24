@@ -46,6 +46,25 @@ class StatusService {
     return snapshot;
   }
 
+  /// Decrypts a pushed history blob — the host's answer to a history request.
+  ///
+  /// Null for anything that is not one, which is how a status push and a
+  /// history push share the same `encrypted_status` field: each side reads
+  /// `type` and ignores what it was not looking for.
+  ///
+  /// Unlike a status, a history slice is not checked for staleness or ordering.
+  /// It is old readings by definition, and the slices are merged by timestamp,
+  /// so they may arrive late, out of order, or not at all.
+  Future<GlucoseHistory?> handleEncryptedHistory(String encrypted) async {
+    final Map<String, dynamic> json;
+    try {
+      json = await _messenger.decrypt(encrypted);
+    } catch (_) {
+      return null;
+    }
+    return GlucoseHistory.fromJson(json);
+  }
+
   /// Restores the last received snapshot so the app has data immediately
   /// after launch, before the next push arrives.
   Future<StatusSnapshot?> loadPersisted() async {

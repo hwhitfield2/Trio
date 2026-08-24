@@ -31,6 +31,9 @@ struct CommandPayload: Decodable, Sendable {
     /// Clamped on the host; storage spreads slow meals the same way a local
     /// food search entry is spread.
     var absorptionHours: Double?
+    /// How far back a follower's `history_request` reaches, in hours. Clamped
+    /// on the host to what it is willing to send.
+    var historyHours: Int?
     /// Monotonically increasing counter set by paired follower apps. Required
     /// on the follower command path, where it provides replay protection.
     var sequence: Int?
@@ -92,6 +95,7 @@ struct CommandPayload: Decodable, Sendable {
         case scheduledTime = "scheduled_time"
         case note
         case absorptionHours = "absorption_hours"
+        case historyHours = "hours"
         case sequence
         case returnNotification = "return_notification"
         case pushToken = "push_token"
@@ -142,6 +146,8 @@ struct CommandPayload: Decodable, Sendable {
             description += "Cancel Override command."
         case .statusRequest:
             description += "Status request."
+        case .historyRequest:
+            description += "History request (\(historyHours ?? 0) h)."
         case .registerFollower:
             description += "Follower push registration (\(pushTransport ?? "unknown transport"))."
         case .registerLiveActivity:
@@ -186,6 +192,7 @@ extension TrioRemoteControl {
         case startOverride = "start_override"
         case cancelOverride = "cancel_override"
         case statusRequest = "status_request"
+        case historyRequest = "history_request"
         case registerFollower = "register_follower"
         case registerLiveActivity = "register_live_activity"
         case suspendInsulin = "suspend_insulin"
@@ -213,6 +220,8 @@ extension TrioRemoteControl {
                 return "Cancel Override"
             case .statusRequest:
                 return "Status Request"
+            case .historyRequest:
+                return "History Request"
             case .registerFollower:
                 return "Register Follower"
             case .registerLiveActivity:

@@ -47,19 +47,7 @@ class ReadingHistory {
   /// copy wins: the host is the source of truth, and a backfilled or corrected
   /// value is a correction.
   ReadingHistory merge(StatusSnapshot snapshot) {
-    final byDate = <int, GlucoseReading>{
-      for (final reading in readings) reading.date.millisecondsSinceEpoch: reading,
-      for (final reading in snapshot.readings) reading.date.millisecondsSinceEpoch: reading,
-    };
-    final merged = byDate.values.toList()..sort((a, b) => b.date.compareTo(a.date));
-
-    // Pruned relative to the newest reading rather than the wall clock: a
-    // night with the host unreachable should age the chart, not empty it.
-    DateTime? cutoff;
-    if (merged.isNotEmpty) {
-      cutoff = merged.first.date.subtract(retention);
-      merged.removeWhere((reading) => reading.date.isBefore(cutoff!));
-    }
+    final (merged, cutoff) = _mergeReadings(snapshot.readings);
 
     // Treatments are keyed by time *and* amount: an SMB and a manual bolus can
     // land the same second, and collapsing those would erase insulin.
@@ -76,8 +64,8 @@ class ReadingHistory {
       ..sort((a, b) => b.date.compareTo(a.date));
     final mergedCarbs = carbsByKey.values.toList()..sort((a, b) => b.date.compareTo(a.date));
     if (cutoff != null) {
-      mergedBoluses.removeWhere((bolus) => bolus.date.isBefore(cutoff!));
-      mergedCarbs.removeWhere((carb) => carb.date.isBefore(cutoff!));
+      mergedBoluses.removeWhere((bolus) => bolus.date.isBefore(cutoff));
+      mergedCarbs.removeWhere((carb) => carb.date.isBefore(cutoff));
     }
 
     return ReadingHistory(
@@ -85,6 +73,65 @@ class ReadingHistory {
       boluses: List.unmodifiable(mergedBoluses),
       carbs: List.unmodifiable(mergedCarbs),
     );
+  }
+
+  /// This history with a run of older readings folded in.
+  ///
+  /// The backfill path. Readings only: a history push carries no IOB, no
+  /// treatments and no state, because everything else about a moment two days
+  /// ago has already stopped being true.
+  ReadingHistory mergeHistory(List<GlucoseReading> incoming) {
+    if (incoming.isEmpty) return this;
+    final (merged, cutoff) = _mergeReadings(incoming);
+
+    // Treatments are pruned against the new window too: backfilled readings
+    // can only ever move the newest reading forward, never back, so this
+    // cannot drop a treatment that was still on the chart.
+    final prunedBoluses = [...boluses];
+    final prunedCarbs = [...carbs];
+    if (cutoff != null) {
+      prunedBoluses.removeWhere((bolus) => bolus.date.isBefore(cutoff));
+      prunedCarbs.removeWhere((carb) => carb.date.isBefore(cutoff));
+    }
+
+    return ReadingHistory(
+      readings: List.unmodifiable(merged),
+      boluses: List.unmodifiable(prunedBoluses),
+      carbs: List.unmodifiable(prunedCarbs),
+    );
+  }
+
+  /// Folds [incoming] into the kept readings, newest first, and returns them
+  /// with the retention cutoff the caller should prune treatments against.
+  ///
+  /// Keyed by timestamp, so the overlap between consecutive snapshots — which
+  /// resend most of the same window every five minutes — collapses instead of
+  /// stacking, and a backfill that covers ground the device already had is
+  /// free rather than duplicated.
+  (List<GlucoseReading>, DateTime?) _mergeReadings(List<GlucoseReading> incoming) {
+    final byDate = <int, GlucoseReading>{
+      for (final reading in readings) reading.date.millisecondsSinceEpoch: reading,
+      for (final reading in incoming) reading.date.millisecondsSinceEpoch: reading,
+    };
+    final merged = byDate.values.toList()..sort((a, b) => b.date.compareTo(a.date));
+
+    // Pruned relative to the newest reading rather than the wall clock: a
+    // night with the host unreachable should age the chart, not empty it.
+    DateTime? cutoff;
+    if (merged.isNotEmpty) {
+      cutoff = merged.first.date.subtract(retention);
+      merged.removeWhere((reading) => reading.date.isBefore(cutoff!));
+    }
+    return (merged, cutoff);
+  }
+
+  /// How far back the kept readings actually reach.
+  ///
+  /// What decides whether a chart span can be drawn from what this device has,
+  /// or whether the host has to be asked for the rest.
+  Duration get coverage {
+    if (readings.length < 2) return Duration.zero;
+    return readings.first.date.difference(readings.last.date);
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
