@@ -157,7 +157,11 @@ PY
   # Android 11 hides other apps from this one unless they are declared here,
   # so without this the suspension banner's call and message buttons quietly
   # do nothing on a modern phone - which is the one moment they exist for.
-  if ! grep -q '<queries>' "$MANIFEST"; then
+  #
+  # Keyed on the tel scheme rather than on <queries>: current Flutter templates
+  # ship a <queries> block of their own (for PROCESS_TEXT), and a guard that
+  # only asked whether the element existed found that one and declared nothing.
+  if ! grep -q 'android:scheme="tel"' "$MANIFEST"; then
     echo "==> Declaring the dialer and messaging intents in AndroidManifest.xml"
     python3 - <<'QUERIES_PY'
 import re
@@ -166,10 +170,21 @@ path = 'android/app/src/main/AndroidManifest.xml'
 with open(path) as f:
     content = f.read()
 
-queries = (
-    '    <queries>\n        <intent>\n            <action android:name="android.intent.action.DIAL" />\n            <data android:scheme="tel" />\n        </intent>\n        <intent>\n            <action android:name="android.intent.action.VIEW" />\n            <data android:scheme="tel" />\n        </intent>\n        <intent>\n            <action android:name="android.intent.action.VIEW" />\n            <data android:scheme="sms" />\n        </intent>\n        <intent>\n            <action android:name="android.intent.action.SENDTO" />\n            <data android:scheme="smsto" />\n        </intent>\n    </queries>\n'
+INTENTS = (
+    '        <intent>\n            <action android:name="android.intent.action.DIAL" />\n            <data android:scheme="tel" />\n        </intent>\n'
+    '        <intent>\n            <action android:name="android.intent.action.VIEW" />\n            <data android:scheme="tel" />\n        </intent>\n'
+    '        <intent>\n            <action android:name="android.intent.action.VIEW" />\n            <data android:scheme="sms" />\n        </intent>\n'
+    '        <intent>\n            <action android:name="android.intent.action.SENDTO" />\n            <data android:scheme="smsto" />\n        </intent>\n'
 )
-content = re.sub(r'(<manifest[^>]*>\n)', lambda m: m.group(1) + queries, content, count=1)
+
+# A manifest may declare at most one <queries> element, so merge into the
+# template's if it has one and create it otherwise.
+existing = re.search(r'([ \t]*<queries>\n)', content)
+if existing:
+    content = content[:existing.end()] + INTENTS + content[existing.end():]
+else:
+    block = '    <queries>\n' + INTENTS + '    </queries>\n'
+    content = re.sub(r'(<manifest[^>]*>\n)', lambda m: m.group(1) + block, content, count=1)
 
 with open(path, 'w') as f:
     f.write(content)

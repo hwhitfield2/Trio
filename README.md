@@ -85,6 +85,57 @@ stepper cannot exceed the host's limit in the first place, and it works
 one-handed, in the dark, without a keyboard covering the amount about to be
 sent.
 
+## This repository
+
+The follower was developed inside the [Trio](https://github.com/nightscout/Trio)
+repository, under `FollowerApp/`. This repository is that directory split out
+with `git subtree split`, so the follower's own commit history is intact and
+every path has moved up to the root — `FollowerApp/lib/main.dart` is now
+`lib/main.dart`.
+
+The host half of the protocol stays in Trio, and the two halves have to agree:
+
+| Concern | Host (in Trio) | Follower (here) |
+| --- | --- | --- |
+| Pairing bundle | `Trio/Sources/Services/RemoteControl/FollowerPairingManager.swift` | `lib/models/pairing_bundle.dart` |
+| Command payload | `Trio/Sources/Models/CommandPayload.swift` | `lib/models/command.dart` |
+| Encryption | `Trio/Sources/Services/RemoteControl/SecureMessenger.swift` | `lib/services/secure_messenger.dart` |
+| Command handling | `Trio/Sources/Services/RemoteControl/TrioRemoteControl.swift` | `lib/services/command_service.dart` |
+| Status snapshot | `Trio/Sources/Services/RemoteControl/FollowerStatusPublisher.swift` | `lib/models/status_snapshot.dart` |
+| Status delivery | `Trio/Sources/Services/RemoteControl/FollowerPushSender.swift` | `lib/services/push_service.dart` / `status_service.dart` |
+
+Nothing enforces that: neither repository's CI can see the other, and a
+protocol change made on one side alone fails at runtime, on a caregiver's
+phone, rather than in a build. [`docs/PROTOCOL.md`](docs/PROTOCOL.md) is the
+specification both sides are written against — change it in the same breath as
+the code, and carry the change to the other repository.
+
+The app keeps its Trio identity: the Dart package is `trio_follower`, the iOS
+bundle id is `org.nightscout.<TEAMID>.triofollower`, and the app group it
+shares with its widget is Trio's own
+`group.org.nightscout.<TEAMID>.trio.trio-app-group` (see `Config.xcconfig`).
+Those are what App Store Connect, fastlane match and every phone already
+paired have records for, so moving repositories deliberately did not move
+them.
+
+### Layout
+
+```
+lib/            the app: models, services, state, screens, widgets
+test/           protocol, crypto, chart and store tests — no device needed
+platform/       native sources the generated shells get: the iOS widget
+                extension and Live Activity, the Android widget providers
+                and resources, the alert tones, the Live Activity plugin
+tool/           prepare_platforms.sh — generates and patches ios/ and android/
+assets/         bundled IBM Plex fonts (SIL OFL 1.1, see assets/fonts/OFL.txt)
+fastlane/       iOS signing and TestFlight lanes
+docs/           the host <-> follower protocol specification
+```
+
+`ios/` and `android/` are not in the repository. `tool/prepare_platforms.sh`
+generates them with `flutter create` and applies every patch the app needs, so
+there is no hand-maintained Xcode project or manifest to drift.
+
 ## How it works
 
 ```
@@ -182,8 +233,11 @@ an app update usually does not.
 The host shows, under Settings → Remote Control:
 
 - the **latest follower release**, read from `FollowerApp/pubspec.yaml` on
-  `main` in the Trio repository (the same way Trio checks its own version
-  against `Config.xcconfig`), and
+  `main` in the [Trio repository](https://github.com/nightscout/Trio) — the
+  host's copy of the follower, not this one (`FollowerVersionChecker.swift`
+  has that URL compiled in), so a build from this repository can report a
+  version the host has never heard of and be told, wrongly, that it is
+  current; and
 - **each follower's version**, marked when it is behind.
 
 From there the host can send an outdated follower — or all of them — a
@@ -216,12 +270,16 @@ biometric or device credential where available.
 
 ### CI/CD (recommended)
 
-The repository's GitHub Actions build the follower for you:
+This repository's GitHub Actions build the follower for you. They need the
+same secrets the Trio host build uses — `TEAMID`, `GH_PAT`, `MATCH_PASSWORD`,
+`FASTLANE_KEY_ID`, `FASTLANE_ISSUER_ID`, `FASTLANE_KEY` — set on *this*
+repository, and they share the host's private `Match-Secrets` repository, so
+running them here does not invalidate anything there: match reuses the same
+Distribution certificate and only adds the follower's two profiles to it.
 
-- **"5. Build Trio Follower"** (`build_follower.yml`) — run it from the
-  Actions tab (or push to `main` touching `FollowerApp/`). It ships the iOS
-  app to **TestFlight** using the same fastlane/match secrets as "4. Build
-  Trio", and attaches an installable **Android APK** as a workflow artifact.
+- **"4. Build Trio Follower"** (`build_follower.yml`) — run it from the
+  Actions tab, or push to `main`. It ships the iOS app to **TestFlight** and
+  attaches an installable **Android APK** as a workflow artifact.
   Export compliance is declared during the build — `prepare_platforms.sh`
   writes `ITSAppUsesNonExemptEncryption` into the generated `Info.plist`, the
   same answer Trio's own carries — so a build reaches TestFlight installable
@@ -251,13 +309,14 @@ The repository's GitHub Actions build the follower for you:
   3. Run **"3. Create Certificates"** — it provisions the follower's signing
      profile. The follower build runs fastlane match in read-only mode and
      cannot create the profile itself, so it has to exist beforehand. Run this
-     even if you already created certificates before the follower existed.
+     even if you already created certificates for the Trio host: the
+     follower's two profiles are new ones.
   4. Optional, Android live status: add a repository secret
      `FOLLOWER_GOOGLE_SERVICES_JSON` containing your Firebase project's
      `google-services.json` contents.
-- **"Follower CI"** (`follower_ci.yml`) — runs automatically on changes to
-  `FollowerApp/`: analyzer, protocol/crypto tests, an Android APK build, and
-  an unsigned iOS compile check.
+- **"CI"** (`ci.yml`) — runs on every push and pull request: analyzer,
+  protocol/crypto tests, an Android APK build, and an unsigned iOS compile
+  check. It needs no secrets, so it works on a fork.
 
 ## Home screen widgets
 
@@ -300,7 +359,7 @@ TEAMID=<your team id> ./tool/prepare_platforms.sh
 Without it the script skips the iOS widget (with a warning) and everything else
 still builds. It also needs fastlane's `xcodeproj` gem, since it adds the widget
 extension target to the generated `ios/Runner.xcodeproj`; run `bundle install`
-at the repository root first, then run the script under `bundle exec`. For a
+first, then run the script under `bundle exec`. For a
 local `flutter run`/`flutter build ios`, pass the group to the Dart side too:
 
 ```bash
@@ -320,7 +379,6 @@ required platform patch** (permissions, background modes, entitlements,
 FlutterFragmentActivity, optional Firebase config):
 
 ```bash
-cd FollowerApp
 ./tool/prepare_platforms.sh
 flutter pub get
 flutter test
@@ -369,9 +427,9 @@ flutter run
 ## Protocol compatibility
 
 The command wire format is byte-compatible with Trio's
-`SecureMessenger`/`CommandPayload` (see `docs/FOLLOWER_APP.md` in the repo
-root for the full protocol specification). If you change either side, change
-both and bump the pairing-bundle version.
+`SecureMessenger`/`CommandPayload` — see [`docs/PROTOCOL.md`](docs/PROTOCOL.md)
+for the full specification. If you change either side, change both (they are
+in [two repositories](#this-repository)) and bump the pairing-bundle version.
 
 ## Status pushes
 

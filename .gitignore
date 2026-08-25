@@ -8,17 +8,36 @@ build/
 .pub/
 pubspec.lock
 
-# Platform shells are generated with `flutter create .` (see README).
-# Commit them once generated and customized if you prefer; by default we
-# keep generated intermediates out.
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/ephemeral/
-android/.gradle/
-android/local.properties
-android/app/.cxx/
+# Platform shells. This repository holds only the Dart code and the platform
+# sources under platform/; tool/prepare_platforms.sh generates ios/ and
+# android/ from them with `flutter create` and patches them, on every CI run
+# and before every local build. Committing the generated output would mean
+# maintaining it by hand against whatever template the installed Flutter SDK
+# ships.
+/ios/
+/android/
+# Written by `flutter create` too, and it pins the exact Flutter revision that
+# generated the shells - which differs per builder and per CI run.
+/.metadata
+
+# Firebase config for FCM status pushes on Android: written by
+# prepare_platforms.sh from the FOLLOWER_GOOGLE_SERVICES_JSON secret, or
+# dropped in by hand for a local build. Never commit it.
+google-services.json
+
+# fastlane / signing
+/artifacts/
+/buildlog/
+/fastlane/README.md
+/fastlane/report.xml
+ConfigOverride.xcconfig
+*.mobileprovision
+*.ipa
+*.dSYM.zip
+*.p8
 
 # IDE
 .idea/
 *.iml
 .vscode/
+.DS_Store

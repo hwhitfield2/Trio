@@ -12,7 +12,7 @@
 # carries the id flutter create gave it; fastlane renames both to the team's
 # identifiers at archive time.
 #
-# Run from FollowerApp/ after `flutter create` has produced the iOS shell.
+# Run from the repository root after `flutter create` has produced the iOS shell.
 
 require 'xcodeproj'
 

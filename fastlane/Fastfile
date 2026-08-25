@@ -1,0 +1,311 @@
+# fastlane configuration for the Trio Follower app.
+#
+# Split out of the Trio repository's Fastfile: the lanes here are the follower
+# ones, with the paths that used to point into FollowerApp/ now pointing at
+# this repository's root. The Trio host's own lanes stay in the Trio
+# repository — the two builds share only an Apple team, an app group and a
+# Match-Secrets repository.
+#
+# Documentation: https://docs.fastlane.tools
+
+default_platform(:ios)
+
+TEAMID = ENV["TEAMID"]
+GH_PAT = ENV["GH_PAT"]
+GITHUB_WORKSPACE = ENV["GITHUB_WORKSPACE"] || File.expand_path("..", __dir__)
+GITHUB_REPOSITORY_OWNER = ENV["GITHUB_REPOSITORY_OWNER"]
+FASTLANE_KEY_ID = ENV["FASTLANE_KEY_ID"]
+FASTLANE_ISSUER_ID = ENV["FASTLANE_ISSUER_ID"]
+FASTLANE_KEY = ENV["FASTLANE_KEY"]
+ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] = "120"
+
+# Parse Config.xcconfig, substituting $(DEVELOPMENT_TEAM) with ENV["TEAMID"].
+def parse_xcconfig_file(path)
+  xcconfig = {}
+  # Read as UTF-8 rather than the runner's default external encoding, which on
+  # a runner without a UTF-8 locale is US-ASCII and makes String#strip! raise
+  # on any non-ASCII byte in the file.
+  File.open(path, "r:UTF-8").each_line do |line|
+    line.strip!
+    next if line.empty? || line.start_with?('//') || line.start_with?('#')
+    parts = line.split('=')
+    next if parts.length < 2 # Skip lines without '='
+    key, value = parts.map(&:strip)
+    value = value.gsub('$(DEVELOPMENT_TEAM)', TEAMID.to_s)
+    xcconfig[key] = value
+  end
+  xcconfig
+end
+
+xcconfig = parse_xcconfig_file("#{GITHUB_WORKSPACE}/Config.xcconfig")
+ENV["BUNDLE_ID"] = xcconfig["BUNDLE_IDENTIFIER"]
+
+platform :ios do
+  desc "Build Trio Follower (Flutter iOS) and sign for TestFlight"
+  lane :build_follower do
+    setup_ci if ENV['CI']
+    FOLLOWER_BUNDLE_ID = "#{ENV['BUNDLE_ID']}follower"
+    FOLLOWER_WIDGET_BUNDLE_ID = "#{FOLLOWER_BUNDLE_ID}.widget"
+    # The follower shares Trio's app group rather than registering one of its
+    # own. Must match what tool/prepare_platforms.sh writes into the
+    # entitlements, or the widget cannot read what the app publishes.
+    FOLLOWER_APP_GROUP_ID = "group.org.nightscout.#{TEAMID}.trio.trio-app-group"
+    follower_dir = GITHUB_WORKSPACE
+
+    api_key = app_store_connect_api_key(
+      key_id: "#{FASTLANE_KEY_ID}",
+      issuer_id: "#{FASTLANE_ISSUER_ID}",
+      key_content: "#{FASTLANE_KEY}"
+    )
+
+    previous_build_number = begin
+      latest_testflight_build_number(
+        app_identifier: FOLLOWER_BUNDLE_ID,
+        api_key: api_key
+      )
+    rescue => e
+      UI.message("No previous TestFlight build found (#{e.message}); starting at 0")
+      0
+    end
+    current_build_number = previous_build_number + 1
+
+    # Compile the Flutter app once without signing; gym re-archives the
+    # generated workspace with distribution signing below.
+    #
+    # with_unbundled_env is required: this lane runs under `bundle exec`, and
+    # the Flutter build shells out to `pod`. CocoaPods inherits our Bundler
+    # environment, whose Gemfile has fastlane but not cocoapods, and dies with
+    # "CocoaPods is installed but broken ... not in valid state" — so Flutter
+    # skips pod install and the archive has no Pods to link against.
+    Dir.chdir(follower_dir) do
+      Bundler.with_unbundled_env do
+        sh("flutter", "pub", "get")
+        sh("flutter", "build", "ios", "--release", "--no-codesign",
+           "--build-number=#{current_build_number}",
+           "--dart-define=APP_GROUP_ID=#{FOLLOWER_APP_GROUP_ID}")
+      end
+    end
+
+    update_project_team(
+      path: "#{follower_dir}/ios/Runner.xcodeproj",
+      teamid: "#{TEAMID}"
+    )
+
+    # Point the Runner target at the entitlements written by
+    # tool/prepare_platforms.sh so the binary carries aps-environment.
+    require 'xcodeproj'
+    project = Xcodeproj::Project.open("#{follower_dir}/ios/Runner.xcodeproj")
+    project.targets.select { |t| t.name == "Runner" }.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "Runner/Runner.entitlements"
+      end
+    end
+    project.save
+
+    match(
+      type: "appstore",
+      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
+      app_identifier: [FOLLOWER_BUNDLE_ID, FOLLOWER_WIDGET_BUNDLE_ID]
+    )
+
+    mapping = Actions.lane_context[
+      SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING
+    ]
+
+    update_code_signing_settings(
+      path: "#{follower_dir}/ios/Runner.xcodeproj",
+      use_automatic_signing: false,
+      profile_name: mapping[FOLLOWER_BUNDLE_ID],
+      code_sign_identity: "iPhone Distribution",
+      bundle_identifier: FOLLOWER_BUNDLE_ID,
+      targets: ["Runner"]
+    )
+
+    # The widget extension is only present when prepare_platforms.sh could
+    # create it, i.e. when TEAMID was set for that step.
+    widget_target = project.targets.find { |t| t.name == "TrioFollowerWidgetExtension" }
+    if widget_target
+      update_code_signing_settings(
+        path: "#{follower_dir}/ios/Runner.xcodeproj",
+        use_automatic_signing: false,
+        profile_name: mapping[FOLLOWER_WIDGET_BUNDLE_ID],
+        code_sign_identity: "iPhone Distribution",
+        bundle_identifier: FOLLOWER_WIDGET_BUNDLE_ID,
+        targets: ["TrioFollowerWidgetExtension"]
+      )
+    else
+      UI.important("No widget extension target found; building the follower without its home screen widget")
+    end
+
+    profiles = { FOLLOWER_BUNDLE_ID => mapping[FOLLOWER_BUNDLE_ID] }
+    if widget_target
+      profiles[FOLLOWER_WIDGET_BUNDLE_ID] = mapping[FOLLOWER_WIDGET_BUNDLE_ID]
+    end
+
+    gym(
+      workspace: "#{follower_dir}/ios/Runner.xcworkspace",
+      export_method: "app-store",
+      scheme: "Runner",
+      output_name: "TrioFollower.ipa",
+      configuration: "Release",
+      destination: 'generic/platform=iOS',
+      buildlog_path: 'buildlog',
+      export_options: {
+        provisioningProfiles: profiles
+      }
+    )
+
+    copy_artifacts(
+      target_path: "artifacts",
+      artifacts: ["*.mobileprovision", "*.ipa", "*.dSYM.zip"]
+    )
+  end
+
+  desc "Push Trio Follower to TestFlight"
+  lane :release_follower do
+    api_key = app_store_connect_api_key(
+      key_id: "#{FASTLANE_KEY_ID}",
+      issuer_id: "#{FASTLANE_ISSUER_ID}",
+      key_content: "#{FASTLANE_KEY}"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_submission: false,
+      ipa: "TrioFollower.ipa",
+      skip_waiting_for_build_processing: true,
+      changelog: git_branch+" "+last_git_commit[:abbreviated_commit_hash],
+    )
+  end
+
+  desc "Provision Identifiers"
+  lane :identifiers do
+    setup_ci if ENV['CI']
+    ENV["MATCH_READONLY"] = false.to_s
+    BUNDLE_ID = ENV["BUNDLE_ID"]
+
+    app_store_connect_api_key(
+      key_id: "#{FASTLANE_KEY_ID}",
+      issuer_id: "#{FASTLANE_ISSUER_ID}",
+      key_content: "#{FASTLANE_KEY}"
+    )
+
+    def configure_bundle_id(name, identifier, capabilities)
+      bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier) || Spaceship::ConnectAPI::BundleId.create(
+        name:       name,
+        identifier: identifier,
+        platform:   "IOS"
+      )
+      existing = bundle_id.get_capabilities.map(&:capability_type)
+      capabilities.reject { |c| existing.include?(c) }.each do |cap|
+        bundle_id.create_capability(cap)
+      end
+    end
+
+    # The follower needs push notifications so the host can deliver encrypted
+    # status snapshots to it, and the app group it shares with its home screen
+    # widget. That group belongs to Trio — see Config.xcconfig — and Apple's
+    # API cannot assign app groups, so both identifiers still need the group
+    # added by hand once (see the README).
+    configure_bundle_id("Trio Follower", "#{BUNDLE_ID}follower", [
+      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS,
+      Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS
+    ])
+
+    configure_bundle_id("Trio Follower Widget", "#{BUNDLE_ID}follower.widget", [
+      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
+    ])
+
+    # Report whether the follower has an App Store Connect app record, which
+    # "4. Build Trio Follower" needs before it can upload to TestFlight.
+    #
+    # This cannot be automated with the credentials CI has. Apple's App Store
+    # Connect API does not support creating apps at all ("The resource 'apps'
+    # does not allow 'CREATE'"), and produce, which can, has no api_key option
+    # in fastlane 2.235.0 — it only speaks Apple ID auth. So the record has to
+    # be created once by hand; everything else here is automated.
+    begin
+      follower_bundle_id = "#{BUNDLE_ID}follower"
+      if Spaceship::ConnectAPI::App.find(follower_bundle_id)
+        UI.success("App Store Connect record for #{follower_bundle_id} is present")
+      else
+        UI.important("No App Store Connect app record for #{follower_bundle_id}.")
+        UI.important("\"4. Build Trio Follower\" will build but fail to upload to TestFlight.")
+        UI.important("Create it once at https://appstoreconnect.apple.com → Apps → +:")
+        UI.important("  Platform: iOS")
+        UI.important("  Bundle ID: #{follower_bundle_id}")
+        UI.important("  SKU: #{follower_bundle_id}")
+        UI.important("  Name: anything free in the App Store, e.g. \"Trio Follower\"")
+      end
+    rescue => e
+      UI.important("Could not check the follower app record: #{e.message}")
+    end
+  end
+
+  desc "Provision Certificates"
+  lane :certs do
+    setup_ci if ENV['CI']
+    ENV["MATCH_READONLY"] = false.to_s
+    BUNDLE_ID = ENV["BUNDLE_ID"]
+
+    app_store_connect_api_key(
+      key_id: "#{FASTLANE_KEY_ID}",
+      issuer_id: "#{FASTLANE_ISSUER_ID}",
+      key_content: "#{FASTLANE_KEY}"
+    )
+
+    match(
+      type: "appstore",
+      force: false,
+      verbose: true,
+      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
+      app_identifier: [
+        # build_follower calls setup_ci, which forces MATCH_READONLY, so its
+        # match run can only fetch an existing profile — this lane is the only
+        # place the follower profiles get created.
+        "#{BUNDLE_ID}follower",
+        "#{BUNDLE_ID}follower.widget"
+      ]
+    )
+  end
+
+  desc "Validate Secrets"
+  lane :validate_secrets do
+    setup_ci if ENV['CI']
+    ENV["MATCH_READONLY"] = true.to_s
+    BUNDLE_ID = ENV["BUNDLE_ID"]
+
+    app_store_connect_api_key(
+      key_id: "#{FASTLANE_KEY_ID}",
+      issuer_id: "#{FASTLANE_ISSUER_ID}",
+      key_content: "#{FASTLANE_KEY}"
+    )
+
+    Spaceship::ConnectAPI::BundleId.find("#{BUNDLE_ID}follower")
+
+    match(
+      type: "appstore",
+      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
+      app_identifier: [],
+    )
+  end
+
+  desc "Nuke Certs"
+  lane :nuke_certs do
+    setup_ci if ENV['CI']
+    ENV["MATCH_READONLY"] = false.to_s
+
+    app_store_connect_api_key(
+      key_id: "#{FASTLANE_KEY_ID}",
+      issuer_id: "#{FASTLANE_ISSUER_ID}",
+      key_content: "#{FASTLANE_KEY}"
+    )
+
+    match_nuke(
+      type: "appstore",
+      team_id: "#{TEAMID}",
+      skip_confirmation: true,
+      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}")
+    )
+  end
+end
