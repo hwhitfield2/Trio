@@ -107,15 +107,15 @@ extension DeliveryCapEditor {
         private func doubleBinding(_ value: Binding<Decimal>) -> Binding<Double> {
             Binding(
                 get: { Double(truncating: value.wrappedValue as NSDecimalNumber) },
-                // 3 decimals: real-insulin steps with diluted insulin are as fine as 0.005
-                set: { value.wrappedValue = Decimal(Int(($0 * 1000).rounded())) / 1000 }
+                // 4 decimals: real-insulin steps with diluted insulin are as fine as 0.0025 (U-5)
+                set: { value.wrappedValue = Decimal(Int(($0 * 10000).rounded())) / 10000 }
             )
         }
 
         private func formatted(_ value: Decimal) -> String {
             let formatter = NumberFormatter()
             formatter.minimumFractionDigits = 0
-            formatter.maximumFractionDigits = 3
+            formatter.maximumFractionDigits = 4
             return formatter.string(from: value as NSDecimalNumber) ?? "\(value)"
         }
     }

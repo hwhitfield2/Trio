@@ -176,7 +176,13 @@ extension UnitsLimitsSettings {
                         // binary Double noise lands in the stored profile.
                         rate = pump.roundToSupportedBasalRate(unitsPerHour: Double(target)).decimal ?? target
                     }
-                    if (rate == 0 && target > 0) || abs(rate - target) > Decimal(0.1) {
+                    // The absolute 0.1 U/hr test alone is factor-blind: scaling
+                    // volumes *down* (leaving U-5 is ÷20) can distort a slot by
+                    // a large fraction of its real value while staying far under
+                    // 0.1, so a relative test has to back it up.
+                    if (rate == 0 && target > 0) || abs(rate - target) > Decimal(0.1) ||
+                        (target > 0 && abs(rate - target) / target > Decimal(0.1))
+                    {
                         clampedSlots.append("\(entry.start): \(target) → \(rate) U/hr")
                     }
                     return BasalProfileEntry(start: entry.start, minutes: entry.minutes, rate: rate)
@@ -192,7 +198,7 @@ extension UnitsLimitsSettings {
 
             if clampedSlots.isNotEmpty {
                 warnings.append(String(
-                    localized: "The pump cannot deliver some rescaled basal rates and they were clamped: \(clampedSlots.joined(separator: ", ")). Review your basal profile."
+                    localized: "The pump cannot deliver some rescaled basal rates and they were clamped (rates in pumped volume units): \(clampedSlots.joined(separator: ", ")). Review your basal profile."
                 ))
             }
 

@@ -1010,11 +1010,18 @@ extension Treatments.StateModel {
             lastLoopDate = apsManager.lastLoopDate as Date?
             insulin = (mostRecentDetermination.insulinForManualBolus ?? 0) as Decimal
             target = (mostRecentDetermination.currentTarget ?? currentBGTarget as NSDecimalNumber) as Decimal
-            isf = (mostRecentDetermination.insulinSensitivity ?? currentISF as NSDecimalNumber) as Decimal
+            // A determination written by an older oref bundle carries ISF/CR
+            // display-rounded, under dilution coarse enough to reach zero (real
+            // ISF 9 at U-5 stores 0.45 per pumped unit → rounds to 0). These
+            // values are divided by in the bolus calculation, so fall back to
+            // the schedule values rather than show or divide by zero.
+            let determinationISF = (mostRecentDetermination.insulinSensitivity ?? 0) as Decimal
+            isf = determinationISF > 0 ? determinationISF : currentISF
             cob = mostRecentDetermination.cob as Int16
             iob = (mostRecentDetermination.iob ?? 0) as Decimal
             basal = (mostRecentDetermination.tempBasal ?? 0) as Decimal
-            carbRatio = (mostRecentDetermination.carbRatio ?? currentCarbRatio as NSDecimalNumber) as Decimal
+            let determinationCR = (mostRecentDetermination.carbRatio ?? 0) as Decimal
+            carbRatio = determinationCR > 0 ? determinationCR : currentCarbRatio
             insulinCalculated = await calculateInsulin()
         }
     }

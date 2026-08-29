@@ -590,7 +590,12 @@ final class BaseGarminManager: NSObject, GarminManager, Injectable {
                 }
 
                 if let isf = latestDetermination.insulinSensitivity {
-                    isfValue = Int16(truncating: isf)
+                    // The determination ISF carries decimals (it is no longer
+                    // display-rounded by oref); round instead of truncating so
+                    // 43.7 shows as 44, not 43. Sub-1 per-pumped-unit values
+                    // under strong dilution still show 0 — the field is a
+                    // whole number by the watch schema.
+                    isfValue = Int16(truncating: rounded(isf.decimalValue, scale: 0, roundingMode: .plain) as NSDecimalNumber)
                 }
 
                 if let eventualBG = latestDetermination.eventualBG {

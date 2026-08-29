@@ -1,7 +1,9 @@
 //для monitor/meal.json параметры: monitor/pumphistory-24h-zoned.json settings/profile.json monitor/clock-zoned.json monitor/glucose.json settings/basal_profile.json monitor/carbhistory.json
 
 function generate(pumphistory_data, profile_data, clock_data, glucose_data, basalprofile_data, carbhistory = false) {
-    if (typeof(profile_data.carb_ratio) === 'undefined' || profile_data.carb_ratio < 0.1) {
+    // carb_ratio is g per PUMPED unit; the floor must sit below the CR editor
+    // real minimum of 1 g/U at U-5 dilution (stores 1/20 = 0.05).
+    if (typeof(profile_data.carb_ratio) === 'undefined' || profile_data.carb_ratio < 0.04) {
         return {"error":"Error: carb_ratio " + profile_data.carb_ratio + " out of bounds"};
     }
 

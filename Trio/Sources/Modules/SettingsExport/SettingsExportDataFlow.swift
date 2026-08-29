@@ -29,7 +29,7 @@ struct TrioSettingsBackup: JSON {
     /// Effective insulin concentration the therapy values below are denominated
     /// in (1 = U-100, 0.1 = U-10). Written independently of `trioSettings` on
     /// purpose: every therapy figure in a backup is a *pumped volume*, so
-    /// without this the same numbers mean something 2–10x different on a device
+    /// without this the same numbers mean something 2–20x different on a device
     /// running a different concentration. An import that finds therapy data but
     /// no concentration cannot know which, and must refuse rather than guess.
     var insulinConcentrationFactor: Decimal?

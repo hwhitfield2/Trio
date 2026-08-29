@@ -10,7 +10,9 @@ struct TherapySettingEditorView: View {
 
     private let basalFormatter: NumberFormatter = {
         let numberFormatter = NumberFormatter()
-        numberFormatter.maximumFractionDigits = 3
+        // Real-insulin basal steps with diluted insulin are as fine as
+        // 0.00125 U/hr (a 0.025 U/hr pump increment at U-5).
+        numberFormatter.maximumFractionDigits = 5
         numberFormatter.minimumFractionDigits = 2
         return numberFormatter
     }()

@@ -1251,8 +1251,13 @@ var determine_basal = function determine_basal(glucose_status, currenttemp, iob_
     rT.IOB=iob_data.iob;
     rT.BGI=convert_bg(bgi,profile);
     rT.deviation=convert_bg(deviation, profile);
-    rT.ISF=convert_bg(sens, profile);
-    rT.CR=round(carbRatio, 1);
+    // ISF and CR are per PUMPED unit and consumers do dose math with them
+    // (Trio's bolus calculator divides by both), so they cannot take display
+    // rounding: convert_bg's whole-mg/dL (or 0.1 mmol/L) quantum rounds a
+    // diluted ISF as low as 0.45 (real ISF 9 at U-5) to zero, and a 0.1 CR
+    // quantum is a 2 g/U real error at U-5. Report at 0.001 like sens itself.
+    rT.ISF = profile.out_units === "mmol/L" ? round(sens * 0.0555, 3) : round(sens, 3);
+    rT.CR = round(carbRatio, 3);
     rT.target_bg=convert_bg(target_bg, profile);
     rT.current_target=round(target_bg, 0);
     rT.reason = isfreason + ", COB: " + rT.COB + ", Dev: " + rT.deviation + ", BGI: " + rT.BGI + ", CR: " + rT.CR + ", Target: " + targetLog + ", minPredBG " + convert_bg(minPredBG, profile) + ", minGuardBG " + convert_bg(minGuardBG, profile) + ", IOBpredBG " + convert_bg(lastIOBpredBG, profile);

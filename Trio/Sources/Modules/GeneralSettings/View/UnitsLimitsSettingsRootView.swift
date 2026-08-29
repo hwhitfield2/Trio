@@ -21,7 +21,7 @@ extension UnitsLimitsSettings {
                 Text("Default: OFF (standard U-100 insulin)").bold()
 
                 Text(
-                    "Only use diluted insulin under the guidance of your care team, and only enable this setting when the reservoir actually contains diluted insulin. A mismatch between this setting and the reservoir contents will cause dosing that is 2–10× too high or too low."
+                    "Only use diluted insulin under the guidance of your care team, and only enable this setting when the reservoir actually contains diluted insulin. A mismatch between this setting and the reservoir contents will cause dosing that is 2–20× too high or too low."
                 )
                 .bold()
                 .foregroundStyle(Color.orange)
@@ -40,6 +40,9 @@ extension UnitsLimitsSettings {
                     Text("• Dosing resolution improves 10×: a pump with 0.05 U steps can deliver 0.005 U of actual insulin.")
                     Text(
                         "• The pump's maximum deliverable amounts shrink 10×: a pump limited to 30 U/hr of volume can deliver at most 3 U/hr of actual insulin."
+                    )
+                    Text(
+                        "• With U-5 every effect doubles: 0.05 U steps deliver 0.0025 U of actual insulin, and the same pump can deliver at most 1.5 U/hr."
                     )
                     Text("• Nightscout, Tidepool, and Apple Health also receive pumped volume units.")
                 }

@@ -29,6 +29,9 @@ enum InsulinConcentrationOption: Int, CaseIterable, Identifiable {
     case u50 = 50
     case u20 = 20
     case u10 = 10
+    // Declaration order is display order: the concentration picker renders
+    // allCases descending, so u5 stays last.
+    case u5 = 5
 
     var id: Int { rawValue }
 
@@ -52,6 +55,8 @@ enum InsulinConcentrationOption: Int, CaseIterable, Identifiable {
             return String(localized: "1 part U-100 insulin + 4 parts diluent")
         case .u10:
             return String(localized: "1 part U-100 insulin + 9 parts diluent")
+        case .u5:
+            return String(localized: "1 part U-100 insulin + 19 parts diluent")
         }
     }
 

@@ -16,6 +16,9 @@ extension BasalProfileEditor {
         private var rateFormatter: NumberFormatter {
             let formatter = NumberFormatter()
             formatter.numberStyle = .decimal
+            // Real-insulin rates with diluted insulin can be as fine as
+            // 0.00125 U/hr (a 0.025 U/hr pump increment at U-5)
+            formatter.maximumFractionDigits = 5
             return formatter
         }
 

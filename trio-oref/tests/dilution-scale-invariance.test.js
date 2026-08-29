@@ -9,9 +9,10 @@
   size cap was rounded to 0.1 U (fixed), which both inflated the cap at U-100
   and floored it to zero for small basal rates.
 
-  These tests run the SAME therapy twice — once undiluted, once as the exactly
-  equivalent U-10 configuration with every insulin quantity x10, ISF and CR /10
-  — and assert that every insulin output differs by exactly the same factor.
+  These tests run the SAME therapy twice — once undiluted, once as an exactly
+  equivalent diluted configuration (e.g. U-10: every insulin quantity x10, ISF
+  and CR /10; U-5: x20 and /20) — and assert that every insulin output differs
+  by exactly the same factor.
   They drive the MINIFIED BUNDLES Trio actually executes, not trio-oref/lib,
   because those are what ships. The bundles are self-contained (their
   dependencies are webpacked in), so this test needs nothing installed.
@@ -64,7 +65,9 @@ function makeProfile(config) {
         ' __config.preferences, __config.carbRatio, [], __config.model, false, __config.trio)',
         sandbox
     );
-    assert.ok(profile && !profile.error, 'profile generation failed: ' + JSON.stringify(profile));
+    // Profile generation signals failure both ways: -1 (sanity floors) and
+    // an {error} object (malformed inputs). -1 is truthy, so test it apart.
+    assert.ok(profile && profile !== -1 && !profile.error, 'profile generation failed: ' + JSON.stringify(profile));
     return profile;
 }
 
@@ -282,7 +285,7 @@ const SMALL_DOSE = {
 console.log('dilution scale invariance');
 
 for (const [name, therapy] of [['adult', ADULT], ['small-dose', SMALL_DOSE]]) {
-    for (const scale of [2, 5, 10]) {
+    for (const scale of [2, 5, 10, 20]) {
         scenario(name + ' / rapid rise / x' + scale, () => {
             assertScaleInvariant(name, therapy, RAPID_RISE, scale);
         });
@@ -290,19 +293,24 @@ for (const [name, therapy] of [['adult', ADULT], ['small-dose', SMALL_DOSE]]) {
             assertScaleInvariant(name, therapy, FLAT, scale);
         });
     }
-    scenario(name + ' / rapid rise with COB / x10', () => {
-        assertScaleInvariant(name, Object.assign({}, therapy, { cob: 30 }), RAPID_RISE, 10);
-    });
-    scenario(name + ' / dynamic ISF / x10', () => {
-        assertScaleInvariant(name, Object.assign({}, therapy, { dynamicISF: true }), RAPID_RISE, 10);
-    });
+    for (const scale of [10, 20]) {
+        scenario(name + ' / rapid rise with COB / x' + scale, () => {
+            assertScaleInvariant(name, Object.assign({}, therapy, { cob: 30 }), RAPID_RISE, scale);
+        });
+        scenario(name + ' / dynamic ISF / x' + scale, () => {
+            assertScaleInvariant(name, Object.assign({}, therapy, { dynamicISF: true }), RAPID_RISE, scale);
+        });
+    }
 }
 
 // The SMB size cap must be exactly maxSMBBasalMinutes worth of basal — never
 // rounded up past the user's setting, and never floored to zero for a small
 // basal rate, which silently disabled SMBs entirely.
 scenario('SMB cap is exactly maxSMBBasalMinutes of basal, at every scale', () => {
-    for (const [therapy, scale] of [[ADULT, 1], [ADULT, 10], [SMALL_DOSE, 1], [SMALL_DOSE, 10]]) {
+    for (const [therapy, scale] of [
+        [ADULT, 1], [ADULT, 10], [ADULT, 20],
+        [SMALL_DOSE, 1], [SMALL_DOSE, 10], [SMALL_DOSE, 20]
+    ]) {
         const { logs } = determine(build(therapy, scale, RAPID_RISE));
         const line = logs.find((l) => l.indexOf('maxBolus: ') >= 0);
         assert.ok(line, 'no maxBolus log line');
@@ -322,24 +330,104 @@ scenario('SMB cap is exactly maxSMBBasalMinutes of basal, at every scale', () =>
 // doses that round away to nothing at U-100 become deliverable.
 scenario('dilution does not reduce deliverable SMB for small-dose therapy', () => {
     const plain = determine(build(SMALL_DOSE, 1, RAPID_RISE)).result;
-    const diluted = determine(build(SMALL_DOSE, 10, RAPID_RISE)).result;
-    const plainReal = (plain.units || 0);
-    const dilutedReal = (diluted.units || 0) / 10;
-    checks += 1;
-    assert.ok(
-        dilutedReal >= plainReal,
-        'U-10 delivers ' + dilutedReal + ' U of actual insulin vs ' + plainReal + ' undiluted'
-    );
+    for (const scale of [10, 20]) {
+        const diluted = determine(build(SMALL_DOSE, scale, RAPID_RISE)).result;
+        const plainReal = (plain.units || 0);
+        const dilutedReal = (diluted.units || 0) / scale;
+        checks += 1;
+        assert.ok(
+            dilutedReal >= plainReal,
+            'x' + scale + ' delivers ' + dilutedReal + ' U of actual insulin vs ' + plainReal + ' undiluted'
+        );
+    }
 });
 
 // Stored ISF and CR shrink by the factor, and oref's sanity floors are absolute.
 // A legitimate diluted profile must still generate — this is the defect that
 // returned -1 from profile generation and stopped the loop completely.
-scenario('diluted ISF and CR still pass profile sanity floors at U-10', () => {
-    const profile = build(SMALL_DOSE, 10, RAPID_RISE).profile;
+scenario('diluted ISF and CR still pass profile sanity floors at U-10 and U-5', () => {
+    for (const scale of [10, 20]) {
+        const profile = build(SMALL_DOSE, scale, RAPID_RISE).profile;
+        checks += 1;
+        assert.strictEqual(profile.sens, SMALL_DOSE.isf / scale, 'ISF rejected or altered at x' + scale);
+        assert.strictEqual(
+            profile.carb_ratio, SMALL_DOSE.carbRatio / scale,
+            'carb ratio rejected or altered at x' + scale
+        );
+    }
+});
+
+// The editors' real-unit minima (ISF 9 mg/dL/U, CR 1 g/U) are selectable at
+// every concentration, and U-5 stores them 20x smaller than U-100 — below the
+// floors as they stood before U-5 support (ISF 0.5, CR 0.1 per pumped unit).
+// The floors must sit below what the editors can legitimately produce, and the
+// carb-ratio guards in the prepare-layer glue must agree with them. (The glue
+// guards are exercised against stubs of the bundled workers — what is pinned
+// here is each guard's bound, not the worker behind it.)
+scenario('editor-minimum therapy at U-5 passes the profile floors and glue guards', () => {
+    const extreme = Object.assign({}, SMALL_DOSE, { isf: 9, carbRatio: 1 });
+    const built = build(extreme, 20, RAPID_RISE);
     checks += 1;
-    assert.strictEqual(profile.sens, SMALL_DOSE.isf / 10, 'ISF rejected or altered');
-    assert.strictEqual(profile.carb_ratio, SMALL_DOSE.carbRatio / 10, 'carb ratio rejected or altered');
+    assert.strictEqual(built.profile.sens, 9 / 20, 'stored ISF 0.45 rejected or altered');
+    assert.strictEqual(built.profile.carb_ratio, 1 / 20, 'stored CR 0.05 rejected or altered');
+
+    // The prepare/meal.js guard mirrors the profile floor; a profile that
+    // generates but cannot enter COB math would still kill the loop's meal
+    // handling.
+    {
+        const { sandbox } = newContext();
+        load(sandbox, 'prepare/log.js');
+        vm.runInContext('function trio_meal(inputs) { return { mealCOB: 0, carbs: 0 }; }', sandbox);
+        load(sandbox, 'prepare/meal.js');
+        sandbox.__profile = { carb_ratio: built.profile.carb_ratio };
+        const meal = vm.runInContext(
+            'generate([], __profile, new Date().toISOString(), [1, 2, 3, 4], [{ rate: 1 }])',
+            sandbox
+        );
+        checks += 1;
+        assert.ok(meal && !meal.error, 'meal glue rejected CR 0.05: ' + JSON.stringify(meal));
+    }
+
+    // prepare/autotune-prep.js carries the same guard twice (profile and pump
+    // profile); a refusal returns undefined instead of the worker's result.
+    {
+        const { sandbox } = newContext();
+        load(sandbox, 'prepare/log.js');
+        vm.runInContext('function trio_autotunePrep(inputs) { return { ran: true }; }', sandbox);
+        load(sandbox, 'prepare/autotune-prep.js');
+        sandbox.__profile = { carb_ratio: built.profile.carb_ratio };
+        const prepped = vm.runInContext(
+            'generate([], __profile, [], { carb_ratio: __profile.carb_ratio, curve: "rapid-acting", useCustomPeakTime: false })',
+            sandbox
+        );
+        checks += 1;
+        assert.ok(prepped && prepped.ran === true, 'autotune-prep glue refused CR 0.05: ' + JSON.stringify(prepped));
+    }
+});
+
+// oref reports rT.ISF and rT.CR back to Trio, whose bolus calculator divides
+// by both — display rounding is not survivable there. Whole-mg/dL rounding
+// turned the U-5 editor-minimum ISF (0.45 per pumped unit) into zero, a
+// division by zero in the calculator; a 0.1 CR quantum is a 2 g/U real error
+// at U-5. Pin the reported precision at both a typical and the minimum U-5
+// therapy, and at U-100 where the values must stay unchanged.
+scenario('reported ISF and CR carry dose-math precision, not display rounding', () => {
+    const plain = determine(build(SMALL_DOSE, 1, RAPID_RISE)).result;
+    checks += 1;
+    assert.strictEqual(plain.ISF, SMALL_DOSE.isf, 'undiluted reported ISF changed');
+    assert.strictEqual(plain.CR, SMALL_DOSE.carbRatio, 'undiluted reported CR changed');
+
+    const diluted = determine(build(SMALL_DOSE, 20, RAPID_RISE)).result;
+    checks += 1;
+    assert.strictEqual(diluted.ISF, SMALL_DOSE.isf / 20, 'U-5 reported ISF rounded away');
+    assert.strictEqual(diluted.CR, SMALL_DOSE.carbRatio / 20, 'U-5 reported CR rounded away');
+
+    const extreme = Object.assign({}, SMALL_DOSE, { isf: 9, carbRatio: 1 });
+    const minimum = determine(build(extreme, 20, RAPID_RISE)).result;
+    checks += 1;
+    assert.strictEqual(minimum.ISF, 0.45, 'editor-minimum reported ISF must survive rounding, not become 0');
+    assert.strictEqual(minimum.CR, 0.05, 'editor-minimum reported CR must survive rounding, not become 0.1');
+    assert.ok(minimum.ISF > 0 && minimum.CR > 0, 'reported ISF/CR reached zero');
 });
 
 console.log(failures === 0

@@ -192,6 +192,23 @@ extension SettingsExport {
                     name: String(localized: "Glucose Units"),
                     value: trioSettings.units.rawValue
                 )
+                // Every insulin figure in this report is a pumped volume; when
+                // the reservoir holds diluted insulin, that is up to 20x the
+                // actual dose, so the report has to say which "U" it speaks.
+                // The enum's unknown-factor fallback is U-100, which is the one
+                // answer this row must never give for a diluted device — print
+                // the raw factor instead when the value matches no option.
+                let concentrationFactor = trioSettings.insulinConcentrationFactorDecimal
+                if concentrationFactor != 1 {
+                    let option = InsulinConcentrationOption(factor: concentrationFactor)
+                    addSetting(
+                        category: therapyCategory,
+                        subcategory: unitsLimitsSubcategory,
+                        name: String(localized: "Insulin Dilution"),
+                        value: option.factor == concentrationFactor ? option.displayName :
+                            String(localized: "concentration factor \(concentrationFactor.description)")
+                    )
+                }
                 addSetting(
                     category: therapyCategory,
                     subcategory: unitsLimitsSubcategory,
@@ -1514,7 +1531,7 @@ extension SettingsExport.StateModel {
         // meaning together with the concentration it was written under. A backup
         // that carries therapy data but no concentration (an older export, or one
         // whose settings could not be read) cannot be placed on the scale — and
-        // guessing wrong is a 2–10x dosing error in either direction.
+        // guessing wrong is a 2–20x dosing error in either direction.
         if backupConcentrationFactor(backup) == nil, hasInsulinDenominatedContent(backup) {
             return .validationFailed(String(
                 localized: "This backup does not record which insulin concentration its therapy settings were saved under, so Trio cannot tell whether they match this device. Re-export the backup from the device it came from, or enter these settings manually."

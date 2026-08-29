@@ -412,10 +412,12 @@ function tuneAllTheThings (inputs) {
     var maxCR = pumpCarbRatio * autotuneMax;
     if (maxCR > 150) { maxCR = 150 }
     var minCR = pumpCarbRatio * autotuneMin;
-    // CR is g per PUMPED unit; with U-10 dilution real CR is stored /10, so
-    // the absolute floor must sit below the CR editor real minimum
-    // (1 g/U -> 0.1 stored at U-10).
-    if (minCR < 0.1) { minCR = 0.1 }
+    // CR is g per PUMPED unit; with U-5 dilution real CR is stored /20 and the
+    // CR editor real minimum of 1 g/U stores 0.05. The absolute clamp matches
+    // the profile-generation floor (carbs.js) exactly, so autotune can never
+    // emit a CR that profile generation then rejects; the cost is that tuning
+    // below 0.04 (only reachable from a stored CR under 0.058) is clamped.
+    if (minCR < 0.04) { minCR = 0.04 }
     // safety cap fullNewCR
     if (typeof(pumpCarbRatio) !== 'undefined') {
         if (fullNewCR > maxCR) {

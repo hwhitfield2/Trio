@@ -21,6 +21,7 @@ import Testing
     }
 
     @Test("enabled dilution resolves the stored factor") func testEnabledFactor() {
+        #expect(settings(allowDilution: true, concentration: 0.05).insulinConcentrationFactorDecimal == 0.05)
         #expect(settings(allowDilution: true, concentration: 0.1).insulinConcentrationFactorDecimal == 0.1)
         #expect(settings(allowDilution: true, concentration: 0.2).insulinConcentrationFactorDecimal == 0.2)
         #expect(settings(allowDilution: true, concentration: 0.5).insulinConcentrationFactorDecimal == 0.5)
@@ -35,7 +36,15 @@ import Testing
     @Test("option enum maps factors both ways") func testOptionMapping() {
         #expect(InsulinConcentrationOption.u10.factor == 0.1)
         #expect(InsulinConcentrationOption(factor: 0.1) == .u10)
+        #expect(InsulinConcentrationOption.u5.factor == 0.05)
+        #expect(InsulinConcentrationOption(factor: 0.05) == .u5)
         #expect(InsulinConcentrationOption(factor: 0.42) == .u100) // unknown → U-100
+    }
+
+    @Test("U-5 derives its display name and mixing recipe") func testU5Copy() {
+        #expect(InsulinConcentrationOption.u5.displayName == "U-5")
+        // 1 part U-100 + 19 parts diluent = 5% insulin.
+        #expect(InsulinConcentrationOption.u5.dilutionRecipe?.contains("19 parts") == true)
     }
 
     // MARK: - Editor display conversions (U-10)
@@ -84,13 +93,24 @@ import Testing
         #expect(rescale.ratioScale == 10)
     }
 
+    @Test("U-100 to U-5 multiplies amounts by 20, and back divides") func testRescaleToU5() {
+        let rescale = InsulinConcentrationRescale(from: 1, to: 0.05)
+        #expect(rescale.amountScale == 20)
+        #expect(rescale.ratioScale == 0.05)
+        #expect(!rescale.isIdentity)
+
+        let back = InsulinConcentrationRescale(from: 0.05, to: 1)
+        #expect(back.amountScale == 0.05)
+        #expect(back.ratioScale == 20)
+    }
+
     @Test("unchanged concentration is the identity rescale") func testIdentityRescale() {
         #expect(InsulinConcentrationRescale(from: 0.1, to: 0.1).isIdentity)
         #expect(InsulinConcentrationRescale(from: 1, to: 1).isIdentity)
     }
 
     @Test("rescaling preserves the real-insulin meaning of stored values") func testRescalePreservesRealMeaning() {
-        let factors: [Decimal] = [1, 0.5, 0.2, 0.1]
+        let factors: [Decimal] = [1, 0.5, 0.2, 0.1, 0.05]
         for oldFactor in factors {
             for newFactor in factors {
                 let old = settings(allowDilution: true, concentration: oldFactor)
@@ -136,7 +156,7 @@ import Testing
         // The pump-supported volume grid as Trio builds it: Decimal(Double).
         let volumeGrid: [Decimal] = stride(from: 0.05, through: 10.0, by: 0.05).map { Decimal($0) }
 
-        for factor in [Decimal(1), 0.5, 0.2, 0.1] {
+        for factor in [Decimal(1), 0.5, 0.2, 0.1, 0.05] {
             let realGrid = volumeGrid.map { $0 * factor }
             for (index, gridValue) in realGrid.enumerated() {
                 // What the wheel hands back after tag/binding round trip.
@@ -209,6 +229,15 @@ import Testing
         #expect(ledger.scale(forEventAt: Date()) == 1)
     }
 
+    @Test("the U-5 switch composes at the ledger's largest scale") func testLedgerU5Switches() {
+        // U-100 → U-5 three days ago (x20), then U-5 → U-20 one day ago (x0.25).
+        let ledger = [change(3, scale: 20), change(1, scale: 0.25)]
+
+        #expect(ledger.scale(forEventAt: Date().addingTimeInterval(-5 * 24 * 60 * 60)) == 5)
+        #expect(ledger.scale(forEventAt: Date().addingTimeInterval(-2 * 24 * 60 * 60)) == Decimal(0.25))
+        #expect(ledger.scale(forEventAt: Date()) == 1)
+    }
+
     @Test("a scaled bolus keeps its real meaning across a switch") func testScaledEventPreservesRealInsulin() {
         let u100 = settings(allowDilution: false, concentration: 1)
         let u10 = settings(allowDilution: true, concentration: 0.1)
@@ -266,9 +295,55 @@ import Testing
         #expect(amount?.contains("1.5") == true)
         #expect(amount?.contains("15") == true)
 
-        // Ratios move the other way: 500 mg/dL per real unit is 50 per pumped unit.
+        // Ratios move the other way: 500 mg/dL per real unit is 50 per pumped
+        // unit. A bare "50" is a substring of "500", so anchor the pumped half
+        // to its separator.
         let ratio = u10.pumpedEquivalentCaption(forRealRatio: 500, unit: "mg/dL")
         #expect(ratio?.contains("500") == true)
-        #expect(ratio?.contains("50") == true)
+        #expect(ratio?.contains("· 50 ") == true)
+    }
+
+    @Test("unit caption converts by 20 at U-5") func testCaptionAtU5() {
+        let u5 = settings(allowDilution: true, concentration: 0.05)
+        let amount = u5.pumpedEquivalentCaption(forRealAmount: 1.5, unit: "U")
+        #expect(amount?.contains("1.5") == true)
+        #expect(amount?.contains("30") == true)
+
+        let ratio = u5.pumpedEquivalentCaption(forRealRatio: 500, unit: "mg/dL")
+        #expect(ratio?.contains("500") == true)
+        #expect(ratio?.contains("25") == true)
+    }
+
+    // MARK: - Picker range extension
+
+    /// Rescaling preserves stored values exactly, so a preserved value can sit
+    /// outside a freshly scaled picker range and the range must widen to reach
+    /// it — in whole steps only, so the wheel's grid stays aligned.
+    @Test("picker ranges widen in whole steps to cover preserved values") func testPickerExtension() {
+        // A U-5 real-unit grid: step 0.0025, covering 0.0025…0.25.
+        let setting = PickerSetting(value: 0.05, step: 0.0025, min: 0.0025, max: 0.25, type: .insulinUnitPerHour)
+
+        // A preserved real Max Basal of 0.3 overshoots the max by 20 steps.
+        let extended = setting.extended(toCover: 0.3)
+        #expect(extended.max >= 0.3)
+        #expect(extended.min == setting.min)
+        // Whole steps only: the distance moved is an exact multiple of the step.
+        let movedSteps = (extended.max - setting.max) / extended.step
+        var rounded = Decimal()
+        var raw = movedSteps
+        NSDecimalRound(&rounded, &raw, 0, .plain)
+        #expect(rounded == movedSteps)
+
+        // And the value itself lands on the extended grid.
+        let offset = (Decimal(0.3) - extended.min) / extended.step
+        var offsetRounded = Decimal()
+        var offsetRaw = offset
+        NSDecimalRound(&offsetRounded, &offsetRaw, 0, .plain)
+        #expect(offsetRounded == offset)
+
+        // Already-covered values change nothing.
+        let untouched = setting.extended(toCover: 0.05)
+        #expect(untouched.min == setting.min)
+        #expect(untouched.max == setting.max)
     }
 }

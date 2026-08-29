@@ -184,10 +184,10 @@ function generate (inputs, opts) {
   profile.temptargetSet = range.temptargetSet;
   profile.sens = isf.isfLookup(inputs.isf);
   profile.isfProfile = inputs.isf;
-  // sens is mg/dL per PUMPED unit; with U-10 dilution real ISF is stored /10,
+  // sens is mg/dL per PUMPED unit; with U-5 dilution real ISF is stored /20,
   // so the sanity floor must sit below the ISF editor real-unit minimum
-  // (9 mg/dL/U -> 0.9 stored at U-10).
-  if (profile.sens < 0.5) {
+  // (9 mg/dL/U -> 0.45 stored at U-5).
+  if (profile.sens < 0.2) {
     console.error("ISF of",profile.sens,"is not supported");
     return -1;
   }

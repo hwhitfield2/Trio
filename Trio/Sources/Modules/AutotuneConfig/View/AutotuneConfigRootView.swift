@@ -28,8 +28,9 @@ extension AutotuneConfig {
         private var rateFormatter: NumberFormatter {
             let formatter = NumberFormatter()
             formatter.numberStyle = .decimal
-            // Real-insulin steps with diluted insulin can be as fine as 0.005 U/hr
-            formatter.maximumFractionDigits = 3
+            // Real-insulin steps with diluted insulin can be as fine as
+            // 0.00125 U/hr (a 0.025 U/hr pump increment at U-5)
+            formatter.maximumFractionDigits = 5
             return formatter
         }
 

@@ -23,10 +23,10 @@ function carbRatioLookup (inputs, profile, now) {
             // therapy regimens (a 500:1 ratio with ISF up to 1800 mg/dL/U);
             // a ratio above bounds previously made carb_ratio undefined,
             // which surfaced as CR: NaN and silently broke all COB math.
-            // Lower bound lowered from 1 to 0.1: ratio is g per PUMPED unit;
-            // with U-10 dilution real CR is stored /10, so the CR editor real
-            // minimum of 1 g/U becomes 0.1 stored at U-10.
-            if (carbRatio.ratio < 0.1 || carbRatio.ratio > 500) {
+            // Lower bound lowered from 1 to 0.04: ratio is g per PUMPED unit;
+            // with U-5 dilution real CR is stored /20, so the CR editor real
+            // minimum of 1 g/U becomes 0.05 stored at U-5.
+            if (carbRatio.ratio < 0.04 || carbRatio.ratio > 500) {
                 console.error("Error: carbRatio of " + carbRatio.ratio + " out of bounds.");
                 return;
             }

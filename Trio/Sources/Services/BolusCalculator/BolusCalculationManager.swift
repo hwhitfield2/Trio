@@ -276,13 +276,23 @@ final class BaseBolusCalculationManager: BolusCalculationManager, Injectable {
             lastLoopDate: apsManager.lastLoopDate as Date?,
             insulin: (mostRecentDetermination.insulinForManualBolus ?? 0) as Decimal,
             target: (mostRecentDetermination.currentTarget ?? currentBGTarget as NSDecimalNumber) as Decimal,
-            isf: (mostRecentDetermination.insulinSensitivity ?? NSDecimalNumber(decimal: currentISF)) as Decimal,
+            isf: positiveDeterminationValue(mostRecentDetermination.insulinSensitivity, orFallback: currentISF),
             cob: mostRecentDetermination.cob as Int16,
             iob: (mostRecentDetermination.iob ?? 0) as Decimal,
             basal: currentBasal,
-            carbRatio: (mostRecentDetermination.carbRatio ?? NSDecimalNumber(decimal: currentCarbRatio)) as Decimal,
+            carbRatio: positiveDeterminationValue(mostRecentDetermination.carbRatio, orFallback: currentCarbRatio),
             insulinCalculated: 0
         )
+    }
+
+    /// The determination's ISF and CR are divided by below, and a determination
+    /// written by an older oref bundle carries them display-rounded — under
+    /// dilution coarse enough to reach zero (real ISF 9 at U-5 stores 0.45 per
+    /// pumped unit and rounded to a whole number is 0). Never divide by such a
+    /// value; use the schedule value instead.
+    private func positiveDeterminationValue(_ value: NSDecimalNumber?, orFallback fallback: Decimal) -> Decimal {
+        guard let value, value.decimalValue > 0 else { return fallback }
+        return value.decimalValue
     }
 
     private func prepareCalculationInput(

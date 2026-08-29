@@ -1,10 +1,11 @@
-# Running Diluted Insulin (U-10/U-20/U-50)
+# Running Diluted Insulin (U-5/U-10/U-20/U-50)
 
 ## The convention
 
 This fork supports pumping diluted insulin (e.g. U-10: 1 part U-100 insulin +
-9 parts diluent, so a 300 U reservoir holds 30 U of actual insulin) with a
-hybrid convention:
+9 parts diluent, so a 300 U reservoir holds 30 U of actual insulin; U-5:
+1 part + 19 parts, the strongest supported dilution) with a hybrid
+convention:
 
 1. **Runtime is pumped volume units.** Every stored and runtime insulin
    quantity — boluses, SMBs, basal rates, IOB, TDD, pump history, oref inputs
@@ -73,7 +74,7 @@ Settings-backup **import** handles two scales at once, and keeps them apart:
 - every backup records the concentration its therapy values are denominated in
   (`insulinConcentrationFactor`), independently of the Trio-settings section —
   a backup's therapy figures are pumped volumes, so the same numbers mean
-  something 2–10× different on a device running a different concentration. An
+  something 2–20× different on a device running a different concentration. An
   import that finds therapy data but no concentration is **refused**, because
   guessing is a dosing error in either direction;
 - values the backup carries are converted from the backup's concentration to
@@ -91,13 +92,24 @@ Settings-backup **import** handles two scales at once, and keeps them apart:
 oref is unit-agnostic: with every quantity in the same unit, no conversion is
 needed anywhere in the loop. That only holds if the algorithm contains no
 constant denominated in insulin units, which is a property that has to be
-maintained rather than assumed. Three places broke it and were fixed:
+maintained rather than assumed. Four places broke it and were fixed:
 
-- **sanity floors.** ISF ≥ 0.5 mg/dL per pumped unit, CR ≥ 0.1 g per pumped
-  unit, and the autotune CR clamp likewise, so legitimately diluted values —
-  real ISF 45 storing as 4.5 under U-10 — no longer kill profile generation or
-  COB math. These are absolute by design; they simply sit below what any
-  supported concentration can produce.
+- **sanity floors.** ISF ≥ 0.2 mg/dL per pumped unit and CR ≥ 0.04 g per
+  pumped unit, so legitimately diluted values no longer kill profile
+  generation or COB math. These are absolute by design; they must sit below
+  what any supported concentration can *legitimately* produce, and that bound
+  is not just the editor minima (real ISF 9 mg/dL/U and CR 1 g/U store as
+  0.45 and 0.05 at U-5 — already under the floors as they stood for U-10):
+  autotune may push a stored ISF down to editor-minimum ÷ `autosens_max`
+  (0.45 / 2 = 0.225), which the 0.2 floor still admits. The autotune CR clamp
+  is set *equal* to the CR floor (0.04) so a tuned CR can never fall below
+  what profile generation accepts. Adding a stronger dilution means
+  re-deriving every floor against both the editors and autotune's range. The
+  trade-off of an absolute floor this low is real: junk in (0.04, 0.1) — e.g.
+  an inverted carb ratio for real CRs of 10–25 g/U — is no longer rejected on
+  an undiluted device, extending the band the old floor already admitted
+  (0.1–1.0, the inverse of real CRs 1–10). No in-app editor can produce such
+  values; the exposure is corrupted or hand-edited imports.
 - **the SMB size cap.** `maxSMBBasalMinutes` worth of basal was rounded to
   0.1 U, which both let the cap exceed the setting (0.25 U of basal became a
   0.3 U ceiling) and floored it to *zero* — disabling SMBs entirely — for any
@@ -106,12 +118,21 @@ maintained rather than assumed. Three places broke it and were fixed:
 - **ISF quantisation.** `sens` was rounded to 0.1 mg/dL per *pumped* unit,
   which under U-10 quantised the real ISF to 1 mg/dL steps — the one place
   where diluting made the algorithm coarser instead of finer. Now 0.001.
+- **reported ISF/CR.** `rT.ISF` and `rT.CR` were display-rounded (whole
+  mg/dL or 0.1 mmol/L; 0.1 g per pumped unit), but Trio's manual bolus
+  calculator *divides* by both. Under U-5 the ISF editor minimum stores as
+  0.45 per pumped unit and rounded to zero (mmol/L reached zero at U-10
+  already), turning the bolus calculation into a division by zero. Both now
+  report at 0.001, and the Swift calculator additionally refuses to divide by
+  a non-positive determination value, falling back to the schedule value.
 
 `trio-oref/tests/dilution-scale-invariance.test.js` pins this: it runs the
 shipped **bundles** (not `trio-oref/lib`, which is informational) over the same
-therapy expressed at U-100, U-50, U-20 and U-10 and asserts every insulin
+therapy expressed at U-100, U-50, U-20, U-10 and U-5 and asserts every insulin
 output agrees in actual-insulin terms to within the undiluted run's own
-granularity, and that diluting never delivers less. Run it with
+granularity, and that diluting never delivers less. It also pins the floors:
+an editor-minimum U-5 therapy (stored ISF 0.45, CR 0.05) must generate a
+profile and enter COB math. Run it with
 `node trio-oref/tests/dilution-scale-invariance.test.js` — it needs nothing
 installed.
 
@@ -136,19 +157,23 @@ by 10 to discuss actual insulin with a care team.
 ## Why dilution helps small-dose therapy
 
 The pump's mechanical increments are unchanged (0.05 U volume per pulse), but
-each pulse carries 1/10 the insulin with U-10. A real basal of 0.05 U/hr runs
-as 0.5 U/hr of volume — ten pulses spread across the hour instead of one.
-Effective dosing resolution improves 10×; the editors accordingly display
-real-unit steps as fine as 0.005 U.
+each pulse carries 1/10 the insulin with U-10 and 1/20 with U-5. A real basal
+of 0.05 U/hr runs as 0.5 U/hr of volume under U-10 — ten pulses spread across
+the hour instead of one. Effective dosing resolution improves by the dilution
+factor; the editors accordingly display real-unit steps as fine as 0.0025 U
+(and basal labels down to 0.00125 U/hr on pumps with 0.025 U increments).
 
 The pump's hardware maxima shrink correspondingly in real terms: a 30 U/hr
-volume cap can deliver at most 3 U/hr of actual insulin.
+volume cap can deliver at most 3 U/hr of actual insulin at U-10, and only
+1.5 U/hr at U-5. The same goes for the pump's largest single bolus and its
+reservoir: a 200 U pod holds 10 U of actual insulin at U-5. Check that the
+therapy actually fits the hardware at the chosen dilution.
 
 ## Safety notes
 
 - **The reservoir contents and the concentration setting must agree.** Change
   the setting at the same time as you fill a fresh reservoir/pod with the
-  diluted insulin. A mismatch causes dosing that is 2–10× off.
+  diluted insulin. A mismatch causes dosing that is 2–20× off.
 - **Still prefer to switch with IOB near zero.** Pump history recorded before
   the switch keeps its old volume units on disk. The concentration ledger
   re-expresses those events for IOB, COB, TDD and autotune as they enter the
@@ -163,6 +188,12 @@ volume cap can deliver at most 3 U/hr of actual insulin.
   Trio uploaded and wrong for one written by a care team or another app, which
   is in actual insulin. The onboarding import step warns about this when
   dilution is on; check every imported value before looping.
+- **Do not open a U-5 configuration with a Trio build that predates U-5
+  support.** An older build's concentration picker does not know the 0.05
+  factor and coerces it to U-100; merely opening its Units and Limits screen
+  replays that coercion into storage *without* rescaling the stored therapy —
+  a silent 20× mismatch. The loop math itself is unaffected until that screen
+  is opened.
 - History: an earlier implementation instead kept everything in actual
   insulin units and converted at the pump boundary (commit `880cd73`,
   reverted) — rejected because runtime numbers no longer matched the pump's
