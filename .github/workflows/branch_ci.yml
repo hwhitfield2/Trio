@@ -2,6 +2,12 @@ name: Branch CI (build + unit tests)
 
 # Compile check + unit tests for working branches. No signing, no TestFlight —
 # simulator build only. Mirrors the upstream unit_tests.yml invocation.
+#
+# Runs two independent jobs in parallel: the Xcode build/test on macOS, and the
+# oref dilution scale-invariance suite on Linux. The latter drives the shipped
+# JavaScript bundles directly, so it is the only thing guarding the diluted-
+# insulin dosing invariants against a bundle rebuild — and it needs neither
+# Xcode nor the submodules, so it reports in seconds instead of ten minutes.
 on:
   workflow_dispatch:
   push:
@@ -14,6 +20,42 @@ on:
       - 'docs/**'
 
 jobs:
+  oref:
+    name: oref dilution invariants
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run dilution scale-invariance suite
+        run: |
+          set -o pipefail
+          node trio-oref/tests/dilution-scale-invariance.test.js 2>&1 | tee oref-dilution.log
+
+      - name: Annotate results
+        if: always()
+        run: |
+          if [ -f oref-dilution.log ]; then
+            if grep -q "^all scenarios passed" oref-dilution.log; then
+              summary=$(grep "^all scenarios passed" oref-dilution.log)
+              echo "::notice title=oref Dilution Invariants Passed::$summary"
+              echo "✅ oref dilution invariants: $summary" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "::error title=oref Dilution Invariants Failed::Scale invariance broken"
+              echo "## ❌ oref dilution invariants failed:" >> $GITHUB_STEP_SUMMARY
+              grep -E "^  FAIL|^[0-9]+ scenario" oref-dilution.log | \
+                sed 's/^/  - /' >> $GITHUB_STEP_SUMMARY || true
+            fi
+          fi
+
   test:
     name: Build and run unit tests
     runs-on: macos-26
