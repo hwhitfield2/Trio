@@ -68,6 +68,15 @@ struct InsulinSensitivityStepView: View {
                                 proxy.scrollTo(bottomID, anchor: .bottom)
                             }
                         }
+                    ,
+                        // Sensitivities are stored mg/dL; convert before labelling with the
+                        // user's unit, or a mmol/L reader is off by 18x.
+                        valueCaption: {
+                            state.actualInsulinCaption(
+                                forVolumeRatio: state.units == .mmolL ? $0.asMmolL : $0,
+                                unit: state.units.rawValue
+                            )
+                        }
                     )
 
                     // Example calculation based on first ISF

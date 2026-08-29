@@ -12,13 +12,15 @@ import Foundation
 /// screens 1:1 and the loop's math needs no conversion anywhere: oref is
 /// unit-agnostic as long as all quantities share one unit.
 ///
-/// The concentration setting exists only so therapy settings can be *entered
-/// and read* in actual insulin units. The settings editors convert at the UI
-/// boundary:
+/// Therapy settings are shown, entered and stored in those same pumped volume
+/// units, so a basal rate on screen is the rate the pump is programmed with and
+/// nothing in the app needs converting. Because a prescription is written in
+/// *actual* insulin, the editors carry that figure as a caption under each
+/// value (`actualInsulinCaption`):
 ///
 /// - Amounts and rates (basal rates, Max Bolus, Max Basal, Max IOB, delivery
-///   caps): displayed real = stored volume × factor.
-/// - Per-unit ratios (ISF, carb ratio): displayed real = stored volume ÷ factor.
+///   caps): caption real = shown volume × factor.
+/// - Per-unit ratios (ISF, carb ratio): caption real = shown volume ÷ factor.
 ///
 /// When the concentration setting changes, the stored (volume-unit) therapy
 /// settings are rescaled in place so their *real* meaning is preserved, and
@@ -102,40 +104,37 @@ extension TrioSettings {
         real * insulinConcentrationFactorDecimal
     }
 
-    /// Spells out which "U" a therapy-settings value is, and what the pump will
-    /// actually meter for it.
+    /// Names the actual insulin a stored (pumped-volume) therapy value carries.
     ///
-    /// Under dilution the app shows two different quantities both labelled "U":
-    /// therapy settings in actual insulin, and everything delivered (IOB, TDD,
-    /// boluses, history, uploads) in pumped volume. A Max IOB of 1 U sitting
-    /// next to a home screen reading 3 U of IOB is not a contradiction, but it
-    /// looks like one — and a user who "fixes" it has moved a safety limit by
-    /// the concentration factor. Returns nil at U-100, where the two coincide
-    /// and the note would be noise.
-    func pumpedEquivalentCaption(forRealAmount real: Decimal, unit: String) -> String? {
+    /// Every number Trio shows — therapy settings included — is the volume of
+    /// fluid the pump meters, so every screen matches the pump 1:1. Under
+    /// dilution that volume is 2-20x the insulin in it, and a prescription is
+    /// written in actual insulin: a care team's ISF of 500 typed into a field
+    /// that wants 25 is a 20x under-correction. This caption is what carries
+    /// the prescription figure alongside the pumped one. Returns nil at U-100,
+    /// where the two coincide and the note would be noise.
+    func actualInsulinCaption(forVolumeAmount volume: Decimal, unit: String) -> String? {
         guard insulinConcentrationFactorDecimal != 1 else { return nil }
-        let pumped = volumeInsulinAmount(fromReal: real)
-        return String(
-            localized: "\(Self.captionNumber(real)) \(unit) of actual insulin · pump meters \(Self.captionNumber(pumped)) \(unit)"
-        )
+        let real = realInsulinAmount(fromVolume: volume)
+        return String(localized: "\(Self.captionNumber(real)) \(unit) actual insulin")
     }
 
-    /// The ratio counterpart: ISF and carb ratio are *per unit*, so the pumped
-    /// figure is smaller, not larger.
-    func pumpedEquivalentCaption(forRealRatio real: Decimal, unit: String) -> String? {
+    /// The ratio counterpart: ISF and carb ratio are *per unit*, so the actual
+    /// insulin figure is larger, not smaller.
+    func actualInsulinCaption(forVolumeRatio volume: Decimal, unit: String) -> String? {
         guard insulinConcentrationFactorDecimal != 1 else { return nil }
-        let pumped = volumeInsulinRatio(fromReal: real)
-        return String(
-            localized: "\(Self.captionNumber(real)) \(unit) per unit of actual insulin · \(Self.captionNumber(pumped)) \(unit) per pumped unit"
-        )
+        let real = realInsulinRatio(fromVolume: volume)
+        return String(localized: "\(Self.captionNumber(real)) \(unit) per unit of actual insulin")
     }
 
     /// Trims a converted value to something readable — the conversion can push
-    /// a tidy entry to several decimals that carry no meaning here.
+    /// a tidy entry to several decimals that carry no meaning here. Five places:
+    /// the finest real quantum any supported pump/concentration pair produces is
+    /// 0.00125 U/hr (a 0.025 U/hr Medtronic increment at U-5).
     private static func captionNumber(_ value: Decimal) -> String {
         var input = value
         var rounded = Decimal()
-        NSDecimalRound(&rounded, &input, 4, .plain)
+        NSDecimalRound(&rounded, &input, 5, .plain)
         return rounded.description
     }
 }

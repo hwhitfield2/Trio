@@ -16,9 +16,9 @@ extension BasalProfileEditor {
         private var rateFormatter: NumberFormatter {
             let formatter = NumberFormatter()
             formatter.numberStyle = .decimal
-            // Real-insulin rates with diluted insulin can be as fine as
-            // 0.00125 U/hr (a 0.025 U/hr pump increment at U-5)
-            formatter.maximumFractionDigits = 5
+            // Rows are pump volume rates, bounded by the pump's own finest
+            // increment (0.01 U/hr on Dana)
+            formatter.maximumFractionDigits = 3
             return formatter
         }
 
@@ -148,10 +148,20 @@ extension BasalProfileEditor {
 
                     Spacer()
 
-                    HStack {
-                        Text(rateFormatter.string(from: state.total as NSNumber) ?? "0")
-                        Text("U/day")
-                            .foregroundStyle(Color.secondary)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        HStack {
+                            Text(rateFormatter.string(from: state.total as NSNumber) ?? "0")
+                            Text("U/day")
+                                .foregroundStyle(Color.secondary)
+                        }
+                        if let caption = state.actualInsulinCaption(
+                            forVolumeAmount: state.total,
+                            unit: String(localized: "U/day")
+                        ) {
+                            Text(caption)
+                                .font(.caption2)
+                                .foregroundStyle(Color.secondary)
+                        }
                     }
                     .id(refreshUI)
                 }
@@ -208,7 +218,8 @@ extension BasalProfileEditor {
                                         withAnimation {
                                             proxy.scrollTo(bottomID, anchor: .bottom)
                                         }
-                                    }
+                                    },
+                                    valueCaption: { state.actualInsulinCaption(forVolumeRate: $0) }
                                 )
                                 .padding(.horizontal)
 

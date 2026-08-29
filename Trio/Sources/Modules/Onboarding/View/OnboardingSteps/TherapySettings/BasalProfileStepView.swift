@@ -63,6 +63,8 @@ struct BasalProfileStepView: View {
                                 proxy.scrollTo(bottomID, anchor: .bottom)
                             }
                         }
+                    ,
+                        valueCaption: { state.actualInsulinCaption(forVolumeAmount: $0, unit: String(localized: "U/hr")) }
                     )
 
                     Spacer(minLength: 20)

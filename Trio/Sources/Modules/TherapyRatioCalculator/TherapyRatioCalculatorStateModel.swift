@@ -52,10 +52,9 @@ extension TherapyRatioCalculator {
 
         override func subscribe() {
             units = settingsManager.settings.units
-            // Stored profiles are per pumped unit; this screen displays and
-            // recommends values per unit of actual insulin, like the editors.
-            currentSensitivities = provider.isfProfile.sensitivities.map(realSensitivity)
-            currentCarbRatioSchedule = provider.carbRatios.schedule.map(realCarbRatio)
+            // Shown as stored: per pumped unit, like the editors.
+            currentSensitivities = provider.isfProfile.sensitivities
+            currentCarbRatioSchedule = provider.carbRatios.schedule
 
             Task {
                 await self.loadTDDHistory()
@@ -118,22 +117,35 @@ extension TherapyRatioCalculator {
             }
         }
 
-        /// Recommended ISF in mg/dL per unit of *actual insulin* (the unit the
-        /// ISF editor displays), clamped to the ISF editor's bounds.
+        /// Recommended ISF in mg/dL per *pumped* unit — the unit the ISF editor
+        /// shows, stores, and oref uses. The 1800 rule is defined for actual
+        /// insulin, so the rule is evaluated in real units and the result is
+        /// converted; the clamp and rounding are applied afterwards, in volume
+        /// space, so the recommendation always lands on a value the editor grid
+        /// can actually represent.
         var recommendedISF: Decimal? {
             guard let tdd = effectiveRealTDD, tdd > 0 else { return nil }
-            let isf = Self.isfRuleNumerator / tdd
-            return Self.clamp(Self.round(isf, scale: 0), min: 9, max: 7200)
+            let realISF = Self.isfRuleNumerator / tdd
+            let volumeISF = realISF * concentrationFactor
+            return Self.clamp(Self.round(volumeISF, scale: 0), min: 9, max: 7200)
         }
 
-        /// Recommended carb ratio in grams per unit of *actual insulin* (the unit
-        /// the carb ratio editor displays), clamped to the carb ratio editor's bounds.
+        /// Recommended carb ratio in grams per *pumped* unit, on the same basis:
+        /// the 500 rule in real units, then converted, rounded and clamped
+        /// against the carb ratio editor's grid.
         var recommendedCarbRatio: Decimal? {
             guard let tdd = effectiveRealTDD, tdd > 0 else { return nil }
-            let ratio = Self.carbRatioRuleNumerator / tdd
+            let realRatio = Self.carbRatioRuleNumerator / tdd
+            let volumeRatio = realRatio * concentrationFactor
             // The editor grid is 0.1 g steps up to 50 g/U, whole grams above
-            let rounded = ratio > 50 ? Self.round(ratio, scale: 0) : Self.round(ratio, scale: 1)
+            let rounded = volumeRatio > 50 ? Self.round(volumeRatio, scale: 0) : Self.round(volumeRatio, scale: 1)
             return Self.clamp(rounded, min: 1, max: 2000)
+        }
+
+        /// The actual insulin a recommended (pumped-unit) ratio corresponds to,
+        /// for the caption beside it. nil at U-100.
+        func actualInsulinCaption(forVolumeRatio ratio: Decimal, unit: String) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeRatio: ratio, unit: unit)
         }
 
         @MainActor func loadTDDHistory() async {
@@ -211,35 +223,18 @@ extension TherapyRatioCalculator {
             }
         }
 
-        private func realSensitivity(_ entry: InsulinSensitivityEntry) -> InsulinSensitivityEntry {
-            InsulinSensitivityEntry(
-                sensitivity: settingsManager.settings.realInsulinRatio(fromVolume: entry.sensitivity),
-                offset: entry.offset,
-                start: entry.start
-            )
-        }
-
-        private func realCarbRatio(_ entry: CarbRatioEntry) -> CarbRatioEntry {
-            CarbRatioEntry(
-                start: entry.start,
-                offset: entry.offset,
-                ratio: settingsManager.settings.realInsulinRatio(fromVolume: entry.ratio)
-            )
-        }
-
         /// Replaces the entire ISF schedule with a single full-day entry at the recommended value.
         func applyRecommendedISF() {
             guard canApplyRecommendations, let isf = recommendedISF else { return }
 
-            // The recommendation is per actual insulin unit; store per pumped unit.
-            let storedISF = settingsManager.settings.volumeInsulinRatio(fromReal: isf)
+            // The recommendation is already per pumped unit: store as-is.
             let profile = InsulinSensitivities(
                 units: .mgdL,
                 userPreferredUnits: .mgdL,
-                sensitivities: [InsulinSensitivityEntry(sensitivity: storedISF, offset: 0, start: "00:00:00")]
+                sensitivities: [InsulinSensitivityEntry(sensitivity: isf, offset: 0, start: "00:00:00")]
             )
             provider.saveISFProfile(profile)
-            currentSensitivities = profile.sensitivities.map(realSensitivity)
+            currentSensitivities = profile.sensitivities
 
             DispatchQueue.main.async {
                 self.broadcaster.notify(InsulinSensitivitiesObserver.self, on: .main) {
@@ -253,14 +248,13 @@ extension TherapyRatioCalculator {
         func applyRecommendedCarbRatio() {
             guard canApplyRecommendations, let ratio = recommendedCarbRatio else { return }
 
-            // The recommendation is per actual insulin unit; store per pumped unit.
-            let storedRatio = settingsManager.settings.volumeInsulinRatio(fromReal: ratio)
+            // The recommendation is already per pumped unit: store as-is.
             let profile = CarbRatios(
                 units: .grams,
-                schedule: [CarbRatioEntry(start: "00:00:00", offset: 0, ratio: storedRatio)]
+                schedule: [CarbRatioEntry(start: "00:00:00", offset: 0, ratio: ratio)]
             )
             provider.saveCarbRatios(profile)
-            currentCarbRatioSchedule = profile.schedule.map(realCarbRatio)
+            currentCarbRatioSchedule = profile.schedule
 
             DispatchQueue.main.async {
                 self.broadcaster.notify(CarbRatiosObserver.self, on: .main) {

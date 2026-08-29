@@ -132,7 +132,7 @@ extension TherapyRatioCalculator {
                             ProgressView()
                             Text("Loading insulin history…").foregroundStyle(.secondary)
                         }
-                    } else if let tdd = state.averageRealTDD {
+                    } else if let tdd = state.averageTDD {
                         HStack {
                             Text("7-Day Average TDD")
                             Spacer()
@@ -180,7 +180,7 @@ extension TherapyRatioCalculator {
                             updateWeight(weightInput, unit: newUnit)
                         }
                     }
-                    if let tdd = state.effectiveRealTDD {
+                    if let tdd = state.effectiveTDD {
                         HStack {
                             Text("Estimated TDD")
                             Spacer()
@@ -198,13 +198,15 @@ extension TherapyRatioCalculator {
             .listRowBackground(Color.chart)
         }
 
-        /// Every figure on this screen — TDD, ISF, CR — is in actual insulin
-        /// units so the 1800/500 arithmetic reconciles on screen. Elsewhere
-        /// Trio reports pumped volume units, so name the difference explicitly.
+        /// Every figure on this screen is in pumped units, like the rest of
+        /// Trio. The 1800/500 rules are defined for actual insulin, so they are
+        /// evaluated on the actual-insulin TDD and the result converted back —
+        /// which means the arithmetic does not reconcile on screen at a glance,
+        /// and has to be named.
         @ViewBuilder private var dilutionNote: some View {
-            if state.isDiluted, let volumeTDD = state.effectiveTDD {
+            if state.isDiluted, let realTDD = state.effectiveRealTDD {
                 Text(
-                    "Shown in actual insulin units, matching the ISF and carb ratio below. Because you use diluted insulin, the same dose reads as \(formattedRatio(volumeTDD)) pumped units elsewhere in Trio."
+                    "Shown in pumped units, like the rest of Trio — that is \(formattedRatio(realTDD)) U of actual insulin. The 1800 and 500 rules are applied to the actual-insulin figure and the recommendations converted back, so dividing the numbers on this screen will not reproduce them."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -223,6 +225,14 @@ extension TherapyRatioCalculator {
                     title: String(localized: "Insulin Sensitivity (ISF)"),
                     current: currentISFDescription,
                     recommended: "\(formattedISF(state.recommendedISF)) \(isfUnitLabel)",
+                    // recommendedISF is mg/dL; convert before labelling it with
+                    // the user's unit, or a mmol/L user reads it 18x too high.
+                    recommendedCaption: state.recommendedISF.flatMap {
+                        state.actualInsulinCaption(
+                            forVolumeRatio: state.units == .mmolL ? $0.asMmolL : $0,
+                            unit: state.units.rawValue
+                        )
+                    },
                     applyAction: { isISFConfirmationPresented = true }
                 )
 
@@ -230,6 +240,9 @@ extension TherapyRatioCalculator {
                     title: String(localized: "Carb Ratio (CR)"),
                     current: currentCarbRatioDescription,
                     recommended: "\(formattedRatio(state.recommendedCarbRatio)) g/U",
+                    recommendedCaption: state.recommendedCarbRatio.flatMap {
+                        state.actualInsulinCaption(forVolumeRatio: $0, unit: String(localized: "g"))
+                    },
                     applyAction: { isCarbRatioConfirmationPresented = true }
                 )
             }
@@ -240,6 +253,7 @@ extension TherapyRatioCalculator {
             title: String,
             current: String,
             recommended: String,
+            recommendedCaption: String? = nil,
             applyAction: @escaping () -> Void
         ) -> some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -255,6 +269,11 @@ extension TherapyRatioCalculator {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("Recommended").font(.caption).foregroundStyle(.secondary)
                         Text(recommended).bold()
+                        if let recommendedCaption {
+                            Text(recommendedCaption)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 Button(action: applyAction) {

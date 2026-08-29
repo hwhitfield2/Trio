@@ -44,8 +44,8 @@ extension BasalProfileEditor {
                 let timeIndex = timeValues.firstIndex(where: { abs($0 - therapyItem.time) < 1 }) ?? 0
                 // Snap to the closest grid value — the picker wheel round-trips
                 // values through Double, so an exact Decimal match can fail
-                // (especially on the factor-scaled real-unit grid) and must
-                // never silently fall back to index 0, the minimum rate.
+                // and must never silently fall back to index 0, the minimum
+                // rate.
                 let rateIndex = rateValues.firstIndex(of: therapyItem.value)
                     ?? rateValues.findClosestIndex(to: therapyItem.value) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
@@ -53,27 +53,34 @@ extension BasalProfileEditor {
         }
 
         override func subscribe() {
-            // The editor displays actual insulin units; storage and the pump
-            // stay in pumped volume units (see InsulinConcentration.swift).
-            let settings = settingsManager.settings
-            let supportedVolumeRates = provider.supportedBasalRates ?? stride(from: 5.0, to: 1001.0, by: 5.0)
+            // The editor shows the pump's own volume rates; the actual
+            // insulin each carries is a caption (see InsulinConcentration.swift).
+            rateValues = provider.supportedBasalRates ?? stride(from: 5.0, to: 1001.0, by: 5.0)
                 .map { ($0.decimal ?? .zero) / 100 }
-            rateValues = supportedVolumeRates.map { settings.realInsulinAmount(fromVolume: $0) }
             items = provider.profile.map { value in
                 let timeIndex = timeValues.firstIndex(of: Double(value.minutes * 60)) ?? 0
-                let realRate = settings.realInsulinAmount(fromVolume: value.rate)
                 // Snap stored rates that are off the grid (Decimal(Double)
                 // noise, or a concentration rescale done without a pump to
                 // round against) to the closest supported value instead of
                 // silently collapsing to the minimum rate.
-                let rateIndex = rateValues.firstIndex(of: realRate)
-                    ?? rateValues.findClosestIndex(to: realRate) ?? 0
+                let rateIndex = rateValues.firstIndex(of: value.rate)
+                    ?? rateValues.findClosestIndex(to: value.rate) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
 
             initialItems = items.map { Item(rateIndex: $0.rateIndex, timeIndex: $0.timeIndex) }
 
             calcTotal()
+        }
+
+        /// The actual insulin a shown pump-volume rate carries, for the
+        /// caption under each row. nil at U-100.
+        func actualInsulinCaption(forVolumeRate rate: Decimal) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeAmount: rate, unit: String(localized: "U/hr"))
+        }
+
+        func actualInsulinCaption(forVolumeAmount amount: Decimal, unit: String) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeAmount: amount, unit: unit)
         }
 
         func calcTotal() {
@@ -111,15 +118,14 @@ extension BasalProfileEditor {
             guard hasChanges else { return }
 
             syncInProgress = true
-            let settings = settingsManager.settings
             let profile = items.map { item -> BasalProfileEntry in
                 let formatter = DateFormatter()
                 formatter.timeZone = TimeZone(secondsFromGMT: 0)
                 formatter.dateFormat = "HH:mm:ss"
                 let date = Date(timeIntervalSince1970: self.timeValues[item.timeIndex])
                 let minutes = Int(date.timeIntervalSince1970 / 60)
-                // Displayed rates are actual insulin; store/push pump volume units.
-                let rate = settings.volumeInsulinAmount(fromReal: self.rateValues[item.rateIndex])
+                // Displayed rates are already pump volume units: store as-is.
+                let rate = self.rateValues[item.rateIndex]
                 return BasalProfileEntry(start: formatter.string(from: date), minutes: minutes, rate: rate)
             }
             provider.saveProfile(profile)

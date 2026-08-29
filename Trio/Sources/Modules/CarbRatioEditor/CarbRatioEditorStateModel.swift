@@ -29,8 +29,26 @@ extension CarbRatioEditor {
         private static let ultraCoarseRatios: [Decimal] = stride(from: 1010.0, to: 2001.0, by: 10.0)
             .map { $0.decimal ?? .zero } // 1010-2000 by 10
 
-        let rateValues: [Decimal] = StateModel.fineRatios + StateModel.mediumRatios +
+        private static let realRatios: [Decimal] = StateModel.fineRatios + StateModel.mediumRatios +
             StateModel.coarseRatios + StateModel.veryCoarseRatios + StateModel.ultraCoarseRatios
+
+        /// Ratios are grams per *pumped* unit, so the grid is the clinical
+        /// (per-actual-unit) tiers scaled by the concentration — a prescribed
+        /// 10 g/U has to stay settable, and at U-10 that is a stored 1.0, at
+        /// U-5 a stored 0.5, both below the undiluted grid's floor of 1. This
+        /// keeps exactly the set of stored values the editor round-tripped
+        /// before the display moved to pumped units.
+        var rateValues: [Decimal] {
+            let factor = settingsManager?.settings.insulinConcentrationFactorDecimal ?? 1
+            guard factor != 1 else { return Self.realRatios }
+            return Self.realRatios.map { $0 * factor }
+        }
+
+        /// The per-actual-unit carb ratio a shown per-pumped-unit value
+        /// corresponds to, for the caption under each row. nil at U-100.
+        func actualInsulinCaption(forVolumeRatio ratio: Decimal) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeRatio: ratio, unit: String(localized: "g"))
+        }
 
         var canAdd: Bool {
             guard let lastItem = items.last else { return true }
@@ -74,16 +92,15 @@ extension CarbRatioEditor {
         }
 
         override func subscribe() {
-            // Stored ratios are grams per *pumped* unit; the editor displays
-            // grams per unit of actual insulin.
-            let settings = settingsManager.settings
+            // Ratios are grams per *pumped* unit everywhere — stored, shown,
+            // and used by oref. The caption carries the per-actual-unit figure
+            // a prescription is written in.
             items = provider.profile.schedule.map { value in
                 let timeIndex = timeValues.firstIndex(of: Double(value.offset * 60)) ?? 0
-                let realRatio = settings.realInsulinRatio(fromVolume: value.ratio)
                 // Snap stored values that are off the tiered grid to the closest
                 // picker value instead of silently defaulting to the 1 g/U minimum
-                let rateIndex = rateValues.firstIndex(of: realRatio)
-                    ?? rateValues.findClosestIndex(to: realRatio) ?? 0
+                let rateIndex = rateValues.firstIndex(of: value.ratio)
+                    ?? rateValues.findClosestIndex(to: value.ratio) ?? 0
                 return Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
 
@@ -107,15 +124,14 @@ extension CarbRatioEditor {
             guard hasChanges else { return }
             shouldDisplaySaving = true
 
-            let settings = settingsManager.settings
             let schedule = items.enumerated().map { _, item -> CarbRatioEntry in
                 let fotmatter = DateFormatter()
                 fotmatter.timeZone = TimeZone(secondsFromGMT: 0)
                 fotmatter.dateFormat = "HH:mm:ss"
                 let date = Date(timeIntervalSince1970: self.timeValues[item.timeIndex])
                 let minutes = Int(date.timeIntervalSince1970 / 60)
-                // Displayed values are per actual insulin unit; store per pumped unit.
-                let rate = settings.volumeInsulinRatio(fromReal: self.rateValues[item.rateIndex])
+                // Displayed values are already per pumped unit: store as-is.
+                let rate = self.rateValues[item.rateIndex]
                 return CarbRatioEntry(start: fotmatter.string(from: date), offset: minutes, ratio: rate)
             }
             let profile = CarbRatios(units: .grams, schedule: schedule)

@@ -31,18 +31,21 @@ extension UnitsLimitsSettings {
                 )
 
                 Text(
-                    "With this setting enabled, you still enter your therapy settings — basal rates, ISF, carb ratio, and the maximum bolus, basal, and IOB limits — in actual insulin units, and Trio scales them for the dilution automatically. Everything the pump delivers — boluses, basal rates, IOB, TDD, and history — is shown in pumped volume units, matching the pump's own screens 1:1."
+                    "With this setting enabled, every insulin number in Trio — your therapy settings as well as boluses, IOB, TDD, and history — is shown in pumped volume units, matching the pump's own screens 1:1. Because a prescription is written in actual insulin, each therapy setting also shows the actual insulin it carries beneath it: convert your prescription once when you enter it, and check it against that caption."
                 )
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Practical effects with U-10:")
                     Text("• A bolus of 5 U shown in Trio is 5 U of pumped fluid = 0.5 U of actual insulin.")
+                    Text(
+                        "• A prescribed basal of 0.05 U/hr is entered as 0.5 U/hr, and the caption under it reads 0.05 U/hr of actual insulin."
+                    )
                     Text("• Dosing resolution improves 10×: a pump with 0.05 U steps can deliver 0.005 U of actual insulin.")
                     Text(
                         "• The pump's maximum deliverable amounts shrink 10×: a pump limited to 30 U/hr of volume can deliver at most 3 U/hr of actual insulin."
                     )
                     Text(
-                        "• With U-5 every effect doubles: 0.05 U steps deliver 0.0025 U of actual insulin, and the same pump can deliver at most 1.5 U/hr."
+                        "• With U-5 every effect doubles: that same prescribed 0.05 U/hr is entered as 1.0 U/hr, and the pump can deliver at most 1.5 U/hr of actual insulin."
                     )
                     Text("• Nightscout, Tidepool, and Apple Health also receive pumped volume units.")
                 }
@@ -104,7 +107,7 @@ extension UnitsLimitsSettings {
 
                         HStack(alignment: .center) {
                             Text(
-                                "Tell Trio the reservoir holds diluted insulin, e.g. U-10 = 1 part insulin + 9 parts diluent. Therapy settings stay in actual insulin units; deliveries are shown in pumped units."
+                                "Tell Trio the reservoir holds diluted insulin, e.g. U-10 = 1 part insulin + 9 parts diluent. Every value is shown in pumped units; the actual insulin appears beneath each therapy setting."
                             )
                             .font(.footnote)
                             .foregroundColor(.secondary)

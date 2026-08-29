@@ -108,7 +108,8 @@ extension ISFEditor {
                                         withAnimation {
                                             proxy.scrollTo(bottomID, anchor: .bottom)
                                         }
-                                    }
+                                    },
+                                    valueCaption: { state.actualInsulinCaption(forVolumeRatio: $0) }
                                 )
                                 .padding(.horizontal)
 

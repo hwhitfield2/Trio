@@ -7,12 +7,16 @@ struct TherapySettingEditorView: View {
     var valueOptions: [Decimal]
     var validateOnDelete: (() -> Void)?
     var onItemAdded: (() -> Void)?
+    /// The actual insulin a shown pumped-volume value carries, under dilution.
+    /// Returns nil at U-100, where the row shows no caption at all.
+    var valueCaption: ((Decimal) -> String?)?
 
     private let basalFormatter: NumberFormatter = {
         let numberFormatter = NumberFormatter()
-        // Real-insulin basal steps with diluted insulin are as fine as
-        // 0.00125 U/hr (a 0.025 U/hr pump increment at U-5).
-        numberFormatter.maximumFractionDigits = 5
+        // Rows are pump volume rates, so the pump's own finest increment
+        // (0.01 U/hr on Dana) bounds this; the actual-insulin caption is
+        // where the finer diluted figures appear.
+        numberFormatter.maximumFractionDigits = 3
         numberFormatter.minimumFractionDigits = 2
         return numberFormatter
     }()
@@ -73,14 +77,21 @@ struct TherapySettingEditorView: View {
                                 sortTherapyItems()
                             } label: {
                                 HStack {
-                                    HStack {
-                                        Text(displayText(for: unit, decimalValue: item.value))
-                                            .foregroundStyle(
-                                                selectedItemID == item.id ? Color.accentColor : Color
-                                                    .primary
-                                            )
-                                        Text(unit.displayName)
-                                            .foregroundStyle(Color.secondary)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        HStack {
+                                            Text(displayText(for: unit, decimalValue: item.value))
+                                                .foregroundStyle(
+                                                    selectedItemID == item.id ? Color.accentColor : Color
+                                                        .primary
+                                                )
+                                            Text(unit.displayName)
+                                                .foregroundStyle(Color.secondary)
+                                        }
+                                        if let caption = valueCaption?(item.value) {
+                                            Text(caption)
+                                                .font(.caption2)
+                                                .foregroundStyle(Color.secondary)
+                                        }
                                     }
 
                                     Spacer()
@@ -153,7 +164,13 @@ struct TherapySettingEditorView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 // 55 for header row, item counts x 45 for every entry row + 280 for a visible picker row incl. the direct-entry field
-                .frame(height: 55 + CGFloat(items.count) * 45 + (items.contains(where: { $0.id == selectedItemID }) ? 280 : 0))
+                // Row height follows whether a caption actually renders, not
+                // merely whether a closure was supplied — the closure returns
+                // nil at U-100, where reserving the space would be dead air.
+                .frame(
+                    height: 55 + CGFloat(items.count) * (items.contains { valueCaption?($0.value) != nil } ? 58 : 45) +
+                        (items.contains(where: { $0.id == selectedItemID }) ? 280 : 0)
+                )
                 .onAppear {
                     // ensure picker is closed when view appears
                     selectedItemID = nil
@@ -208,6 +225,21 @@ struct TherapySettingEditorView: View {
                 .disabled(parsedTypedValue == nil)
             }
             .padding(.horizontal)
+
+            // Under dilution the field wants a pumped volume while a
+            // prescription is written in actual insulin, so say what the typed
+            // number means *before* Set is pressed — otherwise entering a
+            // prescribed ISF of 500 into a field that wants 25 is a silent 20x
+            // error with no wheel scroll to make the magnitude obvious.
+            if let typed = parsedTypedValue, let caption = valueCaption?(typed) {
+                HStack {
+                    Spacer()
+                    Text(caption)
+                        .font(.caption2)
+                        .foregroundStyle(Color.secondary)
+                }
+                .padding(.horizontal)
+            }
 
             HStack {
                 Picker("Value", selection: Binding(

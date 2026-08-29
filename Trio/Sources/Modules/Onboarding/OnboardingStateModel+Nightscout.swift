@@ -194,18 +194,16 @@ extension Onboarding.StateModel {
         }
         initialTargetItems = targetItems
 
-        // Nightscout profiles from this fork are in stored pump-volume units,
-        // while the onboarding item arrays hold real-insulin display values
-        // (saveOnboardingData converts them back to volume) — convert here
-        // exactly like fetchExistingTherapySettingsFromFile does.
-        let settings = settingsManager.settings
+        // Nightscout profiles from this fork are in pump-volume units, which
+        // is also what the onboarding item arrays hold and what is stored — so
+        // the values map straight across, exactly like
+        // fetchExistingTherapySettingsFromFile.
 
         // Parse: basals → basalProfileItems
         basalProfileItems = basals.map { entry in
             let timeIndex = basalProfileTimeValues.firstIndex(where: { Int($0) == entry.minutes * 60 }) ?? 0
-            let realRate = settings.realInsulinAmount(fromVolume: entry.rate)
             let rateIndex = basalProfileRateValues.enumerated().min(by: {
-                abs($0.element - realRate) < abs($1.element - realRate)
+                abs($0.element - entry.rate) < abs($1.element - entry.rate)
             })?.offset ?? 0
             return BasalProfileEditor.Item(rateIndex: rateIndex, timeIndex: timeIndex)
         }
@@ -214,9 +212,8 @@ extension Onboarding.StateModel {
         // Parse: carbratiosProfile → carbRatioItems
         carbRatioItems = carbratiosProfile.schedule.map { entry in
             let timeIndex = carbRatioTimeValues.firstIndex(where: { Int($0) == entry.offset * 60 }) ?? 0
-            let realRatio = settings.realInsulinRatio(fromVolume: entry.ratio)
             let rateIndex = carbRatioRateValues.enumerated().min(by: {
-                abs($0.element - realRatio) < abs($1.element - realRatio)
+                abs($0.element - entry.ratio) < abs($1.element - entry.ratio)
             })?.offset ?? 0
             return CarbRatioEditor.Item(rateIndex: rateIndex, timeIndex: timeIndex)
         }
@@ -225,9 +222,8 @@ extension Onboarding.StateModel {
         // Parse: sensitivitiesProfile → isfItems
         isfItems = sensitivitiesProfile.sensitivities.map { entry in
             let timeIndex = isfTimeValues.firstIndex(where: { Int($0) == entry.offset * 60 }) ?? 0
-            let realSensitivity = settings.realInsulinRatio(fromVolume: entry.sensitivity)
             let rateIndex = isfRateValues.enumerated().min(by: {
-                abs($0.element - realSensitivity) < abs($1.element - realSensitivity)
+                abs($0.element - entry.sensitivity) < abs($1.element - entry.sensitivity)
             })?.offset ?? 0
 
             return ISFEditor.Item(rateIndex: rateIndex, timeIndex: timeIndex)

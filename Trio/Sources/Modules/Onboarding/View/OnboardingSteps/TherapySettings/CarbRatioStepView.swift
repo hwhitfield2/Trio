@@ -64,6 +64,8 @@ struct CarbRatioStepView: View {
                                 proxy.scrollTo(bottomID, anchor: .bottom)
                             }
                         }
+                    ,
+                        valueCaption: { state.actualInsulinCaption(forVolumeRatio: $0, unit: String(localized: "g")) }
                     )
 
                     // Example calculation based on first carb ratio

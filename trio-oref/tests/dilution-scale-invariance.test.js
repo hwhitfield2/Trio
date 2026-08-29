@@ -357,14 +357,15 @@ scenario('diluted ISF and CR still pass profile sanity floors at U-10 and U-5', 
     }
 });
 
-// The editors' real-unit minima (ISF 9 mg/dL/U, CR 1 g/U) are selectable at
-// every concentration, and U-5 stores them 20x smaller than U-100 — below the
-// floors as they stood before U-5 support (ISF 0.5, CR 0.1 per pumped unit).
-// The floors must sit below what the editors can legitimately produce, and the
-// carb-ratio guards in the prepare-layer glue must agree with them. (The glue
-// guards are exercised against stubs of the bundled workers — what is pinned
-// here is each guard's bound, not the worker behind it.)
-scenario('editor-minimum therapy at U-5 passes the profile floors and glue guards', () => {
+// The floors must admit any therapy that can legitimately reach oref. The
+// editors are volume-denominated (ISF grid from 9, CR from 1 per PUMPED unit),
+// so they no longer produce sub-unit values themselves — but a settings-backup
+// import, or a rescale of a profile authored under an older build, still can:
+// a U-100 ISF of 9 rescaled to U-5 stores 0.45, and a CR of 1 stores 0.05.
+// Those are the values pinned here. (The glue guards are exercised against
+// stubs of the bundled workers — what is pinned is each guard's bound, not the
+// worker behind it.)
+scenario('an imported or rescaled U-5 therapy passes the profile floors and glue guards', () => {
     const extreme = Object.assign({}, SMALL_DOSE, { isf: 9, carbRatio: 1 });
     const built = build(extreme, 20, RAPID_RISE);
     checks += 1;

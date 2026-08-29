@@ -11,7 +11,8 @@ extension UnitsLimitsSettings {
         @Published var units: GlucoseUnits = .mgdL
         @Published var unitsIndex = 0 // index 0 is mg/dl
 
-        // Displayed in actual insulin units; stored in pumped volume units.
+        // Displayed, entered and stored in pumped volume units — the same
+        // numbers the pump is programmed with.
         @Published var maxBolus: Decimal = 10
         @Published var maxBasal: Decimal = 2
         @Published var maxIOB: Decimal = 0
@@ -79,11 +80,7 @@ extension UnitsLimitsSettings {
                 unitsIndex = $0 == .mgdL ? 0 : 1
             }
 
-            subscribePreferencesSetting(\.maxIOB, on: $maxIOB, initial: {
-                maxIOB = settingsManager.settings.realInsulinAmount(fromVolume: $0)
-            }, map: { [weak self] realValue in
-                self?.settingsManager.settings.volumeInsulinAmount(fromReal: realValue) ?? realValue
-            })
+            subscribePreferencesSetting(\.maxIOB, on: $maxIOB) { maxIOB = $0 }
             subscribePreferencesSetting(\.maxCOB, on: $maxCOB) { maxCOB = $0 }
             subscribePreferencesSetting(\.threshold_setting, on: $threshold_setting) { threshold_setting = $0 }
 
@@ -116,9 +113,8 @@ extension UnitsLimitsSettings {
             isReplayingStoredSettings = false
         }
 
-        /// Picker grids for the insulin-denominated limits in actual insulin
-        /// units — the grids get proportionally finer under dilution so values
-        /// like a real Max IOB of 1.5 U stay selectable.
+        /// Picker grids for the insulin-denominated limits, in the pumped
+        /// volume units they are stored, shown and programmed in.
         /// The stored values as loaded, NOT the live picker bindings — a grid
         /// whose bounds follow the wheel's own selection ratchets shut as the
         /// user scrolls down.
@@ -127,48 +123,40 @@ extension UnitsLimitsSettings {
         private var loadedMaxIOB: Decimal = 0
 
         var maxIOBPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxIOB, coveringCurrent: loadedMaxIOB)
+            gridCovering(PickerSettingsProvider.shared.settings.maxIOB, coveringCurrent: loadedMaxIOB)
         }
 
         var maxBolusPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxBolus, coveringCurrent: loadedMaxBolus)
+            gridCovering(PickerSettingsProvider.shared.settings.maxBolus, coveringCurrent: loadedMaxBolus)
         }
 
         var maxBasalPickerSetting: PickerSetting {
-            scaledToReal(PickerSettingsProvider.shared.settings.maxBasal, coveringCurrent: loadedMaxBasal)
+            gridCovering(PickerSettingsProvider.shared.settings.maxBasal, coveringCurrent: loadedMaxBasal)
         }
 
-        /// Caption under an insulin limit spelling out that it is entered in
-        /// actual insulin and what the pump meters for it — the limits and the
-        /// delivered amounts elsewhere in the app are both labelled "U".
-        func amountCaption(_ realValue: Decimal, unit: String) -> String? {
-            settingsManager?.settings.pumpedEquivalentCaption(forRealAmount: realValue, unit: unit)
+        /// Caption under an insulin limit naming the actual insulin the shown
+        /// pumped-volume limit carries — every "U" on this screen is a pumped
+        /// volume, matching the pump, but a prescription is written in actual
+        /// insulin.
+        func amountCaption(_ volumeValue: Decimal, unit: String) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeAmount: volumeValue, unit: unit)
         }
 
-        /// A concentration rescale preserves the real value, which can exceed
-        /// the scaled grid's default ceiling (e.g. real Max Bolus 10 U vs a
-        /// U-10 ceiling of 3 U) — extend the grid so the stored value stays
+        /// A concentration rescale multiplies the stored volume (a U-100 Max
+        /// Bolus of 10 U becomes 200 U of volume at U-5), which can exceed the
+        /// grid's default ceiling — extend the grid so the stored value stays
         /// visible and re-selectable instead of silently snapping down.
-        private func scaledToReal(_ setting: PickerSetting, coveringCurrent current: Decimal) -> PickerSetting {
-            // SwiftUI evaluates `body` — and therefore this grid — before
-            // `configureView` sets the resolver that injects settingsManager,
-            // so fall back to the unscaled (U-100) grid until it is available.
-            guard let settings = settingsManager?.settings else { return setting }
-            var setting = setting
-            setting.value = settings.realInsulinAmount(fromVolume: setting.value)
-            setting.step = settings.realInsulinAmount(fromVolume: setting.step)
-            setting.min = settings.realInsulinAmount(fromVolume: setting.min)
-            setting.max = settings.realInsulinAmount(fromVolume: setting.max)
-            return setting.extended(toCover: current)
+        private func gridCovering(_ setting: PickerSetting, coveringCurrent current: Decimal) -> PickerSetting {
+            setting.extended(toCover: current)
         }
 
         private func refreshDisplayedPumpLimits() {
             let stored = provider.settings()
-            maxBasal = settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBasal)
-            maxBolus = settingsManager.settings.realInsulinAmount(fromVolume: stored.maxBolus)
+            maxBasal = stored.maxBasal
+            maxBolus = stored.maxBolus
             // Max IOB is rescaled by the migration inside the provider, so read
-            // it back rather than assuming the displayed real value still holds.
-            maxIOB = settingsManager.settings.realInsulinAmount(fromVolume: settingsManager.preferences.maxIOB)
+            // it back rather than assuming the displayed value still holds.
+            maxIOB = settingsManager.preferences.maxIOB
             // Snapshot for the picker grids: the ceiling must not follow the
             // wheel's own selection, or scrolling down would ratchet the
             // reachable range shut.
@@ -254,8 +242,8 @@ extension UnitsLimitsSettings {
         /// storage — must happen *after* any queued migration completes,
         /// using the factor and stored values in force by then.
         func saveIfChanged() {
-            let desiredRealBolus = maxBolus
-            let desiredRealBasal = maxBasal
+            let desiredBolus = maxBolus
+            let desiredBasal = maxBasal
             let capturedFactor = settingsManager.settings.insulinConcentrationFactorDecimal
 
             serialized { [self] in
@@ -264,9 +252,9 @@ extension UnitsLimitsSettings {
                 // against the new factor would double-count it.
                 guard settingsManager.settings.insulinConcentrationFactorDecimal == capturedFactor else { return }
 
-                let currentSettings = settingsManager.settings
-                let volumeBolus = currentSettings.volumeInsulinAmount(fromReal: desiredRealBolus)
-                let volumeBasal = currentSettings.volumeInsulinAmount(fromReal: desiredRealBasal)
+                // Shown values are already pumped volumes: store as-is.
+                let volumeBolus = desiredBolus
+                let volumeBasal = desiredBasal
                 let stored = provider.settings()
                 guard volumeBolus != stored.maxBolus || volumeBasal != stored.maxBasal else { return }
 

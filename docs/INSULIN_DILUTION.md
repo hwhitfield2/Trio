@@ -4,8 +4,7 @@
 
 This fork supports pumping diluted insulin (e.g. U-10: 1 part U-100 insulin +
 9 parts diluent, so a 300 U reservoir holds 30 U of actual insulin; U-5:
-1 part + 19 parts, the strongest supported dilution) with a hybrid
-convention:
+1 part + 19 parts, the strongest supported dilution) under one convention:
 
 1. **Runtime is pumped volume units.** Every stored and runtime insulin
    quantity — boluses, SMBs, basal rates, IOB, TDD, pump history, oref inputs
@@ -16,25 +15,25 @@ convention:
    verifiable at a glance, and the loop's math contains **no conversion
    anywhere** — oref is unit-agnostic when all quantities share one unit.
 
-2. **Therapy settings are entered and read in actual insulin units.** The
-   basal profile, ISF, and carb ratio editors, the Max Bolus / Max Basal /
-   Max IOB limits, the scheduled delivery caps, the therapy ratio calculator,
-   and the Autotune results screen display real-insulin values and convert at
-   the UI boundary (`InsulinConcentration.swift`):
+2. **Therapy settings are pumped volume too, with the actual insulin as a
+   caption.** The basal profile, ISF, and carb ratio editors, the Max Bolus /
+   Max Basal / Max IOB limits, the scheduled delivery caps, the therapy ratio
+   calculator, and the Autotune results screen all show the value the pump is
+   programmed with. Nothing converts at the UI boundary; a basal row reading
+   1.0 U/hr *is* the 1.0 U/hr on the pump.
 
-   - amounts and rates: `displayed real = stored volume × factor`
-   - per-unit ratios (ISF, CR): `displayed real = stored volume ÷ factor`
+   Because a prescription is written in actual insulin, each therapy value
+   carries a caption naming it (`actualInsulinCaption`):
 
-   where `factor` is the concentration fraction (U-10 → 0.1). You enter your
-   prescription as your care team states it (ISF 500 mg/dL/U, basal
-   0.05 U/hr) and Trio scales it for the dilution automatically.
+   - amounts and rates: `caption real = shown volume × factor`
+   - per-unit ratios (ISF, CR): `caption real = shown volume ÷ factor`
 
-   Because both quantities are written "U", every screen that shows real-unit
-   values says so: the therapy editors carry a banner naming the concentration,
-   and the Max Bolus / Max Basal / Max IOB fields print the pumped equivalent
-   under the value. Without that, a Max IOB of 1 U sitting next to a home
-   screen reading 3 U of IOB looks like a bug rather than two different units,
-   and "fixing" it moves a safety limit by the concentration factor.
+   where `factor` is the concentration fraction (U-10 → 0.1). Convert your
+   prescription once when you enter it, and check it against the caption: a
+   care team's ISF of 500 typed into a field that wants 25 is a 20× under-
+   correction, which is why the typed-entry field shows the caption live as
+   you type, before you press Set. The editors also carry a banner naming the
+   concentration.
 
 The setting lives in **Settings → Units and Limits → Insulin Dilution**
 (`TrioSettings.allowDilution` + `insulinConcentration`).
@@ -97,11 +96,13 @@ maintained rather than assumed. Four places broke it and were fixed:
 - **sanity floors.** ISF ≥ 0.2 mg/dL per pumped unit and CR ≥ 0.04 g per
   pumped unit, so legitimately diluted values no longer kill profile
   generation or COB math. These are absolute by design; they must sit below
-  what any supported concentration can *legitimately* produce, and that bound
-  is not just the editor minima (real ISF 9 mg/dL/U and CR 1 g/U store as
-  0.45 and 0.05 at U-5 — already under the floors as they stood for U-10):
-  autotune may push a stored ISF down to editor-minimum ÷ `autosens_max`
-  (0.45 / 2 = 0.225), which the 0.2 floor still admits. The autotune CR clamp
+  anything that can legitimately reach oref. The editors are themselves
+  volume-denominated (ISF grid from 9, CR from 1 per pumped unit), so they no
+  longer produce sub-unit values — but a settings-backup import, or a rescale
+  of a profile authored under an older build, still can: a U-100 ISF of 9
+  rescaled to U-5 stores 0.45, and a CR of 1 stores 0.05. Autotune can push a
+  stored ISF lower still, to imported-minimum ÷ `autosens_max`
+  (0.45 / 2 = 0.225), which the 0.2 floor admits. The autotune CR clamp
   is set *equal* to the CR floor (0.04) so a tuned CR can never fall below
   what profile generation accepts. Adding a stronger dilution means
   re-deriving every floor against both the editors and autotune's range. The
@@ -131,7 +132,7 @@ shipped **bundles** (not `trio-oref/lib`, which is informational) over the same
 therapy expressed at U-100, U-50, U-20, U-10 and U-5 and asserts every insulin
 output agrees in actual-insulin terms to within the undiluted run's own
 granularity, and that diluting never delivers less. It also pins the floors:
-an editor-minimum U-5 therapy (stored ISF 0.45, CR 0.05) must generate a
+an imported or rescaled U-5 therapy (stored ISF 0.45, CR 0.05) must generate a
 profile and enter COB math. Run it with
 `node trio-oref/tests/dilution-scale-invariance.test.js` — it needs nothing
 installed.
@@ -142,17 +143,19 @@ the fluid contains, which is exactly why dilution improves dosing resolution.
 
 ## Example: U-10 with a real basal of 0.05 U/hr, ISF 500, CR 100
 
-| Value | You enter/see in editors (real) | Stored/pump/loop (volume) |
+| Value | Shown everywhere (pumped) | Caption (actual insulin) |
 | --- | --- | --- |
-| Basal rate | 0.05 U/hr | 0.5 U/hr |
-| ISF | 500 mg/dL per U | 50 mg/dL per U |
-| Carb ratio | 100 g per U | 10 g per U |
-| Max bolus | 1 U | 10 U |
-| Meal bolus for 30 g | — | shown/delivered as 3.0 U |
-| IOB after that bolus | — | 3.0 U |
+| Basal rate | 0.5 U/hr | 0.05 U/hr |
+| ISF | 50 mg/dL per U | 500 mg/dL per unit |
+| Carb ratio | 10 g per U | 100 g per unit |
+| Max bolus | 10 U | 1 U |
+| Meal bolus for 30 g | 3.0 U | — |
+| IOB after that bolus | 3.0 U | — |
 
-Deliveries, IOB, TDD, history, and all uploads read in pumped units — divide
-by 10 to discuss actual insulin with a care team.
+Every number in the app reads in pumped units. Amounts (boluses, IOB, TDD,
+basal rates) divide by 10 to give actual insulin; ISF and carb ratio are *per*
+unit, so they multiply by 10 instead. Deliveries carry no caption — only
+therapy settings do, and there the caption does the arithmetic for you.
 
 ## Why dilution helps small-dose therapy
 

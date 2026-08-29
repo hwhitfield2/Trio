@@ -53,8 +53,18 @@ extension DeliveryCapEditor {
                                     HStack {
                                         Text("Max Basal")
                                         Spacer()
-                                        Text("\(formatted(window.maxBasalRate)) U/hr")
-                                            .foregroundStyle(window.maxBasalRate == 0 ? Color.red : Color.secondary)
+                                        VStack(alignment: .trailing, spacing: 1) {
+                                            Text("\(formatted(window.maxBasalRate)) U/hr")
+                                                .foregroundStyle(window.maxBasalRate == 0 ? Color.red : Color.secondary)
+                                            if let caption = state.actualInsulinCaption(
+                                                forVolumeAmount: window.maxBasalRate,
+                                                unit: String(localized: "U/hr")
+                                            ) {
+                                                Text(caption)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(Color.secondary)
+                                            }
+                                        }
                                     }
                                 }
                                 Stepper(
@@ -65,8 +75,18 @@ extension DeliveryCapEditor {
                                     HStack {
                                         Text("Max SMB")
                                         Spacer()
-                                        Text("\(formatted(window.maxSMB)) U")
-                                            .foregroundStyle(window.maxSMB == 0 ? Color.red : Color.secondary)
+                                        VStack(alignment: .trailing, spacing: 1) {
+                                            Text("\(formatted(window.maxSMB)) U")
+                                                .foregroundStyle(window.maxSMB == 0 ? Color.red : Color.secondary)
+                                            if let caption = state.actualInsulinCaption(
+                                                forVolumeAmount: window.maxSMB,
+                                                unit: String(localized: "U")
+                                            ) {
+                                                Text(caption)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(Color.secondary)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -107,15 +127,15 @@ extension DeliveryCapEditor {
         private func doubleBinding(_ value: Binding<Decimal>) -> Binding<Double> {
             Binding(
                 get: { Double(truncating: value.wrappedValue as NSDecimalNumber) },
-                // 4 decimals: real-insulin steps with diluted insulin are as fine as 0.0025 (U-5)
-                set: { value.wrappedValue = Decimal(Int(($0 * 10000).rounded())) / 10000 }
+                // Caps are pumped volumes stepped by the pump's own 0.05 U.
+                set: { value.wrappedValue = Decimal(Int(($0 * 100).rounded())) / 100 }
             )
         }
 
         private func formatted(_ value: Decimal) -> String {
             let formatter = NumberFormatter()
             formatter.minimumFractionDigits = 0
-            formatter.maximumFractionDigits = 4
+            formatter.maximumFractionDigits = 2
             return formatter.string(from: value as NSDecimalNumber) ?? "\(value)"
         }
     }

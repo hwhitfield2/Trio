@@ -19,14 +19,15 @@ extension AutotuneConfig {
             }
         }
 
-        /// Autotune output is stored in pumped volume units; this screen shows
-        /// therapy values in actual insulin units, like the editors.
-        func realAmount(_ volume: Decimal) -> Decimal {
-            settingsManager.settings.realInsulinAmount(fromVolume: volume)
+        /// Autotune output is in pumped volume units, which is what this screen
+        /// shows — like the editors. The actual insulin each value carries is a
+        /// caption beneath it.
+        func actualInsulinCaption(forVolumeAmount amount: Decimal, unit: String) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeAmount: amount, unit: unit)
         }
 
-        func realRatio(_ volume: Decimal) -> Decimal {
-            settingsManager.settings.realInsulinRatio(fromVolume: volume)
+        func actualInsulinCaption(forVolumeRatio ratio: Decimal, unit: String) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeRatio: ratio, unit: unit)
         }
 
         override func subscribe() {

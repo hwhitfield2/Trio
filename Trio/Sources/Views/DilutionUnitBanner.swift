@@ -3,13 +3,13 @@ import SwiftUI
 /// Names the unit a therapy-settings screen is working in when diluted insulin
 /// is configured.
 ///
-/// Trio shows two different quantities under the same "U" label: therapy
-/// settings are entered and read in *actual insulin*, while everything the pump
-/// delivers — boluses, IOB, TDD, history, uploads — is shown in *pumped volume*
-/// so it matches the pump's own screens. At U-100 those are the same number and
-/// nothing needs saying. At U-10 they differ by 10x, and a user comparing a
-/// Max IOB of 1 U against a home screen reading 3 U of IOB has every reason to
-/// think something is wrong. This banner is what tells them it is not.
+/// Every "U" in Trio — therapy settings included — is a *pumped volume*, so
+/// every screen matches the pump's own. At U-100 that is also the actual
+/// insulin and nothing needs saying. Under dilution the two differ by the
+/// concentration factor, and a prescription is written in actual insulin: a
+/// care team's ISF of 500 typed into a field that wants 25 is a 20x
+/// under-correction. This banner names the unit before that happens; the
+/// per-value captions carry the actual-insulin figure.
 ///
 /// Renders nothing when dilution is off.
 struct DilutionUnitBanner: View {
@@ -28,7 +28,7 @@ struct DilutionUnitBanner: View {
                 Image(systemName: "drop.fill")
                     .foregroundStyle(Color.accentColor)
                 Text(
-                    "Diluted insulin (\(concentrationName)) is on: \(subject) here are in units of **actual insulin**. Everything Trio delivers — boluses, IOB, and TDD — is shown in pumped units instead, matching the pump's own screens."
+                    "Diluted insulin (\(concentrationName)) is on: \(subject) here are in **pumped units**, matching the pump's own screens and everything Trio delivers. The actual insulin each value carries is shown beneath it."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)

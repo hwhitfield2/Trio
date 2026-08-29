@@ -36,12 +36,13 @@ struct SettingInputSection<VerboseHint: View>: View {
     var isToggleDisabled: Bool = false
     var miniHintColor: Color = .secondary
     /// Overrides the picker grid looked up by key — used by the insulin-limit
-    /// settings, whose real-unit grids scale with the insulin concentration.
+    /// settings, whose grid can be widened to cover a value a concentration
+    /// rescale pushed past the default ceiling.
     var pickerSettingOverride: PickerSetting? = nil
-    /// Caption shown under the value, spelling out which unit it is in. Used by
-    /// the insulin-limit settings, which are entered in actual insulin while
-    /// everything Trio delivers is shown in pumped units. Returning nil (the
-    /// U-100 case) hides the line entirely.
+    /// Caption shown under the value. Used by the insulin-limit settings, which
+    /// are shown in pumped units like the rest of the app, to name the actual
+    /// insulin the limit carries. Returning nil (the U-100 case, where the two
+    /// coincide) hides the line entirely.
     var valueUnitCaption: ((Decimal) -> String?)? = nil
 
     @ObservedObject private var pickerSettingsProvider = PickerSettingsProvider.shared

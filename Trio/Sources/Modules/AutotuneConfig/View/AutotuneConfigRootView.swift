@@ -28,9 +28,9 @@ extension AutotuneConfig {
         private var rateFormatter: NumberFormatter {
             let formatter = NumberFormatter()
             formatter.numberStyle = .decimal
-            // Real-insulin steps with diluted insulin can be as fine as
-            // 0.00125 U/hr (a 0.025 U/hr pump increment at U-5)
-            formatter.maximumFractionDigits = 5
+            // Autotuned rates are pump volumes, bounded by the pump's own
+            // finest increment (0.01 U/hr on Dana)
+            formatter.maximumFractionDigits = 3
             return formatter
         }
 
@@ -118,8 +118,18 @@ extension AutotuneConfig {
                             HStack {
                                 Text("Carb ratio")
                                 Spacer()
-                                Text(isfFormatter.string(from: state.realRatio(autotune.carbRatio) as NSNumber) ?? "0")
-                                Text("g/U").foregroundColor(.secondary)
+                                VStack(alignment: .trailing, spacing: 1) {
+                                    HStack {
+                                        Text(isfFormatter.string(from: autotune.carbRatio as NSNumber) ?? "0")
+                                        Text("g/U").foregroundColor(.secondary)
+                                    }
+                                    if let caption = state.actualInsulinCaption(
+                                        forVolumeRatio: autotune.carbRatio,
+                                        unit: String(localized: "g")
+                                    ) {
+                                        Text(caption).font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
                             }
                             HStack {
                                 Text("Sensitivity")
@@ -127,12 +137,22 @@ extension AutotuneConfig {
                                 if state.units == .mmolL {
                                     Text(
                                         isfFormatter
-                                            .string(from: state.realRatio(autotune.sensitivity).asMmolL as NSNumber) ?? "0"
+                                            .string(from: autotune.sensitivity.asMmolL as NSNumber) ?? "0"
                                     )
                                 } else {
-                                    Text(isfFormatter.string(from: state.realRatio(autotune.sensitivity) as NSNumber) ?? "0")
+                                    Text(isfFormatter.string(from: autotune.sensitivity as NSNumber) ?? "0")
                                 }
                                 Text(state.units.rawValue + "/U").foregroundColor(.secondary)
+                            }
+                            if let caption = state.actualInsulinCaption(
+                                forVolumeRatio: state.units == .mmolL ? autotune.sensitivity.asMmolL : autotune
+                                    .sensitivity,
+                                unit: state.units.rawValue
+                            ) {
+                                HStack {
+                                    Spacer()
+                                    Text(caption).font(.caption2).foregroundStyle(.secondary)
+                                }
                             }
                         }
                         .listRowBackground(Color.chart)
@@ -145,7 +165,7 @@ extension AutotuneConfig {
                                 Spacer()
                                 Text(
                                     rateFormatter
-                                        .string(from: state.realAmount(autotune.basalProfile[index].rate) as NSNumber) ?? "0"
+                                        .string(from: autotune.basalProfile[index].rate as NSNumber) ?? "0"
                                 )
                                 Text("U/hr").foregroundColor(.secondary)
                             }
@@ -158,8 +178,7 @@ extension AutotuneConfig {
                             Text(
                                 rateFormatter
                                     .string(
-                                        from: state
-                                            .realAmount(autotune.basalProfile.reduce(0) { $0 + $1.rate }) as NSNumber
+                                        from: autotune.basalProfile.reduce(0) { $0 + $1.rate } as NSNumber
                                     ) ??
                                     "0"
                             )

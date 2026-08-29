@@ -8,7 +8,15 @@ class PickerSettingsProvider: ObservableObject {
     private init() {} // Private init to enforce singleton pattern
 
     // Helper function to generate values for the picker
-    func generatePickerValues(from setting: PickerSetting, units: GlucoseUnits) -> [Decimal] {
+    /// - Parameter mmolDecimals: precision the mmol/L de-duplication keys on.
+    ///   Defaults to 1, matching how a glucose value is displayed. A grid scaled
+    ///   down by an insulin concentration (the ISF editor under dilution) needs
+    ///   more, or every row collapses to the same key and the wheel empties.
+    func generatePickerValues(
+        from setting: PickerSetting,
+        units: GlucoseUnits,
+        mmolDecimals: Int = 1
+    ) -> [Decimal] {
         var values: [Decimal] = []
         var currentValue = setting.min
 
@@ -23,7 +31,8 @@ class PickerSettingsProvider: ObservableObject {
             // Use a Set to track unique values rounded to 1 decimal
             var uniqueRoundedValues = Set<String>()
             values = values.filter { value in
-                let roundedValue = String(format: "%.1f", NSDecimalNumber(decimal: value.asMmolL).doubleValue)
+                let mmol = NSDecimalNumber(decimal: value * GlucoseUnits.exchangeRate).doubleValue
+                let roundedValue = String(format: "%.\(mmolDecimals)f", mmol)
                 return uniqueRoundedValues.insert(roundedValue).inserted
             }
         }

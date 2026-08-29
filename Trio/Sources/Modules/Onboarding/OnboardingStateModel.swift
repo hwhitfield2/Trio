@@ -183,36 +183,32 @@ extension Onboarding {
         var carbRatioTimeValues: [TimeInterval] { sharedTimeValues }
         var carbRatioRateValues: [Decimal] { settingsProvider.generatePickerValues(from: carbRatioPickerSetting, units: units) }
 
-        /// The onboarding grids are nominally denominated in pump volume units,
-        /// but the steps display actual insulin units — scale the whole grid so
-        /// every stored value stays representable (and the resolution stays
-        /// proportional) under dilution. At U-100 this is the identity.
+        /// The actual insulin a shown pumped-volume therapy value carries, for
+        /// the caption under each onboarding row. nil at U-100.
+        func actualInsulinCaption(forVolumeAmount amount: Decimal, unit: String) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeAmount: amount, unit: unit)
+        }
+
+        func actualInsulinCaption(forVolumeRatio ratio: Decimal, unit: String) -> String? {
+            settingsManager?.settings.actualInsulinCaption(forVolumeRatio: ratio, unit: unit)
+        }
+
+        /// The onboarding grids are denominated in pump volume units, which is
+        /// also what is shown, entered and stored — so these are pass-throughs.
+        /// They stay as named seams so the volume-unit intent is explicit at
+        /// every grid, and so `coveringCurrent` still widens a grid whose stored
+        /// value a concentration rescale pushed past the default ceiling.
         private func scaledRatioSetting(_ setting: PickerSetting) -> PickerSetting {
-            // SwiftUI evaluates `body` — and therefore these grids — before
-            // `configureView` sets the resolver that injects settingsManager,
-            // so fall back to the unscaled (U-100) grid until it is available.
-            guard let settings = settingsManager?.settings else { return setting }
-            var setting = setting
-            setting.value = settings.realInsulinRatio(fromVolume: setting.value)
-            setting.step = settings.realInsulinRatio(fromVolume: setting.step)
-            setting.min = settings.realInsulinRatio(fromVolume: setting.min)
-            setting.max = settings.realInsulinRatio(fromVolume: setting.max)
-            return setting
+            setting
         }
 
         private func scaledAmountSetting(_ setting: PickerSetting, coveringCurrent current: Decimal? = nil) -> PickerSetting {
-            guard let settings = settingsManager?.settings else { return setting }
-            var setting = setting
-            setting.value = settings.realInsulinAmount(fromVolume: setting.value)
-            setting.step = settings.realInsulinAmount(fromVolume: setting.step)
-            setting.min = settings.realInsulinAmount(fromVolume: setting.min)
-            setting.max = settings.realInsulinAmount(fromVolume: setting.max)
             guard let current = current else { return setting }
             return setting.extended(toCover: current)
         }
 
-        /// Delivery-limit grids in actual insulin units, for the onboarding
-        /// delivery-limits step (the stored values and guardrails are volume).
+        /// Delivery-limit grids in pumped volume units, for the onboarding
+        /// delivery-limits step — the same units as the stored values.
         /// The ceiling is extended to cover the value already loaded so a limit
         /// legitimately preserved across a concentration change stays
         /// selectable rather than silently snapping down.
@@ -460,10 +456,9 @@ extension Onboarding {
         ///   - `carbRatioItems` and `initialCarbRatioItems` with carbohydrate ratio entries.
         ///   - `isfItems` and `initialISFItems` with insulin sensitivity factor entries.
         func fetchExistingTherapySettingsFromFile() {
-            // Stored therapy settings are denominated in pumped volume units;
-            // the onboarding editors display actual insulin units (see
-            // InsulinConcentration.swift). Convert on load; saves convert back.
-            let settings = settingsManager.settings
+            // Therapy settings are pumped volume units throughout — stored,
+            // shown and entered alike (see InsulinConcentration.swift) — so
+            // neither this load nor the matching saves convert.
 
             targetItems = provider.glucoseTargetsOnFile.targets.map { value in
                 let timeIndex = closestIndex(for: TimeInterval(Double(value.offset * 60)), in: targetTimeValues)
@@ -476,9 +471,8 @@ extension Onboarding {
 
             basalProfileItems = provider.basalProfileOnFile.map { value in
                 let timeIndex = closestIndex(for: TimeInterval(Double(value.minutes * 60)), in: basalProfileTimeValues)
-                // Stored rates are pump volume U/hr; display actual insulin U/hr.
-                let realRate = settings.realInsulinAmount(fromVolume: value.rate)
-                let rateIndex = closestIndex(for: realRate, in: basalProfileRateValues)
+                // Rates are pump volume U/hr, shown and stored alike.
+                let rateIndex = closestIndex(for: value.rate, in: basalProfileRateValues)
                 return BasalProfileEditor.Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
             initialBasalProfileItems = basalProfileItems
@@ -486,9 +480,8 @@ extension Onboarding {
 
             carbRatioItems = provider.carbRatiosOnFile.schedule.map { value in
                 let timeIndex = closestIndex(for: TimeInterval(Double(value.offset * 60)), in: carbRatioTimeValues)
-                // Stored ratios are g per *pumped* unit; display g per actual unit.
-                let realRatio = settings.realInsulinRatio(fromVolume: value.ratio)
-                let rateIndex = closestIndex(for: realRatio, in: carbRatioRateValues)
+                // Ratios are g per *pumped* unit, shown and stored alike.
+                let rateIndex = closestIndex(for: value.ratio, in: carbRatioRateValues)
                 return CarbRatioEditor.Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
 
@@ -496,10 +489,8 @@ extension Onboarding {
 
             isfItems = provider.isfOnFile.sensitivities.map { value in
                 let timeIndex = closestIndex(for: TimeInterval(Double(value.offset * 60)), in: isfTimeValues)
-                // Stored sensitivities are mg/dL per *pumped* unit; display
-                // mg/dL per unit of actual insulin.
-                let realSensitivity = settings.realInsulinRatio(fromVolume: value.sensitivity)
-                let rateIndex = closestIndex(for: realSensitivity, in: isfRateValues)
+                // Sensitivities are mg/dL per *pumped* unit, shown and stored alike.
+                let rateIndex = closestIndex(for: value.sensitivity, in: isfRateValues)
 
                 return ISFEditor.Item(rateIndex: rateIndex, timeIndex: timeIndex)
             }
@@ -522,33 +513,24 @@ extension Onboarding {
             let providedSettings = settingsProvider.settings
 
             // Stored limits are pump volume units; the editor displays actual
-            // insulin units. The guardrails were authored for U-100, where the
-            // two coincide — they are really bounds on the REAL value, so scale
-            // them into volume space before clamping. At U-100 this is exactly
-            // the original clamp; at U-10 it admits the legitimately 10x larger
-            // volume figure without dropping the ceiling altogether.
-            let settings = settingsManager.settings
-
+            // insulin units. Stored limits, the guardrails and the display are
+            // all pumped volumes now, so no conversion is needed — but a
+            // concentration rescale deliberately multiplies a stored limit (a
+            // U-100 Max Bolus of 10 U is 200 U of volume at U-5), and clamping
+            // that back to the U-100 guardrail would silently undo the rescale
+            // and push the reduced limit to the pump. Widen the guardrail to
+            // cover what is already stored instead.
             func clampPreservingStored(_ stored: Decimal, to guardrail: PickerSetting) -> Decimal {
-                var guardrail = guardrail
-                guardrail.min = settings.volumeInsulinAmount(fromReal: guardrail.min)
-                guardrail.max = settings.volumeInsulinAmount(fromReal: guardrail.max)
-                return stored.clamp(to: guardrail)
+                stored.clamp(to: guardrail.extended(toCover: stored))
             }
 
             if let pumpSettingsFromFile = pumpSettingsFromFile {
-                maxBolus = settings.realInsulinAmount(
-                    fromVolume: clampPreservingStored(pumpSettingsFromFile.maxBolus, to: providedSettings.maxBolus)
-                )
-                maxBasal = settings.realInsulinAmount(
-                    fromVolume: clampPreservingStored(pumpSettingsFromFile.maxBasal, to: providedSettings.maxBasal)
-                )
+                maxBolus = clampPreservingStored(pumpSettingsFromFile.maxBolus, to: providedSettings.maxBolus)
+                maxBasal = clampPreservingStored(pumpSettingsFromFile.maxBasal, to: providedSettings.maxBasal)
             }
 
             let preferences = settingsManager.preferences
-            maxIOB = settings.realInsulinAmount(
-                fromVolume: clampPreservingStored(preferences.maxIOB, to: providedSettings.maxIOB)
-            )
+            maxIOB = clampPreservingStored(preferences.maxIOB, to: providedSettings.maxIOB)
             maxCOB = preferences.maxCOB.clamp(to: providedSettings.maxCOB)
             minimumSafetyThreshold = preferences.threshold_setting
 
@@ -759,12 +741,11 @@ extension Onboarding {
 
         /// Saves the carb ratio items to file storage and sets them as initial values.
         func saveCarbRatios() {
-            let settings = settingsManager.settings
             let schedule = carbRatioItems.map { item in
                 let time = timeFormatter.string(from: Date(timeIntervalSince1970: carbRatioTimeValues[item.timeIndex]))
                 let offset = Int(carbRatioTimeValues[item.timeIndex] / 60)
-                // Displayed values are g per actual insulin unit; store per pumped unit.
-                let value = settings.volumeInsulinRatio(fromReal: carbRatioRateValues[item.rateIndex])
+                // Displayed values are already per pumped unit: store as-is.
+                let value = carbRatioRateValues[item.rateIndex]
                 return CarbRatioEntry(start: time, offset: offset, ratio: value)
             }
             fileStorage.save(CarbRatios(units: .grams, schedule: schedule), as: OpenAPS.Settings.carbRatios)
@@ -773,12 +754,11 @@ extension Onboarding {
 
         /// Saves the basal profile items to file storage and sets them as initial values.
         func saveBasalProfile() {
-            let settings = settingsManager.settings
             let profile = basalProfileItems.map { item in
                 let time = timeFormatter.string(from: Date(timeIntervalSince1970: basalProfileTimeValues[item.timeIndex]))
                 let offset = Int(basalProfileTimeValues[item.timeIndex] / 60)
-                // Displayed rates are actual insulin; store/push pump volume units.
-                let rate = settings.volumeInsulinAmount(fromReal: basalProfileRateValues[item.rateIndex])
+                // Displayed rates are already pump volume units: store as-is.
+                let rate = basalProfileRateValues[item.rateIndex]
                 return BasalProfileEntry(start: time, minutes: offset, rate: rate)
             }
             fileStorage.save(profile, as: OpenAPS.Settings.basalProfile)
@@ -787,12 +767,11 @@ extension Onboarding {
 
         /// Saves the insulin sensitivity (ISF) items to file storage and sets them as initial values.
         func saveISFValues() {
-            let settings = settingsManager.settings
             let sensitivities = isfItems.map { item in
                 let time = timeFormatter.string(from: Date(timeIntervalSince1970: isfTimeValues[item.timeIndex]))
                 let offset = Int(isfTimeValues[item.timeIndex] / 60)
-                // Displayed values are per actual insulin unit; store per pumped unit.
-                let value = settings.volumeInsulinRatio(fromReal: isfRateValues[item.rateIndex])
+                // Displayed values are already per pumped unit: store as-is.
+                let value = isfRateValues[item.rateIndex]
                 return InsulinSensitivityEntry(sensitivity: value, offset: offset, start: time)
             }
             let profile = InsulinSensitivities(units: .mgdL, userPreferredUnits: .mgdL, sensitivities: sensitivities)
@@ -877,8 +856,8 @@ extension Onboarding {
             var preferences = Preferences()
 
             // delivery limits (those that are preference-bound, not pump-settings-bound
-            // Displayed Max IOB is actual insulin; store pump volume units.
-            preferences.maxIOB = settingsManager.settings.volumeInsulinAmount(fromReal: maxIOB)
+            // Displayed Max IOB is already a pump volume: store as-is.
+            preferences.maxIOB = maxIOB
             preferences.maxCOB = maxCOB
             preferences.threshold_setting = minimumSafetyThreshold
 
@@ -930,12 +909,11 @@ extension Onboarding {
         /// Saves pump delivery limits to persistent storage and broadcasts changes.
         func applyToPumpSettings() {
             let defaultDIA = settingsProvider.settings.dia.value
-            // Displayed limits are actual insulin; store/push pump volume units.
-            let settings = settingsManager.settings
+            // Displayed limits are already pump volumes: store/push as-is.
             let pumpSettings = PumpSettings(
                 insulinActionCurve: defaultDIA,
-                maxBolus: settings.volumeInsulinAmount(fromReal: maxBolus),
-                maxBasal: settings.volumeInsulinAmount(fromReal: maxBasal)
+                maxBolus: maxBolus,
+                maxBasal: maxBasal
             )
             fileStorage.save(pumpSettings, as: OpenAPS.Settings.settings)
         }
